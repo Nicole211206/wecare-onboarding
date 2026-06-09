@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeCare Onboarding</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <script>
+    window.WC_SYNC = {
+      url:   '',   // ex: https://wecare-onboarding.nicole-0e7.workers.dev
+      token: ''
+    };
+    // Chave de API do Google Maps (opcional — para busca inline)
+    window.GOOGLE_MAPS_KEY = '';
+  </script>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">We<span>Care</span></div>
+    <div class="login-sub">Sistema de Onboarding</div>
+    <div class="form-group">
+      <input class="form-input" type="email" id="login-email" placeholder="E-mail" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <input class="form-input" type="password" id="login-senha" placeholder="Senha"
+        autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-rose" style="width:100%;justify-content:center;" onclick="doLogin()">
+      <i class="fa-solid fa-right-to-bracket"></i> Entrar
+    </button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">We<span>Care</span></div>
+    <div class="logo-sub">Onboarding</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">Principal</div>
+    <button class="nav-item active" onclick="showPanel('kanban',this)">
+      <i class="fa-solid fa-table-columns"></i> Kanban
+    </button>
+    <button class="nav-item" onclick="showPanel('dashboard',this)">
+      <i class="fa-solid fa-chart-pie"></i> Dashboard
+    </button>
+    <button class="nav-item" onclick="showPanel('intel',this)">
+      <i class="fa-solid fa-magnifying-glass-location"></i> Intel de Mercado
+    </button>
+    <div class="nav-section" id="navsec-admin">Admin</div>
+    <button class="nav-item" id="nav-config" onclick="showPanel('config',this)">
+      <i class="fa-solid fa-sliders"></i> Configurações
+    </button>
+    <button class="nav-item" id="nav-usuarios" onclick="showPanel('usuarios',this)">
+      <i class="fa-solid fa-users"></i> Usuários
+    </button>
+  </div>
+  <div class="sidebar-user">
+    <div class="user-avatar" id="sidebar-avatar">?</div>
+    <div>
+      <div class="user-name" id="sidebar-name">–</div>
+      <div class="user-role" id="sidebar-role">–</div>
+    </div>
+    <button onclick="logout()" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;" title="Sair"><i class="fa-solid fa-right-from-bracket"></i></button>
+  </div>
+</nav>
+
+<!-- ═══ MAIN ═══ -->
+<div id="main">
+  <div id="topbar">
+    <span class="topbar-title" id="panel-title">Kanban</span>
+    <div class="topbar-right">
+      <button class="topbar-btn" onclick="kvPull(true)" title="Sincronizar"><i class="fa-solid fa-rotate"></i></button>
+      <button class="btn btn-rose btn-sm" onclick="abrirNovoImovel()" id="btn-novo-imovel">
+        <i class="fa-solid fa-plus"></i> Novo Imóvel
+      </button>
+    </div>
+  </div>
+  <div id="content">
+
+    <!-- ── KANBAN ── -->
+    <div class="panel active" id="panel-kanban">
+      <div id="kanban-wrap" class="kanban-wrap"></div>
+      <hr class="divider" style="margin-top:24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Imóveis Perdidos</span>
+        <span id="perdidos-count" class="text-muted"></span>
+      </div>
+      <div id="perdidos-lista"></div>
+    </div>
+
+    <!-- ── DASHBOARD ── -->
+    <div class="panel" id="panel-dashboard">
+      <div class="stats-grid" id="dash-stats"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-hourglass-half" style="color:var(--rose)"></i> Tempo por Fase</span></div>
+          <div class="card-body" id="dash-fases"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-house-circle-check" style="color:var(--sage)"></i> Ativações Recentes</span></div>
+          <div class="card-body">
+            <table class="data-table" style="font-size:12px;">
+              <thead><tr><th>Imóvel</th><th>Contrato</th><th>Ativação</th><th>Dias</th></tr></thead>
+              <tbody id="dash-ativos-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INTEL DE MERCADO ── -->
+    <div class="panel" id="panel-intel">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div class="section-title" style="margin-bottom:4px;">Inteligência de Mercado</div>
+          <div class="text-muted">Pesquise prestadores próximos e gerencie seu banco por cidade</div>
+        </div>
+        <button class="btn btn-rose btn-sm" onclick="abrirModalPrestador()"><i class="fa-solid fa-plus"></i> Novo Prestador</button>
+      </div>
+
+      <!-- Busca por endereço -->
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title"><i class="fa-solid fa-location-dot" style="color:var(--rose)"></i> Buscar no Google Maps</span></div>
+        <div class="card-body">
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+            <div class="form-group" style="margin:0;flex:1;min-width:240px;">
+              <label class="form-label">Endereço / Cidade</label>
+              <input class="form-input" id="intel-endereco" placeholder="Ex: Moema, São Paulo, SP">
+            </div>
+            <button class="btn btn-rose" onclick="buscarNoMaps()"><i class="fa-solid fa-search"></i> Buscar</button>
+          </div>
+          <div id="intel-maps-btns" style="display:none;margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;">
+            <button class="btn btn-sm" onclick="abrirMaps('empresa de limpeza residencial')"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Limpeza</button>
+            <button class="btn btn-sm" onclick="abrirMaps('fotógrafo de interiores imóveis')"><i class="fa-solid fa-camera" style="color:var(--lavender)"></i> Fotógrafo</button>
+            <button class="btn btn-sm" onclick="abrirMaps('manutenção hidráulica residencial')"><i class="fa-solid fa-wrench" style="color:var(--sky)"></i> Hidráulica</button>
+            <button class="btn btn-sm" onclick="abrirMaps('eletricista residencial')"><i class="fa-solid fa-bolt" style="color:var(--gold)"></i> Elétrica</button>
+            <button class="btn btn-sm" onclick="abrirMaps('vistoria imóvel laudo')"><i class="fa-solid fa-clipboard-check" style="color:var(--peach)"></i> Vistoria</button>
+            <button class="btn btn-sm" onclick="abrirMaps('serralheria fechadura eletrônica')"><i class="fa-solid fa-lock" style="color:var(--rose)"></i> Fechadura</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela de prestadores -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fa-solid fa-address-book" style="color:var(--lavender)"></i> Prestadores Cadastrados</span>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <select class="form-select" id="intel-filtro-tipo" onchange="renderPrestadores()" style="width:140px;padding:4px 8px;font-size:12px;">
+              <option value="">Todos os tipos</option>
+              <option>Limpeza</option><option>Fotógrafo</option><option>Hidráulica</option>
+              <option>Elétrica</option><option>Vistoria</option><option>Fechadura</option><option>Outros</option>
+            </select>
+            <input class="form-input" id="intel-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderPrestadores()">
+          </div>
+        </div>
+        <div class="card-body" id="intel-prestadores-lista" style="overflow-x:auto;"></div>
+      </div>
+    </div>
+
+    <!-- ── CONFIG ── -->
+    <div class="panel" id="panel-config">
+      <div class="section-title">Configurações</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-users" style="color:var(--lavender)"></i> Membros da Equipe</span>
+            <button class="btn btn-sm" style="margin-left:auto;" onclick="abrirModalMembro()"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <div class="card-body" id="config-membros"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i class="fa-solid fa-list-check" style="color:var(--sage)"></i> Itens de Compras</span>
+            <button class="btn btn-sm" style="margin-left:auto;" onclick="abrirModalItem()"><i class="fa-solid fa-plus"></i> Item</button>
+          </div>
+          <div class="card-body" id="config-itens" style="max-height:340px;overflow-y:auto;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-tag" style="color:var(--peach)"></i> Preços Fixos</span></div>
+          <div class="card-body" id="config-precos" style="max-height:320px;overflow-y:auto;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-bed" style="color:var(--sky)"></i> Preços Enxoval por Tamanho</span></div>
+          <div class="card-body" id="config-precos-enxoval" style="max-height:320px;overflow-y:auto;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Tabela de Limpeza e Fotos</span></div>
+          <div class="card-body" id="config-precos-ops" style="max-height:320px;overflow-y:auto;"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-gear" style="color:var(--text3)"></i> Integração ZapSign</span></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">API Token ZapSign</label>
+              <input class="form-input" id="cfg-zapsign-token" placeholder="Token da API ZapSign" type="password">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label">URL do Webhook (configurar no ZapSign)</label>
+              <div style="display:flex;gap:8px;">
+                <input class="form-input" id="cfg-webhook-url" readonly style="background:var(--bg3);font-family:monospace;font-size:11.5px;">
+                <button class="btn btn-sm" onclick="copiarWebhookUrl()"><i class="fa-solid fa-copy"></i></button>
+              </div>
+            </div>
+            <button class="btn btn-sage btn-sm" style="margin-top:12px;" onclick="salvarConfigZapSign()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── USUARIOS ── -->
+    <div class="panel" id="panel-usuarios">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="section-title" style="margin:0;">Usuários e Acessos</div>
+        <button class="btn btn-rose btn-sm" onclick="abrirNovoUsuario()"><i class="fa-solid fa-plus"></i> Novo</button>
+      </div>
+      <div id="usuarios-lista"></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- ════════════════════════════ MODAIS ════════════════════════════ -->
+
+<!-- Modal: Novo Imóvel -->
+<div class="modal-overlay" id="modal-imovel-novo">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-imovel-novo-title">Novo Imóvel</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-imovel-novo')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome do Imóvel *</label>
+        <input class="form-input" id="ni-nome" placeholder="Ex: Simpatia 104"></div>
+      <div class="form-group"><label class="form-label">Endereço</label>
+        <input class="form-input" id="ni-endereco" placeholder="Rua, número, bairro, cidade"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Proprietário</label>
+        <input class="form-input" id="ni-prop-nome" placeholder="Nome completo"></div>
+      <div class="form-group"><label class="form-label">Telefone / WhatsApp</label>
+        <input class="form-input" id="ni-prop-tel" placeholder="(11) 9xxxx-xxxx"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Quartos</label>
+        <input class="form-input" id="ni-quartos" type="number" value="1" min="0"></div>
+      <div class="form-group"><label class="form-label">Banheiros</label>
+        <input class="form-input" id="ni-banheiros" type="number" value="1" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Comissão WeCare (%)</label>
+        <input class="form-input" id="ni-comissao" type="number" value="20" min="0" max="100"></div>
+      <div class="form-group"><label class="form-label">Base da Comissão</label>
+        <select class="form-select" id="ni-comissao-base">
+          <option value="liquida">Receita Líquida</option>
+          <option value="bruta">Receita Bruta</option>
+        </select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Data do Contrato *</label>
+      <input class="form-input" id="ni-data-criacao" type="date"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn" onclick="closeModal('modal-imovel-novo')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarNovoImovel()"><i class="fa-solid fa-check"></i> Criar Imóvel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detalhe do Imóvel (abas) -->
+<div class="modal-overlay" id="modal-detalhe">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div style="flex:1;min-width:0;">
+        <div class="modal-title" id="detalhe-titulo" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">–</div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:2px;" id="detalhe-subtitulo"></div>
+      </div>
+      <div style="margin-left:12px;display:flex;gap:6px;align-items:center;flex-shrink:0;">
+        <span id="detalhe-fase-tag"></span>
+        <button class="btn btn-sm btn-rose" id="detalhe-avancar-btn" onclick="avancarFaseAtual()"></button>
+        <button class="btn btn-sm" id="detalhe-perdido-btn" onclick="togglePerdidoAtual()"
+          style="color:var(--vermelha);border-color:var(--vermelha-bg);">Perdido</button>
+        <button class="modal-close" onclick="closeModal('modal-detalhe')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <!-- Tabs -->
+    <div class="tabs-bar" id="detalhe-tabs">
+      <button class="tab-btn active"   onclick="showTab('dados',this)">Dados</button>
+      <button class="tab-btn"          onclick="showTab('contrato',this)">Contrato</button>
+      <button class="tab-btn"          onclick="showTab('definicoes',this)">Definições</button>
+      <button class="tab-btn"          onclick="showTab('formulario',this)">Formulário</button>
+      <button class="tab-btn"          onclick="showTab('compras',this)">Compras</button>
+      <button class="tab-btn"          onclick="showTab('enxoval',this)">Enxoval</button>
+      <button class="tab-btn"          onclick="showTab('operacional',this)">Operacional</button>
+      <button class="tab-btn"          onclick="showTab('custos',this)">Custos</button>
+      <button class="tab-btn"          onclick="showTab('final',this)">Final</button>
+    </div>
+    <div class="modal-body" id="detalhe-body"></div>
+    <div style="padding:10px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <button class="btn btn-sm btn-danger" onclick="confirmarApagarImovel()"><i class="fa-solid fa-trash"></i> Apagar</button>
+      <button class="btn btn-sm btn-sage" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Prestador -->
+<div class="modal-overlay" id="modal-prestador">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-prestador-title">Novo Prestador</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-prestador')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome *</label>
+        <input class="form-input" id="pr-nome" placeholder="Nome da empresa / pessoa"></div>
+      <div class="form-group"><label class="form-label">Tipo *</label>
+        <select class="form-select" id="pr-tipo">
+          <option>Limpeza</option><option>Fotógrafo</option><option>Hidráulica</option>
+          <option>Elétrica</option><option>Vistoria</option><option>Fechadura</option><option>Outros</option>
+        </select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cidade / Região</label>
+        <input class="form-input" id="pr-cidade" placeholder="Ex: Moema, SP"></div>
+      <div class="form-group"><label class="form-label">Telefone / WhatsApp</label>
+        <input class="form-input" id="pr-tel" placeholder="(11) 9xxxx-xxxx"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Valor (R$)</label>
+        <input class="form-input" id="pr-valor" placeholder="Ex: R$200 ou 200-350"></div>
+      <div class="form-group"><label class="form-label">Avaliação</label>
+        <select class="form-select" id="pr-avaliacao">
+          <option value="">–</option>
+          <option value="5">⭐⭐⭐⭐⭐ Excelente</option>
+          <option value="4">⭐⭐⭐⭐ Ótimo</option>
+          <option value="3">⭐⭐⭐ Bom</option>
+          <option value="2">⭐⭐ Regular</option>
+        </select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Observações</label>
+      <textarea class="form-textarea" id="pr-obs" placeholder="Condições especiais, particularidades..." style="min-height:60px;"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeModal('modal-prestador')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarPrestador()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Membro -->
+<div class="modal-overlay" id="modal-membro">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-membro-title">Novo Membro</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-membro')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group"><label class="form-label">Nome *</label><input class="form-input" id="mb-nome" placeholder="Nome completo"></div>
+    <div class="form-group"><label class="form-label">Função</label><input class="form-input" id="mb-funcao" placeholder="Ex: Fotógrafo, Limpeza..."></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeModal('modal-membro')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarMembro()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Item de Compras -->
+<div class="modal-overlay" id="modal-item">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-item-title">Novo Item</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-item')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Categoria</label>
+        <select class="form-select" id="it-cat">
+          <option>Cama</option><option>Banheiro</option><option>Lavanderia</option>
+          <option>Cozinha</option><option>Quarto</option><option>Limpeza</option><option>Outros</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Nome *</label>
+        <input class="form-input" id="it-nome" placeholder="Nome do item"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Regra de Quantidade</label>
+        <select class="form-select" id="it-qtd-rule">
+          <option value="1-unidade">1 unidade (fixo)</option>
+          <option value="6-unidade">6 unidades (fixo)</option>
+          <option value="1-colchao">1 por colchão</option>
+          <option value="2-colchao">2 por colchão</option>
+          <option value="3-colchao">3 por colchão</option>
+          <option value="1-leito">1 por leito</option>
+          <option value="2-leito">2 por leito</option>
+          <option value="3-leito">3 por leito</option>
+          <option value="1-banheiro">1 por banheiro</option>
+          <option value="2-banheiro">2 por banheiro</option>
+          <option value="3-banheiro">3 por banheiro</option>
+          <option value="1-quarto">1 por quarto</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Tipo de Preço</label>
+        <select class="form-select" id="it-tipo-preco" onchange="renderItTipoPreco()">
+          <option value="fixo">Preço fixo</option>
+          <option value="enxoval">Varia por tipo de cama</option>
+        </select></div>
+    </div>
+    <div id="it-preco-wrap">
+      <div class="form-group"><label class="form-label">Preço (R$)</label>
+        <input class="form-input" id="it-preco" type="number" min="0" step="0.01" placeholder="0,00"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Link Mercado Livre</label>
+      <input class="form-input" id="it-link" placeholder="https://www.mercadolivre.com.br/..."></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Só aparece se enxoval = Comprado?</label>
+      <select class="form-select" id="it-enxoval-dep">
+        <option value="">Não (sempre aparece)</option>
+        <option value="sim">Sim</option>
+      </select></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn" onclick="closeModal('modal-item')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarItem()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Usuário -->
+<div class="modal-overlay" id="modal-usuario">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-usuario-title">Novo Usuário</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-usuario')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="u-nome"></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="u-email" type="email"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Senha</label><input class="form-input" id="u-senha" type="password"></div>
+      <div class="form-group"><label class="form-label">Perfil</label>
+        <select class="form-select" id="u-perfil" onchange="aplicarPresetPerfil(this.value)">
+          <option value="admin">Admin</option>
+          <option value="coordenacao">Coordenação</option>
+          <option value="operacao" selected>Operação</option>
+        </select></div>
+    </div>
+    <div id="u-modulos-group"><label class="form-label">Acesso aos Módulos</label>
+      <div id="u-modulos-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn" onclick="closeModal('modal-usuario')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarUsuario()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Genérico (respostas do formulário, etc.) -->
+<div class="modal-overlay" id="modal-generico">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="generico-titulo">Informações</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-generico')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="generico-body" style="max-height:65vh;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script src="js/app.js?v=3"></script>
+</body>
+</html>

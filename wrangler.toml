@@ -1,0 +1,10 @@
+name = "wecare-onboarding"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[[kv_namespaces]]
+binding = "ONBOARDING_KV"
+id = ""        # preencha com o ID do seu KV namespace após criar
+
+# Para usar o mesmo CLAIRE_KV que a Claire já usa, troque o id acima
+# pelo namespace_id do CLAIRE_KV (visível no painel Cloudflare → KV)

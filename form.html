@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeCare — Informações do Imóvel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --rose:        #e8a4b0;
+      --rose-dark:   #c97f8e;
+      --rose-light:  #fdf0f3;
+      --rose-mid:    #f5d0d9;
+      --sage:        #82b09a;
+      --sage-light:  #edf5f1;
+      --bg:          #f5f3ef;
+      --text:        #2d2926;
+      --text2:       #7a7068;
+      --text3:       #b0a89e;
+      --border:      rgba(0,0,0,0.10);
+      --r:           14px;
+      --font-display: 'Fraunces', serif;
+      --font-body:    'Plus Jakarta Sans', sans-serif;
+      --shadow-md:   0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--rose-light);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* ── Header ── */
+    .page-header {
+      background: white;
+      border-bottom: 1px solid var(--rose-mid);
+      padding: 18px 20px 16px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(232,164,176,0.15);
+    }
+    .logo {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+    .logo span { color: var(--rose-dark); }
+    .logo-sub {
+      font-size: 0.72rem;
+      color: var(--text3);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* ── Container ── */
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 28px 16px 0;
+    }
+
+    /* ── Intro card ── */
+    .intro-card {
+      background: white;
+      border-radius: var(--r);
+      padding: 24px 24px 20px;
+      border: 1px solid var(--rose-mid);
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-md);
+    }
+    .imovel-nome {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .intro-sub {
+      color: var(--text2);
+      font-size: 0.9rem;
+      line-height: 1.55;
+    }
+
+    /* ── Form card ── */
+    .form-card {
+      background: white;
+      border-radius: var(--r);
+      padding: 24px;
+      border: 1px solid var(--rose-mid);
+      box-shadow: var(--shadow-md);
+    }
+
+    .field-group {
+      margin-bottom: 20px;
+    }
+    .field-group:last-of-type { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--text);
+      background: var(--bg);
+      transition: border-color 0.18s, box-shadow 0.18s;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+    }
+    input[type="text"]:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--rose);
+      box-shadow: 0 0 0 3px rgba(232,164,176,0.18);
+      background: white;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.55;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7068' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    /* ── Divider ── */
+    .section-divider {
+      border: none;
+      border-top: 1.5px solid var(--rose-mid);
+      margin: 24px 0 20px;
+    }
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--rose-dark);
+      margin-bottom: 18px;
+    }
+
+    /* ── Submit button ── */
+    .btn-submit {
+      display: block;
+      width: 100%;
+      margin-top: 28px;
+      padding: 15px 20px;
+      background: var(--rose);
+      color: white;
+      font-family: var(--font-body);
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--r);
+      cursor: pointer;
+      transition: background 0.18s, transform 0.1s, box-shadow 0.18s;
+      box-shadow: 0 4px 14px rgba(232,164,176,0.40);
+      letter-spacing: 0.01em;
+    }
+    .btn-submit:hover:not(:disabled) {
+      background: var(--rose-dark);
+      box-shadow: 0 6px 18px rgba(201,127,142,0.45);
+    }
+    .btn-submit:active:not(:disabled) { transform: scale(0.98); }
+    .btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
+
+    /* ── Error state ── */
+    #error-state {
+      display: none;
+      text-align: center;
+      padding: 48px 24px;
+    }
+    .error-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+    }
+    .error-title {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .error-msg {
+      color: var(--text2);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    /* ── Success state ── */
+    #success-state {
+      display: none;
+      text-align: center;
+      padding: 60px 24px 48px;
+    }
+    .success-icon {
+      width: 72px;
+      height: 72px;
+      background: var(--sage-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    .success-icon svg {
+      width: 36px;
+      height: 36px;
+      stroke: var(--sage);
+      stroke-width: 2.5;
+      fill: none;
+    }
+    .success-title {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    .success-msg {
+      color: var(--text2);
+      font-size: 0.95rem;
+      line-height: 1.65;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    /* ── Loading ── */
+    #loading-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--text2);
+      font-size: 0.9rem;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--rose-mid);
+      border-top-color: var(--rose);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Submit feedback ── */
+    .submit-error {
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: #fdf0ee;
+      border: 1px solid #e8b4ae;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: #c05a50;
+      display: none;
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 20px 12px 0; }
+      .form-card, .intro-card { padding: 18px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<script>
+  window.WC_WORKER_URL = '';
+</script>
+
+<!-- ── Header ── -->
+<header class="page-header">
+  <div class="logo">We<span>Care</span></div>
+  <div class="logo-sub">Onboarding de Imóveis</div>
+</header>
+
+<!-- ── Main content ── -->
+<div class="container">
+
+  <!-- Loading -->
+  <div id="loading-state">
+    <div class="spinner"></div>
+    Carregando informações…
+  </div>
+
+  <!-- Error -->
+  <div id="error-state">
+    <div class="error-icon">🔗</div>
+    <div class="error-title">Link inválido ou expirado</div>
+    <div class="error-msg" id="error-detail">
+      Este link não é mais válido. Por favor, entre em contato com a equipe WeCare para receber um novo link de preenchimento.
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div id="form-state" style="display:none;">
+    <div class="intro-card">
+      <div class="imovel-nome" id="imovel-nome">Seu imóvel</div>
+      <div class="intro-sub">Preencha as informações abaixo para que nossa equipe possa preparar tudo para seus hóspedes. Você pode salvar e voltar a qualquer momento usando o mesmo link.</div>
+    </div>
+
+    <div class="form-card">
+      <div id="campos-container"></div>
+      <button class="btn-submit" id="btn-submit" onclick="submitForm()">Enviar informações</button>
+      <div class="submit-error" id="submit-error"></div>
+    </div>
+  </div>
+
+  <!-- Success -->
+  <div id="success-state">
+    <div class="success-icon">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="success-title">Informações recebidas!</div>
+    <div class="success-msg">A equipe WeCare revisará os dados do seu imóvel e entrará em contato em breve. Obrigado pela parceria!</div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  // ── Perguntas padrão ──
+  const PERGUNTAS_PADRAO = [
+    { id: 'wifi_nome',        pergunta: 'Nome da rede Wi-Fi',                                          tipo: 'text' },
+    { id: 'wifi_senha',       pergunta: 'Senha do Wi-Fi',                                              tipo: 'text' },
+    { id: 'acesso_codigo',    pergunta: 'Código de acesso ao imóvel (fechadura/portaria)',              tipo: 'text' },
+    { id: 'condominio_regras',pergunta: 'Regras do condomínio que os hóspedes devem saber',            tipo: 'textarea' },
+    { id: 'condominio_sindico',pergunta: 'Contato do síndico (nome e telefone)',                       tipo: 'text' },
+    { id: 'garagem',          pergunta: 'Informações sobre garagem/estacionamento',                     tipo: 'text' },
+    { id: 'lixo',             pergunta: 'Dia e horário da coleta de lixo',                             tipo: 'text' },
+    { id: 'animais',          pergunta: 'Animais de estimação são permitidos?',                        tipo: 'select',
+      opcoes: ['Não permitido', 'Permitido (todos)', 'Somente pets pequenos'] },
+    { id: 'capacidade',       pergunta: 'Capacidade máxima de hóspedes',                               tipo: 'text' },
+    { id: 'regras_prop',      pergunta: 'Regras específicas do proprietário',                          tipo: 'textarea' },
+    { id: 'obs',              pergunta: 'Observações adicionais',                                      tipo: 'textarea' },
+  ];
+
+  // ── Helpers ──
+  function qs(sel) { return document.querySelector(sel); }
+  function show(id) { qs('#' + id).style.display = ''; }
+  function hide(id) { qs('#' + id).style.display = 'none'; }
+
+  function getParams() {
+    const p = new URLSearchParams(location.search);
+    return { id: p.get('id') || '', t: p.get('t') || '' };
+  }
+
+  function showError(msg) {
+    hide('loading-state');
+    hide('form-state');
+    hide('success-state');
+    if (msg) qs('#error-detail').textContent = msg;
+    show('error-state');
+  }
+
+  // ── Build form fields ──
+  function buildFields(perguntas, respostas) {
+    const container = qs('#campos-container');
+    container.innerHTML = '';
+
+    perguntas.forEach(function (p, i) {
+      // Optional section divider every group-of-fields could be added here
+      const group = document.createElement('div');
+      group.className = 'field-group';
+
+      const lbl = document.createElement('label');
+      lbl.setAttribute('for', 'field-' + p.id);
+      lbl.textContent = p.pergunta;
+      group.appendChild(lbl);
+
+      const val = (respostas && respostas[p.id] != null) ? respostas[p.id] : '';
+
+      if (p.tipo === 'textarea') {
+        const ta = document.createElement('textarea');
+        ta.id = 'field-' + p.id;
+        ta.name = p.id;
+        ta.placeholder = 'Digite aqui…';
+        ta.value = val;
+        group.appendChild(ta);
+
+      } else if (p.tipo === 'select' && p.opcoes && p.opcoes.length) {
+        const sel = document.createElement('select');
+        sel.id = 'field-' + p.id;
+        sel.name = p.id;
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = 'Selecione…';
+        sel.appendChild(emptyOpt);
+        p.opcoes.forEach(function (op) {
+          const opt = document.createElement('option');
+          opt.value = op;
+          opt.textContent = op;
+          if (op === val) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        if (!val) sel.value = '';
+        group.appendChild(sel);
+
+      } else {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = 'field-' + p.id;
+        inp.name = p.id;
+        inp.placeholder = 'Digite aqui…';
+        inp.value = val;
+        group.appendChild(inp);
+      }
+
+      container.appendChild(group);
+    });
+
+    // Store perguntas for submit
+    window._wcPerguntas = perguntas;
+  }
+
+  // ── Collect answers ──
+  function collectRespostas() {
+    const respostas = {};
+    (window._wcPerguntas || []).forEach(function (p) {
+      const el = document.getElementById('field-' + p.id);
+      if (el) respostas[p.id] = el.value;
+    });
+    return respostas;
+  }
+
+  // ── Submit ──
+  window.submitForm = function () {
+    const { id, t } = getParams();
+    const btn = qs('#btn-submit');
+    const errEl = qs('#submit-error');
+    errEl.style.display = 'none';
+
+    const respostas = collectRespostas();
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+
+    const workerUrl = (window.WC_WORKER_URL || '').replace(/\/$/, '');
+    const url = workerUrl + '/form-save?id=' + encodeURIComponent(id) + '&t=' + encodeURIComponent(t);
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respostas: respostas })
+    })
+    .then(function (r) {
+      if (!r.ok) return r.json().then(function (d) { throw new Error(d.erro || d.error || 'Erro ao salvar'); });
+      return r.json();
+    })
+    .then(function () {
+      hide('form-state');
+      show('success-state');
+    })
+    .catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Enviar informações';
+      errEl.textContent = err.message || 'Erro ao enviar. Tente novamente em alguns instantes.';
+      errEl.style.display = 'block';
+    });
+  };
+
+  // ── Init ──
+  function init() {
+    const { id, t } = getParams();
+
+    if (!id || !t) {
+      showError('Link incompleto. Verifique se o endereço está correto ou solicite um novo link à equipe WeCare.');
+      return;
+    }
+
+    const workerUrl = (window.WC_WORKER_URL || '').replace(/\/$/, '');
+
+    if (!workerUrl) {
+      // Dev fallback: show form with defaults and no data
+      qs('#imovel-nome').textContent = 'Meu Imóvel';
+      buildFields(PERGUNTAS_PADRAO, {});
+      hide('loading-state');
+      show('form-state');
+      return;
+    }
+
+    const url = workerUrl + '/form-load?id=' + encodeURIComponent(id) + '&t=' + encodeURIComponent(t);
+
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (d) { throw new Error(d.erro || d.error || 'Token inválido'); });
+        return r.json();
+      })
+      .then(function (data) {
+        // data: { nome_imovel, perguntas?, respostas? }
+        qs('#imovel-nome').textContent = data.nome_imovel || 'Seu imóvel';
+
+        const perguntas = (data.perguntas && data.perguntas.length)
+          ? data.perguntas
+          : PERGUNTAS_PADRAO;
+
+        buildFields(perguntas, data.respostas || {});
+        hide('loading-state');
+        show('form-state');
+      })
+      .catch(function (err) {
+        showError('Link inválido ou expirado. Entre em contato com a equipe WeCare para receber um novo link.');
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
