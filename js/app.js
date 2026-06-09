@@ -176,14 +176,30 @@ function doLogin(){
   iniciarApp();
 }
 function carregarUsuarios(){try{usuarios=JSON.parse(localStorage.getItem('wc_users')||'[]');}catch{usuarios=[];}}
-function salvarUsuarios(){localStorage.setItem('wc_users',JSON.stringify(usuarios));}
+function salvarUsuarios(){localStorage.setItem('wc_users',JSON.stringify(usuarios));_kvPushDebounced();}
 function garantirAdminPadrao(){
   carregarUsuarios();
-  if(!usuarios.length){usuarios=[{email:'admin@wecare.com',senha:'wecare2025',perfil:'admin',nome:'Nicole',modulos:[]}];salvarUsuarios();}
+  if(!usuarios.length){
+    usuarios=[{email:'admin@wecare.com',senha:'wecare2025',perfil:'admin',nome:'Nicole',modulos:[]}];
+    localStorage.setItem('wc_users',JSON.stringify(usuarios)); // local apenas, sem empurrar
+  }
+}
+// Puxa usuários da nuvem ANTES do login (para qualquer máquina enxergar todos os logins)
+async function sincronizarUsuariosNuvem(){
+  const s=window.WC_SYNC||{};
+  if(!s.url)return;
+  try{
+    const r=await fetch(s.url.replace(/\/$/,'')+'/load?token='+encodeURIComponent(s.token||''));
+    const j=await r.json();
+    if(j&&j.data&&Array.isArray(j.data.wc_users)&&j.data.wc_users.length){
+      localStorage.setItem('wc_users',JSON.stringify(j.data.wc_users));
+      carregarUsuarios();
+    }
+  }catch{}
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_prestadores'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_prestadores','wc_users'];
 function saveAll(){
   localStorage.setItem('wc_imoveis',JSON.stringify(imoveis));
   localStorage.setItem('wc_membros',JSON.stringify(membros));
@@ -348,8 +364,10 @@ function salvarNovoImovel(){
     seguroEasyCover:false, kitAmenities:false, internetClaro:false, ecohost:false, fechaduraEletronica:false,
     defLimpeza:{responsavel:''},
     defEnxoval:{tipo:'comprado',fornecedor:'',valorAluguelMensal:0,valorSetupAluguel:0},
+    // reunião
+    reuniao:{nomeArquivo:'', texto:'', dataUpload:null, iaPreenchidoEm:null, iaEncontrados:0},
     // formulário
-    formToken:uid()+uid(), formPerguntas:[], formRespostas:{}, formPreenchidoEm:null,
+    formToken:uid()+uid(), formRascunho:{}, formRespostas:{}, formConfirmados:{}, formPreenchidoEm:null,
     // operacional
     ops:{fotos:{data:'',responsavel:'',hora:'',custo:0},limpeza:{data:'',responsavel:'',hora:'',custo:0},vistoria:{data:'',responsavel:'',hora:'',custo:0,localizacao:'central'}},
     // custos
@@ -403,7 +421,7 @@ function showTab(aba,btn){
 function renderAba(aba){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const fns={dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
-    definicoes:()=>renderAbaDefinicoes(im),formulario:()=>renderAbaFormulario(im),
+    definicoes:()=>renderAbaDefinicoes(im),reuniao:()=>renderAbaReuniao(im),formulario:()=>renderAbaFormulario(im),
     compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),
     operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im)};
   document.getElementById('detalhe-body').innerHTML=(fns[aba]||fns.dados)();
@@ -485,6 +503,7 @@ function _coletarDadosAba(aba,im){
     im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
   }
   if(aba==='compras'){_coletarCompras(im);}
+  if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
 }
 function _coletarCamas(){
   const rows=document.querySelectorAll('.cama-row');
@@ -645,15 +664,160 @@ function renderAbaDefinicoes(im){
   </div>`;
 }
 
+// ═══════════════════ ABA REUNIÃO (IA) ═══════════════════
+function renderAbaReuniao(im){
+  const r=im.reuniao||{};
+  const temTexto=!!(r.texto&&r.texto.trim());
+  return`<div class="form-grid">
+  <div class="form-section-title"><i class="fa-solid fa-microphone-lines"></i> Transcrição da Reunião</div>
+  <div class="hint" style="margin-bottom:12px;">Suba o <strong>PDF da transcrição do Gemini</strong>. A IA vai ler e preencher automaticamente o formulário do imóvel com o que foi falado na reunião.</div>
+
+  <div style="border:2px dashed var(--border);border-radius:12px;padding:22px;text-align:center;background:var(--surface-2);">
+    <input type="file" id="reuniao-pdf" accept="application/pdf" style="display:none;" onchange="_onUploadReuniaoPDF(event)">
+    <i class="fa-solid fa-file-pdf" style="font-size:32px;color:var(--brand-red);opacity:.7;"></i>
+    <div style="margin:10px 0 14px;font-size:13px;color:var(--text-2);">
+      ${r.nomeArquivo?`Arquivo atual: <strong>${esc(r.nomeArquivo)}</strong>`+(r.dataUpload?` · ${fmtDate(r.dataUpload)}`:''):'Nenhum PDF enviado ainda'}
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('reuniao-pdf').click()">
+      <i class="fa-solid fa-upload"></i> ${r.nomeArquivo?'Trocar PDF':'Escolher PDF'}
+    </button>
+  </div>
+  <div id="reuniao-status" style="margin-top:12px;"></div>
+
+  ${temTexto?`
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Preenchimento Automático</div>
+  ${r.iaPreenchidoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> IA preencheu <strong>${r.iaEncontrados||0}</strong> campos em ${fmtDate(r.iaPreenchidoEm)}. Veja/ajuste na aba <strong>Formulário</strong>.</div>`:'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Transcrição carregada. Clique abaixo para a IA preencher o formulário.</div>'}
+  <button class="btn btn-primary" id="btn-ia-preencher" onclick="_rodarIAReuniao()">
+    <i class="fa-solid fa-robot"></i> Ler transcrição e preencher formulário com IA
+  </button>
+  <div class="hint" style="margin-top:6px;">A IA não sobrescreve respostas que o proprietário já confirmou. Ela só preenche o rascunho.</div>
+
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-lines"></i> Texto Extraído</div>
+  <textarea class="input" id="reuniao-texto" rows="8" style="font-size:12px;" onchange="_salvarTextoReuniao()">${esc(r.texto)}</textarea>
+  <div class="hint">Você pode editar/colar o texto manualmente se precisar antes de rodar a IA.</div>
+  `:`
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-keyboard"></i> Ou cole o texto manualmente</div>
+  <textarea class="input" id="reuniao-texto" rows="6" placeholder="Cole aqui o texto da transcrição, se preferir não subir o PDF..." onchange="_salvarTextoReuniao()"></textarea>
+  <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="_salvarTextoReuniao(true)"><i class="fa-solid fa-save"></i> Salvar texto</button>
+  `}
+  </div>`;
+}
+
+async function _onUploadReuniaoPDF(ev){
+  const file=ev.target.files&&ev.target.files[0];
+  if(!file)return;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const status=document.getElementById('reuniao-status');
+  status.innerHTML='<div class="alert-info"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Lendo o PDF…</div>';
+  try{
+    const texto=await _extrairTextoPDF(file);
+    if(!texto||!texto.trim())throw new Error('Não consegui extrair texto deste PDF (pode ser uma imagem digitalizada).');
+    if(!im.reuniao)im.reuniao={};
+    im.reuniao.nomeArquivo=file.name;
+    im.reuniao.texto=texto;
+    im.reuniao.dataUpload=hoje();
+    im.reuniao.iaPreenchidoEm=null;
+    saveAll();
+    showToast('PDF lido com sucesso!','sage');
+    renderAba('reuniao');
+  }catch(e){
+    status.innerHTML=`<div class="alert-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(e.message||'Erro ao ler PDF')}. Tente colar o texto manualmente.</div>`;
+  }
+}
+async function _extrairTextoPDF(file){
+  if(!window.pdfjsLib)throw new Error('Leitor de PDF não carregou. Recarregue a página.');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let texto='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const content=await page.getTextContent();
+    texto+=content.items.map(it=>it.str).join(' ')+'\n';
+  }
+  return texto.trim();
+}
+function _salvarTextoReuniao(avisar){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const t=document.getElementById('reuniao-texto')?.value||'';
+  if(!im.reuniao)im.reuniao={};
+  im.reuniao.texto=t;
+  if(t&&!im.reuniao.dataUpload)im.reuniao.dataUpload=hoje();
+  saveAll();
+  if(avisar){showToast('Texto salvo!','sage');renderAba('reuniao');}
+}
+async function _rodarIAReuniao(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const s=window.WC_SYNC||{};
+  if(!s.url){showToast('Worker não configurado.','peach');return;}
+  const texto=(im.reuniao&&im.reuniao.texto)||document.getElementById('reuniao-texto')?.value||'';
+  if(!texto.trim()){showToast('Sem transcrição para ler.','peach');return;}
+  const btn=document.getElementById('btn-ia-preencher');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> A IA está lendo a reunião…';}
+  try{
+    const perguntas=(window.FORM_PERGUNTAS_FLAT||[]).map(p=>({id:p.id,label:p.label}));
+    const r=await fetch(s.url.replace(/\/$/,'')+'/extrair-formulario?token='+encodeURIComponent(s.token||''),
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript:texto,perguntas})});
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'Falha na IA');
+    const answers=j.answers||{};
+    // mescla no rascunho sem sobrescrever o que proprietário confirmou
+    if(!im.formRascunho)im.formRascunho={};
+    const conf=im.formConfirmados||{};
+    let n=0;
+    for(const k in answers){
+      if(conf[k])continue; // não mexe no que já foi confirmado
+      im.formRascunho[k]=answers[k];n++;
+    }
+    im.reuniao.iaPreenchidoEm=hoje();
+    im.reuniao.iaEncontrados=n;
+    saveAll();
+    showToast(`IA preencheu ${n} campos!`,'sage');
+    renderAba('reuniao');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Ler transcrição e preencher formulário com IA';}
+    showToast('Erro: '+(e.message||'IA indisponível'),'peach');
+  }
+}
+
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
 function _formUrl(im){
   if(!im||!im.formToken)return'';
   const base=location.origin+location.pathname.replace(/[^/]*$/,'');
   return`${base}form.html?id=${im.id}&t=${im.formToken}`;
 }
+function _todasPerguntas(){
+  return (window.FORM_PERGUNTAS_FLAT||[]);
+}
 function renderAbaFormulario(im){
   const url=_formUrl(im);
-  const perguntas=im.formPerguntas&&im.formPerguntas.length?im.formPerguntas:_perguntasPadrao();
+  const secoes=window.FORM_SECOES||[];
+  const rascunho=im.formRascunho||{};
+  const respostas=im.formRespostas||{};
+  const confirmados=im.formConfirmados||{};
+  const totalPerg=_todasPerguntas().length;
+  const preenchidas=Object.values({...rascunho}).filter(v=>String(v||'').trim()).length;
+
+  const secoesHtml=secoes.map(sec=>`
+    <div class="form-section-title" style="margin-top:18px;"><i class="fa-solid fa-${sec.icon}"></i> ${sec.secao}</div>
+    ${sec.perguntas.map(p=>{
+      const val=rascunho[p.id]||'';
+      const respDada=respostas[p.id];
+      const confirmado=confirmados[p.id];
+      const statusIcon=confirmado?'<span class="tag tag-sage" title="Confirmado pelo proprietário"><i class="fa-solid fa-check"></i></span>'
+        :(respDada!=null&&String(respDada).trim()?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
+      const campo = p.tipo==='textarea'
+        ? `<textarea class="input form-rascunho" data-qid="${p.id}" rows="2" placeholder="Pré-preencher (opcional)">${esc(val)}</textarea>`
+        : `<input class="input form-rascunho" data-qid="${p.id}" type="${p.tipo==='number'?'number':'text'}" placeholder="Pré-preencher (opcional)" value="${esc(val)}">`;
+      return `<div class="form-group">
+        <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span>${esc(p.label)}</span> ${statusIcon}
+        </label>
+        ${campo}
+        ${respDada!=null&&String(respDada).trim()&&String(respDada)!==String(val)?`<div class="hint" style="color:var(--purple-text)"><i class="fa-solid fa-reply"></i> Resposta do proprietário: <strong>${esc(respDada)}</strong></div>`:''}
+      </div>`;
+    }).join('')}
+  `).join('');
+
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-clipboard"></i> Link Público do Formulário</div>
   <div class="form-group">
@@ -662,68 +826,43 @@ function renderAbaFormulario(im){
       <input class="input" readonly value="${esc(url)}" onclick="this.select()">
       <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
       <a href="${esc(url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>
+      <a href="https://wa.me/?text=${encodeURIComponent('Olá! Para finalizar o cadastro do seu imóvel na WeCare, preencha este formulário (já deixamos algumas respostas prontas, é só confirmar ou ajustar): '+url)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;"><i class="fa-brands fa-whatsapp"></i></a>
     </div>
-    <div class="hint">Ao abrir no celular/PC do proprietário, não precisa de login.</div>
+    <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>.</div>
   </div>
-  ${im.formPreenchidoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Formulário preenchido em <strong>${fmtDate(im.formPreenchidoEm)}</strong></div>`
-    :'<div class="alert-info" style="background:var(--lav-light,#f0eaf7);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:8px;"><i class="fa-solid fa-info-circle"></i> Aguardando resposta do proprietário.</div>'}
-  ${im.formPreenchidoEm?`<div style="margin-top:8px;"><button class="btn btn-outline btn-sm" onclick="verRespostasForm()"><i class="fa-solid fa-eye"></i> Ver Respostas</button></div>`:''}
+  ${im.formPreenchidoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Proprietário respondeu em <strong>${fmtDate(im.formPreenchidoEm)}</strong></div>`
+    :'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Aguardando o proprietário confirmar/preencher.</div>'}
+  <div class="hint" style="margin-top:4px;">Progresso do pré-preenchimento: <strong>${preenchidas}/${totalPerg}</strong> campos.</div>
 
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-pen-to-square"></i> Perguntas do Formulário</div>
-  <div class="hint" style="margin-bottom:8px;">Você pode adicionar/remover perguntas. As padrão já estão incluídas.</div>
-  <div id="form-perguntas-list">${perguntas.map((p,i)=>`<div class="form-pergunta-row" style="display:flex;gap:8px;margin-bottom:6px;">
-    <input class="input" value="${esc(p.label)}" placeholder="Pergunta" style="flex:3">
-    <select class="input" style="flex:1">
-      ${['text','textarea','select'].map(t=>`<option${p.tipo===t?' selected':''}>${t}</option>`).join('')}
-    </select>
-    <button class="btn btn-xs btn-danger" onclick="this.closest('.form-pergunta-row').remove()"><i class="fa-solid fa-trash"></i></button>
-  </div>`).join('')}</div>
-  <button class="btn btn-outline btn-sm" onclick="adicionarPergunta()"><i class="fa-solid fa-plus"></i> Adicionar pergunta</button>
-  <button class="btn btn-sm" style="margin-top:12px;" onclick="salvarPerguntasForm()"><i class="fa-solid fa-save"></i> Salvar perguntas</button>
+  <div style="display:flex;gap:8px;margin-top:12px;">
+    <button class="btn btn-sm btn-primary" onclick="salvarRascunhoForm()"><i class="fa-solid fa-save"></i> Salvar pré-preenchimento</button>
+    ${im.formPreenchidoEm?`<button class="btn btn-outline btn-sm" onclick="importarRespostasParaRascunho()"><i class="fa-solid fa-download"></i> Trazer respostas do proprietário</button>`:''}
+  </div>
+
+  <div id="form-rascunho-secoes">${secoesHtml}</div>
+
+  <div style="margin-top:16px;">
+    <button class="btn btn-sm btn-primary" onclick="salvarRascunhoForm()"><i class="fa-solid fa-save"></i> Salvar pré-preenchimento</button>
+  </div>
   </div>`;
 }
-function _perguntasPadrao(){
-  return[
-    {id:'wifi_nome',label:'Nome da Rede Wi-Fi',tipo:'text'},
-    {id:'wifi_senha',label:'Senha do Wi-Fi',tipo:'text'},
-    {id:'acesso_codigo',label:'Código de Acesso / Senha da Portaria',tipo:'text'},
-    {id:'condominio_regras',label:'Regras do Condomínio (silêncio, piscina etc.)',tipo:'textarea'},
-    {id:'condominio_sindico',label:'Nome e telefone do síndico/portaria',tipo:'text'},
-    {id:'garagem',label:'Informações sobre garagem (número, acesso)',tipo:'text'},
-    {id:'lixo',label:'Como funciona o descarte de lixo?',tipo:'text'},
-    {id:'animais',label:'Permite animais de estimação?',tipo:'select'},
-    {id:'capacidade',label:'Capacidade máxima de hóspedes',tipo:'text'},
-    {id:'regras_prop',label:'Regras especiais do proprietário',tipo:'textarea'},
-    {id:'obs',label:'Observações gerais para a WeCare',tipo:'textarea'},
-  ];
+function _coletarRascunho(){
+  const r={};
+  document.querySelectorAll('.form-rascunho').forEach(el=>{
+    const v=el.value.trim();
+    if(v)r[el.dataset.qid]=v;
+  });
+  return r;
 }
-function adicionarPergunta(){
-  const div=document.createElement('div');div.className='form-pergunta-row';
-  div.style.cssText='display:flex;gap:8px;margin-bottom:6px;';
-  div.innerHTML=`<input class="input" placeholder="Nova pergunta" style="flex:3">
-    <select class="input" style="flex:1"><option>text</option><option>textarea</option><option>select</option></select>
-    <button class="btn btn-xs btn-danger" onclick="this.closest('.form-pergunta-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
-  document.getElementById('form-perguntas-list').appendChild(div);
-}
-function salvarPerguntasForm(){
+function salvarRascunhoForm(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const rows=document.querySelectorAll('#form-perguntas-list .form-pergunta-row');
-  im.formPerguntas=Array.from(rows).map(r=>({
-    id:'q_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
-    label:r.querySelectorAll('input')[0]?.value||'',
-    tipo:r.querySelector('select')?.value||'text'
-  }));
-  saveAll();showToast('Perguntas salvas!','sage');
+  im.formRascunho=_coletarRascunho();
+  saveAll();showToast('Pré-preenchimento salvo!','sage');
 }
-function verRespostasForm(){
+function importarRespostasParaRascunho(){
   const im=getImovel(_imovelAtivoId);if(!im||!im.formRespostas)return;
-  const perguntas=im.formPerguntas&&im.formPerguntas.length?im.formPerguntas:_perguntasPadrao();
-  const labels=Object.fromEntries(perguntas.map(p=>[p.id,p.label]));
-  const r=im.formRespostas;
-  const linhas=Object.entries(r).map(([k,v])=>`<tr><td style="font-weight:600;padding:6px 8px;">${esc(labels[k]||k)}</td><td style="padding:6px 8px;">${esc(v)}</td></tr>`).join('');
-  document.getElementById('generico-titulo').textContent='Respostas do Formulário';
-  document.getElementById('generico-body').innerHTML=`<table style="width:100%;border-collapse:collapse;">${linhas}</table>`;
-  document.getElementById('modal-generico').classList.add('open');
+  im.formRascunho={...(im.formRascunho||{}),...im.formRespostas};
+  saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
 }
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
@@ -1363,10 +1502,14 @@ function iniciarApp(){
   loadAll();
   const primeiroPanel=document.querySelector('.nav-item[onclick*="kanban"]');
   showPanel('kanban',primeiroPanel);
-  kvPull(false);
+  kvPull(false).then(()=>{
+    // empurra usuários locais para a nuvem (garante que logins criados antes apareçam em todas as máquinas)
+    carregarUsuarios();
+    if(usuarios.length>1||(usuarios[0]&&usuarios[0].email!=='admin@wecare.com')) _kvPushDebounced();
+  });
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',async()=>{
   garantirAdminPadrao();
   const u=getCurrentUser();
   if(u){
@@ -1375,6 +1518,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   } else {
     document.getElementById('login-overlay')?.classList.remove('hidden');
     document.getElementById('login-email')?.focus();
+    await sincronizarUsuariosNuvem(); // garante que todos os logins da nuvem funcionem nesta máquina
   }
   // Enter no login
   document.getElementById('login-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});

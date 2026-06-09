@@ -8,3 +8,6 @@ id = "a93c0bc253924254a01df4112be42672"
 
 [vars]
 AUTH_TOKEN = "wecare_sync_7k2p9m"
+
+[ai]
+binding = "AI"

@@ -6,532 +6,248 @@
   <title>WeCare — Informações do Imóvel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --brand-red:#D63868; --brand-purple:#8B35C5;
+      --brand-grad:linear-gradient(135deg,#D63868 0%,#8B35C5 100%);
+      --bg:#F4F2F8; --surface:#fff; --surface-2:#F9F7FC;
+      --border:#E8E3F0; --text:#1A1033; --text-2:#4A3F6B; --text-muted:#8878AA;
+      --green:#22C55E; --green-bg:#F0FDF4; --green-text:#15803D;
+      --r:14px; --font:'Plus Jakarta Sans',system-ui,sans-serif;
+      --shadow:0 4px 16px rgba(0,0,0,.08);
+    }
+    html{scroll-behavior:smooth;}
+    body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px;-webkit-font-smoothing:antialiased;}
 
-    :root {
-      --rose:        #e8a4b0;
-      --rose-dark:   #c97f8e;
-      --rose-light:  #fdf0f3;
-      --rose-mid:    #f5d0d9;
-      --sage:        #82b09a;
-      --sage-light:  #edf5f1;
-      --bg:          #f5f3ef;
-      --text:        #2d2926;
-      --text2:       #7a7068;
-      --text3:       #b0a89e;
-      --border:      rgba(0,0,0,0.10);
-      --r:           14px;
-      --font-display: 'Fraunces', serif;
-      --font-body:    'Plus Jakarta Sans', sans-serif;
-      --shadow-md:   0 4px 16px rgba(0,0,0,0.08);
-    }
+    .page-header{background:linear-gradient(135deg,#160A2A 0%,#2B1245 100%);padding:22px 20px;text-align:center;position:sticky;top:0;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.2);}
+    .logo{font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.5px;}
+    .logo span{background:var(--brand-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    .logo-sub{font-size:.7rem;color:rgba(255,255,255,.4);letter-spacing:.14em;text-transform:uppercase;margin-top:3px;}
 
-    html { scroll-behavior: smooth; }
+    .container{max-width:680px;margin:0 auto;padding:24px 16px 0;}
 
-    body {
-      font-family: var(--font-body);
-      background: var(--rose-light);
-      color: var(--text);
-      min-height: 100vh;
-      padding-bottom: 60px;
-    }
+    .intro-card{background:var(--surface);border-radius:var(--r);padding:24px;border:1px solid var(--border);margin-bottom:20px;box-shadow:var(--shadow);}
+    .imovel-nome{font-size:1.4rem;font-weight:800;color:var(--text);margin-bottom:8px;}
+    .intro-sub{color:var(--text-2);font-size:.92rem;line-height:1.6;}
+    .intro-badge{display:inline-flex;align-items:center;gap:6px;background:var(--green-bg);color:var(--green-text);font-size:.78rem;font-weight:600;padding:5px 12px;border-radius:20px;margin-top:12px;}
 
-    /* ── Header ── */
-    .page-header {
-      background: white;
-      border-bottom: 1px solid var(--rose-mid);
-      padding: 18px 20px 16px;
-      text-align: center;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      box-shadow: 0 2px 8px rgba(232,164,176,0.15);
-    }
-    .logo {
-      font-family: var(--font-display);
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: -0.5px;
-      line-height: 1;
-    }
-    .logo span { color: var(--rose-dark); }
-    .logo-sub {
-      font-size: 0.72rem;
-      color: var(--text3);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
+    .progress-wrap{position:sticky;top:84px;z-index:9;background:var(--bg);padding:8px 0 12px;}
+    .progress-bar{height:8px;background:var(--border);border-radius:10px;overflow:hidden;}
+    .progress-fill{height:100%;background:var(--brand-grad);width:0%;transition:width .3s;border-radius:10px;}
+    .progress-label{font-size:.78rem;color:var(--text-muted);margin-top:6px;font-weight:600;}
 
-    /* ── Container ── */
-    .container {
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 28px 16px 0;
-    }
+    .secao{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden;}
+    .secao-header{display:flex;align-items:center;gap:10px;padding:16px 20px;background:var(--surface-2);border-bottom:1px solid var(--border);cursor:pointer;}
+    .secao-header i.sec-icon{width:34px;height:34px;display:grid;place-items:center;background:var(--brand-grad);color:#fff;border-radius:9px;font-size:.95rem;}
+    .secao-title{font-weight:700;font-size:1rem;flex:1;}
+    .secao-count{font-size:.75rem;color:var(--text-muted);font-weight:600;}
+    .secao-chevron{color:var(--text-muted);transition:transform .2s;}
+    .secao.collapsed .secao-chevron{transform:rotate(-90deg);}
+    .secao-body{padding:18px 20px;}
+    .secao.collapsed .secao-body{display:none;}
 
-    /* ── Intro card ── */
-    .intro-card {
-      background: white;
-      border-radius: var(--r);
-      padding: 24px 24px 20px;
-      border: 1px solid var(--rose-mid);
-      margin-bottom: 24px;
-      box-shadow: var(--shadow-md);
-    }
-    .imovel-nome {
-      font-family: var(--font-display);
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 6px;
-    }
-    .intro-sub {
-      color: var(--text2);
-      font-size: 0.9rem;
-      line-height: 1.55;
-    }
+    .field{padding:14px 0;border-bottom:1px solid var(--border);}
+    .field:last-child{border-bottom:none;padding-bottom:0;}
+    .field:first-child{padding-top:0;}
+    .field-label{display:block;font-size:.88rem;font-weight:600;color:var(--text);margin-bottom:8px;line-height:1.4;}
+    input[type=text],input[type=number],textarea{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--font);font-size:.92rem;color:var(--text);background:var(--surface-2);transition:border-color .18s,box-shadow .18s;outline:none;}
+    input:focus,textarea:focus{border-color:var(--brand-purple);box-shadow:0 0 0 3px rgba(139,53,197,.12);background:#fff;}
+    textarea{resize:vertical;min-height:70px;line-height:1.5;}
+    .field.confirmado input,.field.confirmado textarea{border-color:#BBF7D0;background:var(--green-bg);}
 
-    /* ── Form card ── */
-    .form-card {
-      background: white;
-      border-radius: var(--r);
-      padding: 24px;
-      border: 1px solid var(--rose-mid);
-      box-shadow: var(--shadow-md);
-    }
+    .confirm-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+    .confirm-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;font-size:.82rem;font-weight:600;color:var(--text-muted);padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;transition:all .15s;}
+    .confirm-check input{display:none;}
+    .confirm-check.on{background:var(--green-bg);border-color:#BBF7D0;color:var(--green-text);}
+    .confirm-check .box{width:16px;height:16px;border:1.5px solid var(--text-muted);border-radius:4px;display:grid;place-items:center;font-size:.6rem;color:transparent;}
+    .confirm-check.on .box{background:var(--green);border-color:var(--green);color:#fff;}
+    .prefill-tag{font-size:.72rem;color:var(--brand-purple);font-weight:600;margin-left:auto;}
 
-    .field-group {
-      margin-bottom: 20px;
-    }
-    .field-group:last-of-type { margin-bottom: 0; }
+    .btn-submit{display:block;width:100%;margin-top:24px;padding:16px;background:var(--brand-grad);color:#fff;font-family:var(--font);font-size:1.02rem;font-weight:700;border:none;border-radius:var(--r);cursor:pointer;transition:transform .1s,box-shadow .18s;box-shadow:0 4px 16px rgba(214,56,104,.35);}
+    .btn-submit:hover:not(:disabled){box-shadow:0 6px 22px rgba(214,56,104,.45);}
+    .btn-submit:active:not(:disabled){transform:scale(.98);}
+    .btn-submit:disabled{opacity:.6;cursor:not-allowed;}
 
-    label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 6px;
-    }
-
-    input[type="text"],
-    input[type="email"],
-    textarea,
-    select {
-      width: 100%;
-      padding: 11px 14px;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      font-family: var(--font-body);
-      font-size: 0.9rem;
-      color: var(--text);
-      background: var(--bg);
-      transition: border-color 0.18s, box-shadow 0.18s;
-      appearance: none;
-      -webkit-appearance: none;
-      outline: none;
-    }
-    input[type="text"]:focus,
-    textarea:focus,
-    select:focus {
-      border-color: var(--rose);
-      box-shadow: 0 0 0 3px rgba(232,164,176,0.18);
-      background: white;
-    }
-    textarea {
-      resize: vertical;
-      min-height: 100px;
-      line-height: 1.55;
-    }
-    select {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7068' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      padding-right: 36px;
-      cursor: pointer;
-    }
-
-    /* ── Divider ── */
-    .section-divider {
-      border: none;
-      border-top: 1.5px solid var(--rose-mid);
-      margin: 24px 0 20px;
-    }
-    .section-label {
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--rose-dark);
-      margin-bottom: 18px;
-    }
-
-    /* ── Submit button ── */
-    .btn-submit {
-      display: block;
-      width: 100%;
-      margin-top: 28px;
-      padding: 15px 20px;
-      background: var(--rose);
-      color: white;
-      font-family: var(--font-body);
-      font-size: 1rem;
-      font-weight: 700;
-      border: none;
-      border-radius: var(--r);
-      cursor: pointer;
-      transition: background 0.18s, transform 0.1s, box-shadow 0.18s;
-      box-shadow: 0 4px 14px rgba(232,164,176,0.40);
-      letter-spacing: 0.01em;
-    }
-    .btn-submit:hover:not(:disabled) {
-      background: var(--rose-dark);
-      box-shadow: 0 6px 18px rgba(201,127,142,0.45);
-    }
-    .btn-submit:active:not(:disabled) { transform: scale(0.98); }
-    .btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
-
-    /* ── Error state ── */
-    #error-state {
-      display: none;
-      text-align: center;
-      padding: 48px 24px;
-    }
-    .error-icon {
-      font-size: 3rem;
-      margin-bottom: 16px;
-    }
-    .error-title {
-      font-family: var(--font-display);
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 10px;
-    }
-    .error-msg {
-      color: var(--text2);
-      font-size: 0.92rem;
-      line-height: 1.6;
-    }
-
-    /* ── Success state ── */
-    #success-state {
-      display: none;
-      text-align: center;
-      padding: 60px 24px 48px;
-    }
-    .success-icon {
-      width: 72px;
-      height: 72px;
-      background: var(--sage-light);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 24px;
-    }
-    .success-icon svg {
-      width: 36px;
-      height: 36px;
-      stroke: var(--sage);
-      stroke-width: 2.5;
-      fill: none;
-    }
-    .success-title {
-      font-family: var(--font-display);
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-    .success-msg {
-      color: var(--text2);
-      font-size: 0.95rem;
-      line-height: 1.65;
-      max-width: 360px;
-      margin: 0 auto;
-    }
-
-    /* ── Loading ── */
-    #loading-state {
-      text-align: center;
-      padding: 60px 24px;
-      color: var(--text2);
-      font-size: 0.9rem;
-    }
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid var(--rose-mid);
-      border-top-color: var(--rose);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 16px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Submit feedback ── */
-    .submit-error {
-      margin-top: 12px;
-      padding: 12px 16px;
-      background: #fdf0ee;
-      border: 1px solid #e8b4ae;
-      border-radius: 10px;
-      font-size: 0.85rem;
-      color: #c05a50;
-      display: none;
-    }
-
-    @media (max-width: 480px) {
-      .container { padding: 20px 12px 0; }
-      .form-card, .intro-card { padding: 18px 16px; }
-    }
+    #loading-state{text-align:center;padding:60px 24px;color:var(--text-muted);}
+    .spinner{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--brand-purple);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    #error-state{display:none;text-align:center;padding:48px 24px;}
+    .error-icon{font-size:3rem;margin-bottom:16px;}
+    .error-title{font-size:1.35rem;font-weight:800;margin-bottom:10px;}
+    .error-msg{color:var(--text-2);font-size:.92rem;line-height:1.6;}
+    #success-state{display:none;text-align:center;padding:60px 24px;}
+    .success-icon{width:76px;height:76px;background:var(--green-bg);border-radius:50%;display:grid;place-items:center;margin:0 auto 24px;font-size:2rem;color:var(--green);}
+    .success-title{font-size:1.5rem;font-weight:800;margin-bottom:12px;}
+    .success-msg{color:var(--text-2);font-size:.95rem;line-height:1.6;max-width:380px;margin:0 auto;}
+    .submit-error{margin-top:12px;padding:12px 16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;font-size:.85rem;color:#C0392B;display:none;}
+    @media(max-width:480px){.container{padding:16px 12px 0;}.secao-body{padding:14px 16px;}}
   </style>
 </head>
 <body>
 
-<script>
-  window.WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';
-</script>
+<script>window.WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';</script>
 
-<!-- ── Header ── -->
 <header class="page-header">
   <div class="logo">We<span>Care</span></div>
-  <div class="logo-sub">Onboarding de Imóveis</div>
+  <div class="logo-sub">Cadastro do Imóvel</div>
 </header>
 
-<!-- ── Main content ── -->
 <div class="container">
+  <div id="loading-state"><div class="spinner"></div>Carregando informações…</div>
 
-  <!-- Loading -->
-  <div id="loading-state">
-    <div class="spinner"></div>
-    Carregando informações…
-  </div>
-
-  <!-- Error -->
   <div id="error-state">
     <div class="error-icon">🔗</div>
     <div class="error-title">Link inválido ou expirado</div>
-    <div class="error-msg" id="error-detail">
-      Este link não é mais válido. Por favor, entre em contato com a equipe WeCare para receber um novo link de preenchimento.
-    </div>
+    <div class="error-msg" id="error-detail">Este link não é mais válido. Entre em contato com a equipe WeCare para receber um novo link.</div>
   </div>
 
-  <!-- Form -->
   <div id="form-state" style="display:none;">
     <div class="intro-card">
       <div class="imovel-nome" id="imovel-nome">Seu imóvel</div>
-      <div class="intro-sub">Preencha as informações abaixo para que nossa equipe possa preparar tudo para seus hóspedes. Você pode salvar e voltar a qualquer momento usando o mesmo link.</div>
+      <div class="intro-sub">Já preenchemos algumas informações para você. Confira cada uma, marque <strong>“Está correto”</strong> ✓ ou ajuste o que precisar. Você pode salvar e voltar depois usando o mesmo link.</div>
+      <div class="intro-badge"><i class="fa-solid fa-wand-magic-sparkles"></i> Pré-preenchido pela equipe WeCare</div>
     </div>
 
-    <div class="form-card">
-      <div id="campos-container"></div>
-      <button class="btn-submit" id="btn-submit" onclick="submitForm()">Enviar informações</button>
-      <div class="submit-error" id="submit-error"></div>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label">0 de 0 confirmados</div>
     </div>
+
+    <div id="secoes-container"></div>
+    <button class="btn-submit" id="btn-submit" onclick="submitForm()">Enviar informações</button>
+    <div class="submit-error" id="submit-error"></div>
   </div>
 
-  <!-- Success -->
   <div id="success-state">
-    <div class="success-icon">
-      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-    </div>
+    <div class="success-icon"><i class="fa-solid fa-check"></i></div>
     <div class="success-title">Informações recebidas!</div>
-    <div class="success-msg">A equipe WeCare revisará os dados do seu imóvel e entrará em contato em breve. Obrigado pela parceria!</div>
+    <div class="success-msg">A equipe WeCare vai revisar os dados do seu imóvel e preparar tudo para seus hóspedes. Obrigado pela parceria! 💜</div>
   </div>
-
 </div>
 
+<script src="js/perguntas.js?v=4"></script>
 <script>
-(function () {
-  // ── Perguntas padrão ──
-  const PERGUNTAS_PADRAO = [
-    { id: 'wifi_nome',        pergunta: 'Nome da rede Wi-Fi',                                          tipo: 'text' },
-    { id: 'wifi_senha',       pergunta: 'Senha do Wi-Fi',                                              tipo: 'text' },
-    { id: 'acesso_codigo',    pergunta: 'Código de acesso ao imóvel (fechadura/portaria)',              tipo: 'text' },
-    { id: 'condominio_regras',pergunta: 'Regras do condomínio que os hóspedes devem saber',            tipo: 'textarea' },
-    { id: 'condominio_sindico',pergunta: 'Contato do síndico (nome e telefone)',                       tipo: 'text' },
-    { id: 'garagem',          pergunta: 'Informações sobre garagem/estacionamento',                     tipo: 'text' },
-    { id: 'lixo',             pergunta: 'Dia e horário da coleta de lixo',                             tipo: 'text' },
-    { id: 'animais',          pergunta: 'Animais de estimação são permitidos?',                        tipo: 'select',
-      opcoes: ['Não permitido', 'Permitido (todos)', 'Somente pets pequenos'] },
-    { id: 'capacidade',       pergunta: 'Capacidade máxima de hóspedes',                               tipo: 'text' },
-    { id: 'regras_prop',      pergunta: 'Regras específicas do proprietário',                          tipo: 'textarea' },
-    { id: 'obs',              pergunta: 'Observações adicionais',                                      tipo: 'textarea' },
-  ];
+(function(){
+  function qs(s){return document.querySelector(s);}
+  function show(id){qs('#'+id).style.display='';}
+  function hide(id){qs('#'+id).style.display='none';}
+  function getParams(){const p=new URLSearchParams(location.search);return{id:p.get('id')||'',t:p.get('t')||''};}
+  function showError(msg){hide('loading-state');hide('form-state');hide('success-state');if(msg)qs('#error-detail').textContent=msg;show('error-state');}
 
-  // ── Helpers ──
-  function qs(sel) { return document.querySelector(sel); }
-  function show(id) { qs('#' + id).style.display = ''; }
-  function hide(id) { qs('#' + id).style.display = 'none'; }
+  let _valores={}, _confirmados={};
 
-  function getParams() {
-    const p = new URLSearchParams(location.search);
-    return { id: p.get('id') || '', t: p.get('t') || '' };
-  }
+  function buildForm(secoes, rascunho, respostas, confirmados){
+    const cont=qs('#secoes-container');
+    cont.innerHTML='';
+    _valores={}; _confirmados={};
 
-  function showError(msg) {
-    hide('loading-state');
-    hide('form-state');
-    hide('success-state');
-    if (msg) qs('#error-detail').textContent = msg;
-    show('error-state');
-  }
+    secoes.forEach(function(sec,si){
+      const val0=function(qid){
+        if(respostas&&respostas[qid]!=null&&String(respostas[qid]).trim()) return respostas[qid];
+        if(rascunho&&rascunho[qid]!=null) return rascunho[qid];
+        return '';
+      };
+      const box=document.createElement('div');
+      box.className='secao';
+      box.innerHTML=
+        '<div class="secao-header" onclick="this.parentNode.classList.toggle(\'collapsed\')">'+
+          '<i class="sec-icon fa-solid fa-'+sec.icon+'"></i>'+
+          '<span class="secao-title">'+sec.secao+'</span>'+
+          '<span class="secao-count">'+sec.perguntas.length+' itens</span>'+
+          '<i class="secao-chevron fa-solid fa-chevron-down"></i>'+
+        '</div>'+
+        '<div class="secao-body"></div>';
+      const body=box.querySelector('.secao-body');
 
-  // ── Build form fields ──
-  function buildFields(perguntas, respostas) {
-    const container = qs('#campos-container');
-    container.innerHTML = '';
+      sec.perguntas.forEach(function(p){
+        const v=val0(p.id);
+        _valores[p.id]=v;
+        _confirmados[p.id]=!!(confirmados&&confirmados[p.id]);
+        const hasPrefill=rascunho&&rascunho[p.id]!=null&&String(rascunho[p.id]).trim();
 
-    perguntas.forEach(function (p, i) {
-      // Optional section divider every group-of-fields could be added here
-      const group = document.createElement('div');
-      group.className = 'field-group';
+        const field=document.createElement('div');
+        field.className='field'+(_confirmados[p.id]?' confirmado':'');
+        field.dataset.qid=p.id;
 
-      const lbl = document.createElement('label');
-      lbl.setAttribute('for', 'field-' + p.id);
-      lbl.textContent = p.pergunta;
-      group.appendChild(lbl);
+        const lbl=document.createElement('label');
+        lbl.className='field-label';
+        lbl.textContent=p.label;
+        field.appendChild(lbl);
 
-      const val = (respostas && respostas[p.id] != null) ? respostas[p.id] : '';
+        let input;
+        if(p.tipo==='textarea'){input=document.createElement('textarea');}
+        else{input=document.createElement('input');input.type=(p.tipo==='number'?'number':'text');}
+        input.value=v;
+        input.placeholder='Digite aqui…';
+        input.addEventListener('input',function(){_valores[p.id]=input.value;});
+        field.appendChild(input);
 
-      if (p.tipo === 'textarea') {
-        const ta = document.createElement('textarea');
-        ta.id = 'field-' + p.id;
-        ta.name = p.id;
-        ta.placeholder = 'Digite aqui…';
-        ta.value = val;
-        group.appendChild(ta);
-
-      } else if (p.tipo === 'select' && p.opcoes && p.opcoes.length) {
-        const sel = document.createElement('select');
-        sel.id = 'field-' + p.id;
-        sel.name = p.id;
-        const emptyOpt = document.createElement('option');
-        emptyOpt.value = '';
-        emptyOpt.textContent = 'Selecione…';
-        sel.appendChild(emptyOpt);
-        p.opcoes.forEach(function (op) {
-          const opt = document.createElement('option');
-          opt.value = op;
-          opt.textContent = op;
-          if (op === val) opt.selected = true;
-          sel.appendChild(opt);
+        const row=document.createElement('div');
+        row.className='confirm-row';
+        const chk=document.createElement('label');
+        chk.className='confirm-check'+(_confirmados[p.id]?' on':'');
+        chk.innerHTML='<span class="box"><i class="fa-solid fa-check"></i></span> Está correto';
+        chk.addEventListener('click',function(){
+          _confirmados[p.id]=!_confirmados[p.id];
+          chk.classList.toggle('on',_confirmados[p.id]);
+          field.classList.toggle('confirmado',_confirmados[p.id]);
+          updateProgress();
         });
-        if (!val) sel.value = '';
-        group.appendChild(sel);
+        row.appendChild(chk);
+        if(hasPrefill){const tag=document.createElement('span');tag.className='prefill-tag';tag.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> sugerido';row.appendChild(tag);}
+        field.appendChild(row);
 
-      } else {
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.id = 'field-' + p.id;
-        inp.name = p.id;
-        inp.placeholder = 'Digite aqui…';
-        inp.value = val;
-        group.appendChild(inp);
-      }
-
-      container.appendChild(group);
+        body.appendChild(field);
+      });
+      cont.appendChild(box);
     });
-
-    // Store perguntas for submit
-    window._wcPerguntas = perguntas;
+    window._wcSecoes=secoes;
+    updateProgress();
   }
 
-  // ── Collect answers ──
-  function collectRespostas() {
-    const respostas = {};
-    (window._wcPerguntas || []).forEach(function (p) {
-      const el = document.getElementById('field-' + p.id);
-      if (el) respostas[p.id] = el.value;
-    });
-    return respostas;
+  function updateProgress(){
+    const total=(window.FORM_PERGUNTAS_FLAT||[]).length;
+    let conf=0;
+    for(const k in _confirmados) if(_confirmados[k]) conf++;
+    const pct=total?Math.round(conf/total*100):0;
+    qs('#progress-fill').style.width=pct+'%';
+    qs('#progress-label').textContent=conf+' de '+total+' confirmados';
   }
 
-  // ── Submit ──
-  window.submitForm = function () {
-    const { id, t } = getParams();
-    const btn = qs('#btn-submit');
-    const errEl = qs('#submit-error');
-    errEl.style.display = 'none';
-
-    const respostas = collectRespostas();
-    btn.disabled = true;
-    btn.textContent = 'Enviando…';
-
-    const workerUrl = (window.WC_WORKER_URL || '').replace(/\/$/, '');
-    const url = workerUrl + '/form-save?id=' + encodeURIComponent(id) + '&t=' + encodeURIComponent(t);
-
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ respostas: respostas })
-    })
-    .then(function (r) {
-      if (!r.ok) return r.json().then(function (d) { throw new Error(d.erro || d.error || 'Erro ao salvar'); });
-      return r.json();
-    })
-    .then(function () {
-      hide('form-state');
-      show('success-state');
-    })
-    .catch(function (err) {
-      btn.disabled = false;
-      btn.textContent = 'Enviar informações';
-      errEl.textContent = err.message || 'Erro ao enviar. Tente novamente em alguns instantes.';
-      errEl.style.display = 'block';
-    });
+  window.submitForm=function(){
+    const{id,t}=getParams();
+    const btn=qs('#btn-submit'),errEl=qs('#submit-error');
+    errEl.style.display='none';
+    btn.disabled=true;btn.textContent='Enviando…';
+    const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
+    const url=workerUrl+'/form-save?id='+encodeURIComponent(id)+'&t='+encodeURIComponent(t);
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
+    .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Erro ao salvar');});return r.json();})
+    .then(function(){hide('form-state');show('success-state');window.scrollTo(0,0);})
+    .catch(function(err){btn.disabled=false;btn.textContent='Enviar informações';errEl.textContent=err.message||'Erro ao enviar. Tente novamente.';errEl.style.display='block';});
   };
 
-  // ── Init ──
-  function init() {
-    const { id, t } = getParams();
-
-    if (!id || !t) {
-      showError('Link incompleto. Verifique se o endereço está correto ou solicite um novo link à equipe WeCare.');
-      return;
-    }
-
-    const workerUrl = (window.WC_WORKER_URL || '').replace(/\/$/, '');
-
-    if (!workerUrl) {
-      // Dev fallback: show form with defaults and no data
-      qs('#imovel-nome').textContent = 'Meu Imóvel';
-      buildFields(PERGUNTAS_PADRAO, {});
-      hide('loading-state');
-      show('form-state');
-      return;
-    }
-
-    const url = workerUrl + '/form-load?id=' + encodeURIComponent(id) + '&t=' + encodeURIComponent(t);
-
+  function init(){
+    const{id,t}=getParams();
+    const secoes=window.FORM_SECOES||[];
+    if(!id||!t){showError('Link incompleto. Solicite um novo link à equipe WeCare.');return;}
+    const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
+    if(!workerUrl){qs('#imovel-nome').textContent='Meu Imóvel';buildForm(secoes,{},{},{});hide('loading-state');show('form-state');return;}
+    const url=workerUrl+'/form-load?id='+encodeURIComponent(id)+'&t='+encodeURIComponent(t);
     fetch(url)
-      .then(function (r) {
-        if (!r.ok) return r.json().then(function (d) { throw new Error(d.erro || d.error || 'Token inválido'); });
-        return r.json();
+      .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Token inválido');});return r.json();})
+      .then(function(data){
+        qs('#imovel-nome').textContent=data.imovelNome||data.nome_imovel||'Seu imóvel';
+        buildForm(secoes, data.rascunho||{}, data.respostas||{}, data.confirmados||{});
+        hide('loading-state');show('form-state');
       })
-      .then(function (data) {
-        // data: { nome_imovel, perguntas?, respostas? }
-        qs('#imovel-nome').textContent = data.nome_imovel || 'Seu imóvel';
-
-        const perguntas = (data.perguntas && data.perguntas.length)
-          ? data.perguntas
-          : PERGUNTAS_PADRAO;
-
-        buildFields(perguntas, data.respostas || {});
-        hide('loading-state');
-        show('form-state');
-      })
-      .catch(function (err) {
-        showError('Link inválido ou expirado. Entre em contato com a equipe WeCare para receber um novo link.');
-      });
+      .catch(function(){showError('Link inválido ou expirado. Entre em contato com a equipe WeCare.');});
   }
-
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded',init);
 })();
 </script>
 </body>
