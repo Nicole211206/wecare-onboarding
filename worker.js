@@ -3,13 +3,17 @@
 // Variáveis de ambiente: AUTH_TOKEN
 //
 // Endpoints:
-//   GET  /load                    → retorna {ok:true, data:{...}} — estado completo (wc_state)
-//   POST /save                    → merge com estado atual e salva
-//   POST /stats                   → salva key "wc_stats" (resumo para a Claire)
-//   GET  /onboarding-stats        → retorna stats para a Claire (sem auth)
-//   POST /zapsign-webhook         → webhook do ZapSign (sem auth principal)
-//   GET  /form-load?id=X&t=TOKEN  → carrega formulário do imóvel (sem auth principal)
-//   POST /form-save?id=X&t=TOKEN  → salva respostas do formulário
+//   GET  /load                          → estado completo (wc_state)
+//   POST /save                          → merge seguro + backup/hora + salva
+//   POST /stats                         → salva stats para a Claire
+//   GET  /onboarding-stats              → retorna stats + prestadores (sem auth)
+//   POST /zapsign-webhook               → webhook do ZapSign
+//   GET  /form-load?id=X&t=TOKEN        → carrega formulário do imóvel
+//   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
+//   POST /extrair-formulario            → IA extrai dados de transcrição
+//   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis
+//   POST /jarvis-notify?id=X&token=T    → webhook de notificação do Jarvis
+//   POST /analisar-fotos                → IA analisa fotos e preenche campos
 
 const KV_KEY   = 'wc_state';
 const STATS_KEY = 'wc_stats';
@@ -69,7 +73,33 @@ export default {
       let body;
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
       const current = await getState(env);
-      const merged  = { ...current, ...body };
+
+      // Backup horário (7 dias de expiração)
+      try {
+        const hourKey = 'wc_backup_' + Math.floor(Date.now() / 3600000);
+        const hasBackup = await env.ONBOARDING_KV.get(hourKey);
+        if (!hasBackup) {
+          await env.ONBOARDING_KV.put(hourKey, JSON.stringify(current), { expirationTtl: 604800 });
+        }
+      } catch {}
+
+      // Merge: incoming sobrescreve current, exceto listas que encolheriam catastroficamente
+      const merged = { ...current, ...body };
+      const listKeys = ['wc_imoveis','wc_prestadores','wc_users','wc_membros','wc_itens'];
+      for (const k of listKeys) {
+        const sv = Array.isArray(current[k]) ? current[k] : [];
+        const iv = Array.isArray(body[k])    ? body[k]    : [];
+        // Cair para 0, ou de ≥8 para ≤2: mantém servidor
+        if ((iv.length === 0 && sv.length > 0) || (sv.length >= 8 && iv.length <= 2)) {
+          merged[k] = sv;
+        }
+      }
+
+      // lastSaved: aceita o do cliente se for mais novo
+      if (body.lastSaved && +body.lastSaved > +(current.lastSaved || 0)) {
+        merged.lastSaved = body.lastSaved;
+      }
+
       await putState(env, merged);
       return json({ ok: true });
     }
@@ -139,15 +169,25 @@ Regras:
       if (!checkAuth(token, env)) return unauthorized();
       let body;
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
-      await env.ONBOARDING_KV.put(STATS_KEY, JSON.stringify(body.stats ?? []));
+      const payload = { stats: body.stats ?? [], prestadores: body.prestadores ?? [], atualizadoEm: new Date().toISOString() };
+      await env.ONBOARDING_KV.put(STATS_KEY, JSON.stringify(payload));
       return json({ ok: true });
     }
 
     // ── GET /onboarding-stats (sem auth — a Claire lê aqui) ───────────────────
     if (request.method === 'GET' && path === '/onboarding-stats') {
-      const raw   = await env.ONBOARDING_KV.get(STATS_KEY);
-      const stats = raw ? JSON.parse(raw) : [];
-      return json({ ok: true, stats });
+      const raw  = await env.ONBOARDING_KV.get(STATS_KEY);
+      const data = raw ? JSON.parse(raw) : {};
+      // Suporta formato antigo (array) e novo (objeto)
+      const stats      = Array.isArray(data) ? data : (data.stats ?? []);
+      const prestadores = Array.isArray(data) ? [] : (data.prestadores ?? []);
+      const atualizadoEm = data.atualizadoEm ?? null;
+      // KPIs calculados
+      const ativos    = stats.filter(s => s.status === 'ativo' && s.diasOnboarding != null);
+      const mediaOnboarding = ativos.length
+        ? Math.round(ativos.reduce((s,x) => s + x.diasOnboarding, 0) / ativos.length)
+        : null;
+      return json({ ok: true, stats, prestadores, kpi: { mediaOnboardingDias: mediaOnboarding, totalAtivos: ativos.length }, atualizadoEm });
     }
 
     // ── POST /zapsign-webhook ─────────────────────────────────────────────────
@@ -232,6 +272,85 @@ Regras:
 
       await putState(env, state);
       return json({ ok: true });
+    }
+
+    // ── GET /imovel-dados (leitura para o Jarvis) ─────────────────────────────
+    if (request.method === 'GET' && path === '/imovel-dados') {
+      if (!checkAuth(token, env)) return unauthorized();
+      const imovelId = url.searchParams.get('id') || '';
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+      return json({ ok: true, imovel: {
+        id: im.id, nome: im.nome, endereco: im.endereco,
+        proprietarioNome: im.proprietarioNome, proprietarioTel: im.proprietarioTel,
+        quartos: im.quartos, banheiros: im.banheiros, status: im.status,
+        captacaoLink: im.captacaoLink, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao,
+        observacoes: im.observacoes, formRespostas: im.formRespostas ?? {},
+        jarvisPreenchidoEm: im.jarvisPreenchidoEm,
+      }});
+    }
+
+    // ── POST /jarvis-notify (webhook do Jarvis) ────────────────────────────────
+    if (request.method === 'POST' && path === '/jarvis-notify') {
+      if (!checkAuth(token, env)) return unauthorized();
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+      const imovelId = body.id || url.searchParams.get('id') || '';
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+      const dados = body.dados || {};
+      // Pré-preenche sem sobrescrever dados já existentes
+      if (dados.captacaoLink)    im.captacaoLink    = dados.captacaoLink;
+      if (dados.proprietarioNome && !im.proprietarioNome) im.proprietarioNome = dados.proprietarioNome;
+      if (dados.proprietarioTel  && !im.proprietarioTel)  im.proprietarioTel  = dados.proprietarioTel;
+      if (dados.endereco         && !im.endereco)          im.endereco         = dados.endereco;
+      if (dados.quartos          && !im.quartos)           im.quartos          = +dados.quartos;
+      if (dados.banheiros        && !im.banheiros)         im.banheiros        = +dados.banheiros;
+      if (dados.observacoes      && !im.observacoes)       im.observacoes      = dados.observacoes;
+      // Preenche rascunho do formulário sem sobrescrever confirmados
+      if (dados.formRascunho && typeof dados.formRascunho === 'object') {
+        if (!im.formRascunho) im.formRascunho = {};
+        const conf = im.formConfirmados || {};
+        for (const k in dados.formRascunho) {
+          if (!conf[k]) im.formRascunho[k] = dados.formRascunho[k];
+        }
+      }
+      im.jarvisPreenchidoEm = new Date().toISOString();
+      await putState(env, state);
+      return json({ ok: true, imovel: { id: im.id, nome: im.nome, status: im.status } });
+    }
+
+    // ── POST /analisar-fotos (IA analisa fotos e preenche campos) ─────────────
+    if (request.method === 'POST' && path === '/analisar-fotos') {
+      if (!checkAuth(token, env)) return unauthorized();
+      if (!env.AI) return json({ ok: false, error: 'Workers AI não configurado' }, 500);
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+      const fotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 3) : [];
+      if (!fotos.length) return json({ ok: false, error: 'Nenhuma foto enviada' }, 400);
+
+      const base64 = fotos[0].replace(/^data:image\/\w+;base64,/, '');
+      const imageArr = [...atob(base64)].map(c => c.charCodeAt(0));
+      const prompt = `Você é especialista em análise de imóveis para aluguel por temporada.
+Analise esta foto e extraia APENAS o que for claramente visível.
+Retorne SOMENTE um JSON válido, sem texto adicional:
+{"quartos":"numero ou vazio","banheiros":"numero ou vazio","tipo_cama":"Solteiro/Casal/Queen/King ou vazio","descricao":"descricao objetiva do ambiente","condicao":"excelente/boa/regular","observacoes":"outros detalhes relevantes"}`;
+      try {
+        const out = await env.AI.run('@cf/llava-1.5-7b-hf-gguf', { image: imageArr, prompt, max_tokens: 400 });
+        const texto = (out?.response || out?.result || '') + '';
+        let dados = {};
+        const ini = texto.indexOf('{'); const fim = texto.lastIndexOf('}');
+        if (ini >= 0 && fim > ini) { try { dados = JSON.parse(texto.slice(ini, fim + 1)); } catch {} }
+        return json({ ok: true, dados });
+      } catch (e) {
+        return json({ ok: false, error: 'Falha na IA: ' + (e?.message || 'desconhecido') }, 500);
+      }
     }
 
     // ── 404 ───────────────────────────────────────────────────────────────────

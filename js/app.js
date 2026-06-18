@@ -200,6 +200,8 @@ async function sincronizarUsuariosNuvem(){
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
 const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_prestadores','wc_users'];
+let _lastSentStr=null;
+
 function saveAll(){
   localStorage.setItem('wc_imoveis',JSON.stringify(imoveis));
   localStorage.setItem('wc_membros',JSON.stringify(membros));
@@ -218,19 +220,32 @@ function loadAll(){
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
 }
+
 let _kvTimer=null;
 function _kvPushDebounced(){
   const s=window.WC_SYNC||{};if(!s.url)return;
+  // Regra 2: só envia após ter lido o servidor nesta sessão
+  if(!window.__servidorLido)return;
   if(_kvTimer)clearTimeout(_kvTimer);
-  _kvTimer=setTimeout(async()=>{
-    try{
-      const blob={};
-      SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
-      await fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
-        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)});
-    }catch{}
-  },2500);
+  _kvTimer=setTimeout(_kvSendNow,2500);
 }
+async function _kvSendNow(){
+  _kvTimer=null;
+  const s=window.WC_SYNC||{};if(!s.url||!window.__servidorLido)return;
+  const blob={};
+  SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
+  // Regra 1: só envia se mudou de verdade
+  const blobStr=JSON.stringify(blob);
+  if(blobStr===_lastSentStr)return;
+  _lastSentStr=blobStr;
+  blob.lastSaved=Date.now();
+  localStorage.setItem('lastSaved',String(blob.lastSaved));
+  try{
+    await fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)});
+  }catch{}
+}
+
 async function kvPull(showMsg){
   const s=window.WC_SYNC||{};
   if(!s.url){if(showMsg)showToast('Worker não configurado.','peach');return;}
@@ -238,19 +253,41 @@ async function kvPull(showMsg){
     const r=await fetch(s.url.replace(/\/$/,'')+'/load?token='+encodeURIComponent(s.token||''));
     const j=await r.json();
     if(j&&j.data){
-      for(const k in j.data)try{localStorage.setItem(k,JSON.stringify(j.data[k]));}catch{}
-      loadAll();renderKanban();
-      if(showMsg)showToast('Sincronizado!','sage');return true;
+      window.__servidorLido=true; // Regra 2: marca que leu o servidor
+      const localTs=+localStorage.getItem('lastSaved')||0;
+      const serverTs=+(j.data.lastSaved)||0;
+      // Regra 4: só sobrescreve o local se o servidor for estritamente mais novo
+      if(serverTs>localTs){
+        for(const k in j.data){
+          const sv=j.data[k];
+          // Regra 3: vazio/menor nunca sobrescreve cheio
+          if(Array.isArray(sv)){
+            const lv=localStorage.getItem(k);
+            const la=lv?JSON.parse(lv):[];
+            if(Array.isArray(la)&&la.length>sv.length)continue;
+          }
+          try{localStorage.setItem(k,JSON.stringify(sv));}catch{}
+        }
+        loadAll();
+        if(_imovelAtivoId)renderAba(_abaAtiva);
+        renderKanban();
+      }
+      if(showMsg)showToast('Sincronizado!','sage');
+      return true;
     }
   }catch{}
   if(showMsg)showToast('Erro ao sincronizar.','peach');
 }
+
 async function _publicarStats(){
   const s=window.WC_SYNC||{};if(!s.url)return;
   try{
-    const stats=imoveis.map(im=>({nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status}));
+    const stats=imoveis.map(im=>({
+      nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status,
+      diasOnboarding:im.dataCriacao&&im.dataAtivacao?diasEntre(im.dataCriacao,im.dataAtivacao):null
+    }));
     await fetch(s.url.replace(/\/$/,'')+'/stats?token='+encodeURIComponent(s.token||''),
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stats})});
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stats,prestadores})});
   }catch{}
 }
 
@@ -358,6 +395,10 @@ function salvarNovoImovel(){
     dataCriacao:document.getElementById('ni-data-criacao').value||hoje(),
     plataformas:[], camas:[], status:'contrato',
     dataAtivacao:null, statusAnterior:null,
+    // captação
+    captacaoLink:'', jarvisPreenchidoEm:null,
+    // fotos
+    fotos:[], fotosIaEm:null, fotosIaEncontrados:0,
     // contrato
     contratoLink:'', zapsignUuid:'', contratoAssinado:false, dataContratoAssinado:null,
     // definições
@@ -373,7 +414,7 @@ function salvarNovoImovel(){
     // custos
     custos:[], margemWecare:15, descontoTipo:'reais', descontoValor:0, formasPagamento:'',
     // compras
-    compras:{},
+    compras:{}, freteTotal:0,
     // final
     linkFotos:'', linkRelatorio:'', responsavelCriacao:'',
     prazoAtivacaoHoras:24, dataEnvioParaCriacao:null,
@@ -387,13 +428,13 @@ function salvarNovoImovel(){
 // ═══════════════════ DETALHE ═══════════════════
 function getImovel(id){return imoveis.find(x=>x.id===id);}
 function abrirDetalhe(id){
-  _imovelAtivoId=id;_abaAtiva='dados';
+  _imovelAtivoId=id;_abaAtiva='captacao';
   const im=getImovel(id);if(!im)return;
   document.getElementById('detalhe-titulo').textContent=im.nome;
   document.getElementById('detalhe-subtitulo').textContent=(im.proprietarioNome||'')+(im.endereco?' · '+im.endereco:'');
   _atualizarHeaderDetalhe(im);
   document.querySelectorAll('#detalhe-tabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
-  renderAba('dados');
+  renderAba('captacao');
   document.getElementById('modal-detalhe').classList.add('open');
 }
 function _atualizarHeaderDetalhe(im){
@@ -420,8 +461,8 @@ function showTab(aba,btn){
 }
 function renderAba(aba){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const fns={dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
-    definicoes:()=>renderAbaDefinicoes(im),reuniao:()=>renderAbaReuniao(im),formulario:()=>renderAbaFormulario(im),
+  const fns={captacao:()=>renderAbaCaptacao(im),dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
+    definicoes:()=>renderAbaDefinicoes(im),reuniao:()=>renderAbaReuniao(im),fotos:()=>renderAbaFotos(im),formulario:()=>renderAbaFormulario(im),
     compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),
     operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im)};
   document.getElementById('detalhe-body').innerHTML=(fns[aba]||fns.dados)();
@@ -462,6 +503,9 @@ function _coletarDadosAba(aba,im){
   const g=id=>{const el=document.getElementById(id);return el?el.value:''};
   const gc=id=>{const el=document.getElementById(id);return el?el.checked:false};
   const gn=id=>+g(id)||0;
+  if(aba==='captacao'){
+    im.captacaoLink=g('cap-link');
+  }
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
@@ -521,6 +565,8 @@ function _coletarCompras(im){
     if(!im.compras)im.compras={};
     im.compras[idx]={qtdReal:+inp.value||0,comprado:inp.closest('tr')?.querySelector('.compra-check')?.checked||false};
   });
+  const freteEl=document.getElementById('compras-frete');
+  if(freteEl)im.freteTotal=+freteEl.value||0;
 }
 
 // ═══════════════════ ABA DADOS ═══════════════════
@@ -577,6 +623,168 @@ function adicionarCama(){
     <input class="input cama-qtd" type="number" min="1" value="1" style="width:64px;">
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
   document.getElementById('camas-list').appendChild(div);
+}
+
+// ═══════════════════ ABA CAPTAÇÃO ═══════════════════
+function renderAbaCaptacao(im){
+  const base=(window.WC_SYNC?.url||'').replace(/\/$/,'');
+  const tkn=window.WC_SYNC?.token||'';
+  const webhookUrl=base+'/jarvis-notify?token='+encodeURIComponent(tkn)+'&id='+im.id;
+  const readUrl=base+'/imovel-dados?id='+im.id+'&token='+encodeURIComponent(tkn);
+  const temLink=!!(im.captacaoLink||'').trim();
+  return`<div class="form-grid">
+  <div class="form-section-title"><i class="fa-brands fa-google-drive"></i> Pasta de Captação</div>
+  <div class="hint" style="margin-bottom:12px;">Link da pasta do Google Drive criada pela equipe de captação para este imóvel (contrato, reuniões, fotos, etc.).</div>
+  <div class="form-group">
+    <label>Link da Pasta no Drive</label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="cap-link" class="input" placeholder="https://drive.google.com/drive/folders/..." value="${esc(im.captacaoLink||'')}">
+      ${temLink?`<a href="${esc(im.captacaoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i> Abrir</a>`:''}
+    </div>
+  </div>
+  ${im.jarvisPreenchidoEm?`<div class="alert-success" style="margin-top:4px;"><i class="fa-solid fa-robot"></i> Jarvis preencheu dados automaticamente em <strong>${fmtDate(im.jarvisPreenchidoEm)}</strong>.</div>`:''}
+
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-plug"></i> Integração com Jarvis (Assistente WeCare)</div>
+  <div class="alert-info" style="margin-bottom:12px;"><i class="fa-solid fa-info-circle"></i> Configure estes endpoints no Jarvis. Ele lê a pasta automaticamente, preenche os campos e notifica o sistema.</div>
+
+  <div class="form-group">
+    <label>🔔 Webhook de Notificação (POST — Jarvis chama quando há novidade)</label>
+    <div style="display:flex;gap:8px;">
+      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(webhookUrl)}">
+      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(webhookUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+    </div>
+    <div class="hint">Auth: token na query string <code>?token=...</code>. Body JSON: <code>{"id":"${im.id}", "dados":{...campos...}}</code></div>
+  </div>
+
+  <div class="form-group">
+    <label>📖 Endpoint de Leitura (GET — Jarvis consulta dados atuais)</label>
+    <div style="display:flex;gap:8px;">
+      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(readUrl)}">
+      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(readUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+    </div>
+    <div class="hint">Retorna JSON com todos os dados públicos do imóvel. Auth: <code>?token=...</code></div>
+  </div>
+
+  <div class="form-group" style="margin-top:8px;">
+    <label>🔑 Token de Autenticação</label>
+    <div style="display:flex;gap:8px;">
+      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(tkn)}">
+      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(tkn)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
+    ${temLink?`<a href="${esc(im.captacaoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-google-drive"></i> Abrir pasta no Drive</a>`:''}
+  </div>
+  </div>`;
+}
+
+// ═══════════════════ ABA FOTOS ═══════════════════
+function renderAbaFotos(im){
+  const fotos=im.fotos||[];
+  return`<div class="form-grid">
+  <div class="form-section-title"><i class="fa-solid fa-images"></i> Fotos do Imóvel</div>
+  <div class="hint" style="margin-bottom:12px;">Suba as fotos do imóvel. A IA analisa e preenche automaticamente os campos de dados (quartos, camas, características, etc.).</div>
+
+  <div style="border:2px dashed var(--border);border-radius:12px;padding:22px;text-align:center;background:var(--surface-2,#f8f4f9);">
+    <input type="file" id="fotos-input" accept="image/*" multiple style="display:none;" onchange="_onUploadFotos(event)">
+    <i class="fa-solid fa-camera fa-2x" style="color:var(--lavender);opacity:.7;margin-bottom:10px;display:block;"></i>
+    <div style="font-size:13px;color:var(--text-2,#888);margin-bottom:14px;">${fotos.length?`<strong>${fotos.length}</strong> foto(s) carregada(s)`:'Nenhuma foto ainda'}</div>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('fotos-input').click()">
+      <i class="fa-solid fa-upload"></i> ${fotos.length?'Adicionar mais fotos':'Escolher fotos'}
+    </button>
+  </div>
+  <div id="fotos-status" style="margin-top:8px;"></div>
+
+  ${fotos.length?`
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+    ${fotos.map((f,i)=>`<div style="position:relative;">
+      <img src="${f.data}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" title="${esc(f.nome)}">
+      <button onclick="_removerFoto(${i})" style="position:absolute;top:-7px;right:-7px;background:#c0392b;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:20px;text-align:center;padding:0;"><i class="fa-solid fa-xmark"></i></button>
+    </div>`).join('')}
+  </div>
+
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Análise com IA</div>
+  ${im.fotosIaEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> IA analisou as fotos em <strong>${fmtDate(im.fotosIaEm)}</strong> — encontrou <strong>${im.fotosIaEncontrados||0}</strong> informações. Confira na aba <strong>Dados</strong> e <strong>Formulário</strong>.</div>`:'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Clique abaixo para a IA analisar as fotos e preencher os campos automaticamente.</div>'}
+  <button class="btn btn-primary" id="btn-ia-fotos" onclick="_rodarIAFotos()" style="margin-top:8px;">
+    <i class="fa-solid fa-robot"></i> Analisar fotos com IA e preencher campos
+  </button>
+  <div class="hint" style="margin-top:6px;">A IA lê detalhes visíveis: tipo de camas, quantidade de cômodos, estado de conservação, itens presentes, etc.</div>
+  `:''}
+  </div>`;
+}
+
+async function _onUploadFotos(ev){
+  const files=[...(ev.target.files||[])];
+  if(!files.length)return;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const status=document.getElementById('fotos-status');
+  if(status)status.innerHTML='<div class="alert-info">Comprimindo fotos…</div>';
+  if(!im.fotos)im.fotos=[];
+  let ok=0;
+  for(const file of files){
+    try{
+      const data=await _comprimirImagem(file,900,0.72);
+      im.fotos.push({nome:file.name,data,tipo:file.type});ok++;
+    }catch(e){showToast('Erro ao processar '+file.name,'peach');}
+  }
+  saveAll();
+  if(status)status.innerHTML='';
+  renderAba('fotos');
+  if(ok)showToast(ok+' foto(s) adicionada(s)!','sage');
+}
+function _comprimirImagem(file,maxSide,quality){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height;
+      if(w>maxSide||h>maxSide){if(w>h){h=Math.round(h*maxSide/w);w=maxSide;}else{w=Math.round(w*maxSide/h);h=maxSide;}}
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=reject;img.src=url;
+  });
+}
+function _removerFoto(idx){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.fotos=(im.fotos||[]).filter((_,i)=>i!==idx);
+  saveAll();renderAba('fotos');
+}
+async function _rodarIAFotos(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const fotos=im.fotos||[];
+  if(!fotos.length){showToast('Nenhuma foto para analisar.','peach');return;}
+  const s=window.WC_SYNC||{};
+  if(!s.url){showToast('Worker não configurado.','peach');return;}
+  const btn=document.getElementById('btn-ia-fotos');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> A IA está analisando as fotos…';}
+  try{
+    const r=await fetch(s.url.replace(/\/$/,'')+'/analisar-fotos?token='+encodeURIComponent(s.token||''),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fotos:fotos.slice(0,5).map(f=>f.data),imovelNome:im.nome})
+    });
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'Falha na IA');
+    const dados=j.dados||{};
+    let n=0;
+    if(dados.quartos&&!im.quartos){im.quartos=+dados.quartos;n++;}
+    if(dados.banheiros&&!im.banheiros){im.banheiros=+dados.banheiros;n++;}
+    if(dados.descricao){im.observacoes=im.observacoes||dados.descricao;n++;}
+    if(j.formAnswers){
+      if(!im.formRascunho)im.formRascunho={};
+      const conf=im.formConfirmados||{};
+      for(const k in j.formAnswers){if(!conf[k]){im.formRascunho[k]=j.formAnswers[k];n++;}}
+    }
+    im.fotosIaEm=hoje();im.fotosIaEncontrados=n;
+    saveAll();showToast('IA identificou '+n+' informações!','sage');renderAba('fotos');
+  }catch(e){
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Analisar fotos com IA e preencher campos';}
+    showToast('Erro: '+(e.message||'IA indisponível'),'peach');
+  }
 }
 
 // ═══════════════════ ABA CONTRATO ═══════════════════
@@ -907,20 +1115,31 @@ function renderAbaCompras(im){
 
   const msgWA=_gerarMsgWhatsAppEnxoval(im,rows);
 
+  const frete=im.freteTotal||0;
   return`<div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-cart-shopping"></i> Lista de Compras</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total: <strong>${fmtMoeda(totalEstimado)}</strong></span>
+      <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total c/ frete: <strong>${fmtMoeda(totalEstimado+frete)}</strong></span>
       <button class="btn btn-outline btn-sm" onclick="gerarPDFCompras()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
     </div>
   </div>
   ${tabelasCat}
+  <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
+    <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
+    <input type="number" id="compras-frete" class="input" style="width:120px;" min="0" step="0.01" value="${frete}" onchange="_onFreteChange(this)">
+    <span class="text-muted" style="font-size:12px;">Itens: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} = <strong>${fmtMoeda(totalEstimado+frete)}</strong></span>
+  </div>
 
   <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval Buddemeyer</div>
   <textarea id="wamsg-enxoval" class="input" rows="9" style="font-size:11.5px;font-family:monospace;" readonly onclick="this.select()">${esc(msgWA)}</textarea>
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
   </div>`;
+}
+function _onFreteChange(inp){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.freteTotal=+inp.value||0;
+  saveAll();
 }
 function _onCompraCheck(cb,idx){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -1114,7 +1333,8 @@ function renderAbaCustos(im){
     totalCompras+=precoUn*qtdReal;
   });
   const totalOps=(+im.ops?.fotos?.custo||0)+(+im.ops?.limpeza?.custo||0)+(+im.ops?.vistoria?.custo||0);
-  const subtotal=totalCompras+totalOps;
+  const freteCustos=im.freteTotal||0;
+  const subtotal=totalCompras+totalOps+freteCustos;
   const margem=im.margemWecare||15;
   const comissao=subtotal*(margem/100);
   let desc=0;
@@ -1127,6 +1347,7 @@ function renderAbaCustos(im){
   <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
     <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Total Compras</td><td style="text-align:right;">${fmtMoeda(totalCompras)}</td></tr>
     <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Operacional (Fotos + Limpeza + Vistoria)</td><td style="text-align:right;">${fmtMoeda(totalOps)}</td></tr>
+    ${freteCustos?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Frete</td><td style="text-align:right;">${fmtMoeda(freteCustos)}</td></tr>`:''}
     <tr style="border-top:2px solid var(--border)"><td style="padding:8px 4px;font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${fmtMoeda(subtotal)}</td></tr>
   </table>
 
@@ -1503,9 +1724,21 @@ function iniciarApp(){
   const primeiroPanel=document.querySelector('.nav-item[onclick*="kanban"]');
   showPanel('kanban',primeiroPanel);
   kvPull(false).then(()=>{
-    // empurra usuários locais para a nuvem (garante que logins criados antes apareçam em todas as máquinas)
     carregarUsuarios();
     if(usuarios.length>1||(usuarios[0]&&usuarios[0].email!=='admin@wecare.com')) _kvPushDebounced();
+  });
+  // Regra 5: auto-pull a cada ~60s se não houver mudança pendente
+  setInterval(()=>{if(!_kvTimer)kvPull(false);},60000);
+  // Regra 6: envia ao sair/ocultar aba
+  window.addEventListener('beforeunload',()=>{
+    if(!window.__servidorLido)return;
+    const blob={};SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
+    blob.lastSaved=Date.now();
+    const s=window.WC_SYNC||{};
+    if(s.url)navigator.sendBeacon(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),JSON.stringify(blob));
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden')_kvSendNow();
   });
 }
 
