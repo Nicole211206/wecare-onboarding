@@ -56,6 +56,9 @@
     <button class="nav-item" onclick="showPanel('intel',this)">
       <i class="fa-solid fa-magnifying-glass-location"></i> Intel de Mercado
     </button>
+    <button class="nav-item" onclick="showPanel('fornecedores',this)">
+      <i class="fa-solid fa-address-book"></i> Fornecedores
+    </button>
     <div class="nav-section" id="navsec-admin">Admin</div>
     <button class="nav-item" id="nav-config" onclick="showPanel('config',this)">
       <i class="fa-solid fa-sliders"></i> Configurações
@@ -140,13 +143,14 @@
             <button class="btn btn-rose" onclick="buscarNoMaps()"><i class="fa-solid fa-search"></i> Buscar</button>
           </div>
           <div id="intel-maps-btns" style="display:none;margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;">
-            <button class="btn btn-sm" onclick="abrirMaps('empresa de limpeza residencial')"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Limpeza</button>
-            <button class="btn btn-sm" onclick="abrirMaps('fotógrafo de interiores imóveis')"><i class="fa-solid fa-camera" style="color:var(--lavender)"></i> Fotógrafo</button>
-            <button class="btn btn-sm" onclick="abrirMaps('manutenção hidráulica residencial')"><i class="fa-solid fa-wrench" style="color:var(--sky)"></i> Hidráulica</button>
-            <button class="btn btn-sm" onclick="abrirMaps('eletricista residencial')"><i class="fa-solid fa-bolt" style="color:var(--gold)"></i> Elétrica</button>
-            <button class="btn btn-sm" onclick="abrirMaps('vistoria imóvel laudo')"><i class="fa-solid fa-clipboard-check" style="color:var(--peach)"></i> Vistoria</button>
-            <button class="btn btn-sm" onclick="abrirMaps('serralheria fechadura eletrônica')"><i class="fa-solid fa-lock" style="color:var(--rose)"></i> Fechadura</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('empresa de limpeza residencial')"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Limpeza</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('fotógrafo de interiores imóveis')"><i class="fa-solid fa-camera" style="color:var(--lavender)"></i> Fotógrafo</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('manutenção hidráulica residencial')"><i class="fa-solid fa-wrench" style="color:var(--sky)"></i> Hidráulica</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('eletricista residencial')"><i class="fa-solid fa-bolt" style="color:var(--gold)"></i> Elétrica</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('vistoria imóvel laudo')"><i class="fa-solid fa-clipboard-check" style="color:var(--peach)"></i> Vistoria</button>
+            <button class="btn btn-sm" onclick="_buscarEmbeddedMapa('serralheria fechadura eletrônica')"><i class="fa-solid fa-lock" style="color:var(--rose)"></i> Fechadura</button>
           </div>
+          <div id="intel-mapa-embed" style="margin-top:14px;"></div>
         </div>
       </div>
 
@@ -165,6 +169,11 @@
         </div>
         <div class="card-body" id="intel-prestadores-lista" style="overflow-x:auto;"></div>
       </div>
+    </div>
+
+    <!-- ── FORNECEDORES ── -->
+    <div class="panel" id="panel-fornecedores">
+      <div id="fornecedores-wrap"></div>
     </div>
 
     <!-- ── CONFIG ── -->
@@ -196,23 +205,6 @@
         <div class="card">
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Tabela de Limpeza e Fotos</span></div>
           <div class="card-body" id="config-precos-ops" style="max-height:320px;overflow-y:auto;"></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title"><i class="fa-solid fa-gear" style="color:var(--text3)"></i> Integração ZapSign</span></div>
-          <div class="card-body">
-            <div class="form-group">
-              <label class="form-label">API Token ZapSign</label>
-              <input class="form-input" id="cfg-zapsign-token" placeholder="Token da API ZapSign" type="password">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label class="form-label">URL do Webhook (configurar no ZapSign)</label>
-              <div style="display:flex;gap:8px;">
-                <input class="form-input" id="cfg-webhook-url" readonly style="background:var(--bg3);font-family:monospace;font-size:11.5px;">
-                <button class="btn btn-sm" onclick="copiarWebhookUrl()"><i class="fa-solid fa-copy"></i></button>
-              </div>
-            </div>
-            <button class="btn btn-sage btn-sm" style="margin-top:12px;" onclick="salvarConfigZapSign()"><i class="fa-solid fa-floppy-disk"></i> Salvar</button>
-          </div>
         </div>
       </div>
     </div>
@@ -298,7 +290,6 @@
       <button class="tab-btn"          onclick="showTab('dados',this)">Dados</button>
       <button class="tab-btn"          onclick="showTab('contrato',this)">Contrato</button>
       <button class="tab-btn"          onclick="showTab('definicoes',this)">Definições</button>
-      <button class="tab-btn"          onclick="showTab('reuniao',this)">Reunião</button>
       <button class="tab-btn"          onclick="showTab('fotos',this)">📸 Fotos</button>
       <button class="tab-btn"          onclick="showTab('formulario',this)">Formulário</button>
       <button class="tab-btn"          onclick="showTab('compras',this)">Compras</button>
@@ -474,6 +465,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=5"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>

@@ -132,11 +132,12 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',config:'Configurações',usuarios:'Usuários'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',config:'Configurações',usuarios:'Usuários'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban')renderKanban();
   if(id==='dashboard')renderDashboard();
   if(id==='intel')renderIntel();
+  if(id==='fornecedores')renderFornecedores();
   if(id==='config')renderConfig();
   if(id==='usuarios')renderUsuarios();
 }
@@ -416,7 +417,7 @@ function salvarNovoImovel(){
     // compras
     compras:{}, freteTotal:0,
     // final
-    linkFotos:'', linkRelatorio:'', responsavelCriacao:'',
+    linkFotos:'', linkRelatorio:'', responsavelCriacao:'', tarefaClaireId:null,
     prazoAtivacaoHoras:24, dataEnvioParaCriacao:null,
     valorMinNoite:0, valorBaseNoite:0, taxaHospedeExtra:0, taxaHospedeExtraAcimaDe:0, taxaLimpeza:0, observacoes:'',
     comentarios:{}
@@ -462,7 +463,7 @@ function showTab(aba,btn){
 function renderAba(aba){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const fns={captacao:()=>renderAbaCaptacao(im),dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
-    definicoes:()=>renderAbaDefinicoes(im),reuniao:()=>renderAbaReuniao(im),fotos:()=>renderAbaFotos(im),formulario:()=>renderAbaFormulario(im),
+    definicoes:()=>renderAbaDefinicoes(im),fotos:()=>renderAbaFotos(im),formulario:()=>renderAbaFormulario(im),
     compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),
     operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im)};
   document.getElementById('detalhe-body').innerHTML=(fns[aba]||fns.dados)();
@@ -518,7 +519,7 @@ function _coletarDadosAba(aba,im){
     document.getElementById('detalhe-titulo').textContent=im.nome;
   }
   if(aba==='contrato'){
-    im.contratoLink=g('ct-link'); im.zapsignUuid=g('ct-uuid');
+    im.contratoLink=g('ct-link');
     im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
     im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
     im.taxaLimpeza=gn('ct-taxa-limpeza');
@@ -542,7 +543,6 @@ function _coletarDadosAba(aba,im){
     im.descontoValor=gn('cs-desc-val'); im.formasPagamento=g('cs-pagamento');
   }
   if(aba==='final'){
-    im.linkFotos=g('fn-link-fotos'); im.linkRelatorio=g('fn-link-rel');
     im.responsavelCriacao=g('fn-resp-criacao'); im.dataEnvioParaCriacao=g('fn-data-envio');
     im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
   }
@@ -644,34 +644,40 @@ function renderAbaCaptacao(im){
   </div>
   ${im.jarvisPreenchidoEm?`<div class="alert-success" style="margin-top:4px;"><i class="fa-solid fa-robot"></i> Jarvis preencheu dados automaticamente em <strong>${fmtDate(im.jarvisPreenchidoEm)}</strong>.</div>`:''}
 
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-plug"></i> Integração com Jarvis (Assistente WeCare)</div>
-  <div class="alert-info" style="margin-bottom:12px;"><i class="fa-solid fa-info-circle"></i> Configure estes endpoints no Jarvis. Ele lê a pasta automaticamente, preenche os campos e notifica o sistema.</div>
+  <details style="margin-top:16px;">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);user-select:none;padding:8px 0;">
+      <i class="fa-solid fa-gear"></i> Configuração de Integração (Jarvis)
+    </summary>
+    <div style="margin-top:12px;">
+      <div class="alert-info" style="margin-bottom:12px;"><i class="fa-solid fa-info-circle"></i> Configure estes endpoints no Jarvis. Ele lê a pasta automaticamente, preenche os campos e notifica o sistema.</div>
 
-  <div class="form-group">
-    <label>🔔 Webhook de Notificação (POST — Jarvis chama quando há novidade)</label>
-    <div style="display:flex;gap:8px;">
-      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(webhookUrl)}">
-      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(webhookUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
-    </div>
-    <div class="hint">Auth: token na query string <code>?token=...</code>. Body JSON: <code>{"id":"${im.id}", "dados":{...campos...}}</code></div>
-  </div>
+      <div class="form-group">
+        <label>🔔 Webhook de Notificação (POST — Jarvis chama quando há novidade)</label>
+        <div style="display:flex;gap:8px;">
+          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(webhookUrl)}">
+          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(webhookUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+        </div>
+        <div class="hint">Auth: token na query string <code>?token=...</code>. Body JSON: <code>{"id":"${im.id}", "dados":{...campos...}}</code></div>
+      </div>
 
-  <div class="form-group">
-    <label>📖 Endpoint de Leitura (GET — Jarvis consulta dados atuais)</label>
-    <div style="display:flex;gap:8px;">
-      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(readUrl)}">
-      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(readUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
-    </div>
-    <div class="hint">Retorna JSON com todos os dados públicos do imóvel. Auth: <code>?token=...</code></div>
-  </div>
+      <div class="form-group">
+        <label>📖 Endpoint de Leitura (GET — Jarvis consulta dados atuais)</label>
+        <div style="display:flex;gap:8px;">
+          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(readUrl)}">
+          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(readUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+        </div>
+        <div class="hint">Retorna JSON com todos os dados públicos do imóvel. Auth: <code>?token=...</code></div>
+      </div>
 
-  <div class="form-group" style="margin-top:8px;">
-    <label>🔑 Token de Autenticação</label>
-    <div style="display:flex;gap:8px;">
-      <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(tkn)}">
-      <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(tkn)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+      <div class="form-group" style="margin-top:8px;">
+        <label>🔑 Token de Autenticação</label>
+        <div style="display:flex;gap:8px;">
+          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(tkn)}">
+          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(tkn)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+        </div>
+      </div>
     </div>
-  </div>
+  </details>
 
   <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
@@ -798,16 +804,6 @@ function renderAbaContrato(im){
       ${im.contratoLink?`<a href="${esc(im.contratoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>`:''}
     </div>
   </div>
-  <div class="form-group">
-    <label>UUID do Documento no ZapSign</label>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input id="ct-uuid" class="input" placeholder="ex: abcd-1234-efgh" value="${esc(im.zapsignUuid||'')}">
-      <span class="tag ${im.contratoAssinado?'tag-sage':'tag-neutral'}">
-        <i class="fa-solid fa-${im.contratoAssinado?'check-circle':'clock'}"></i> ${im.contratoAssinado?'Assinado':'Aguardando'}
-      </span>
-    </div>
-    <div class="hint">O webhook do ZapSign avança automaticamente para "Compras" ao receber a assinatura.</div>
-  </div>
   ${im.contratoAssinado?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Contrato assinado em <strong>${fmtDate(im.dataContratoAssinado)}</strong></div>`:''}
   <div class="form-group" style="margin-top:8px;">
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
@@ -870,121 +866,6 @@ function renderAbaDefinicoes(im){
     <input id="def-prazo-ativacao" type="number" class="input" value="${im.prazoAtivacaoHoras||24}" min="1">
   </div>
   </div>`;
-}
-
-// ═══════════════════ ABA REUNIÃO (IA) ═══════════════════
-function renderAbaReuniao(im){
-  const r=im.reuniao||{};
-  const temTexto=!!(r.texto&&r.texto.trim());
-  return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-microphone-lines"></i> Transcrição da Reunião</div>
-  <div class="hint" style="margin-bottom:12px;">Suba o <strong>PDF da transcrição do Gemini</strong>. A IA vai ler e preencher automaticamente o formulário do imóvel com o que foi falado na reunião.</div>
-
-  <div style="border:2px dashed var(--border);border-radius:12px;padding:22px;text-align:center;background:var(--surface-2);">
-    <input type="file" id="reuniao-pdf" accept="application/pdf" style="display:none;" onchange="_onUploadReuniaoPDF(event)">
-    <i class="fa-solid fa-file-pdf" style="font-size:32px;color:var(--brand-red);opacity:.7;"></i>
-    <div style="margin:10px 0 14px;font-size:13px;color:var(--text-2);">
-      ${r.nomeArquivo?`Arquivo atual: <strong>${esc(r.nomeArquivo)}</strong>`+(r.dataUpload?` · ${fmtDate(r.dataUpload)}`:''):'Nenhum PDF enviado ainda'}
-    </div>
-    <button class="btn btn-primary btn-sm" onclick="document.getElementById('reuniao-pdf').click()">
-      <i class="fa-solid fa-upload"></i> ${r.nomeArquivo?'Trocar PDF':'Escolher PDF'}
-    </button>
-  </div>
-  <div id="reuniao-status" style="margin-top:12px;"></div>
-
-  ${temTexto?`
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Preenchimento Automático</div>
-  ${r.iaPreenchidoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> IA preencheu <strong>${r.iaEncontrados||0}</strong> campos em ${fmtDate(r.iaPreenchidoEm)}. Veja/ajuste na aba <strong>Formulário</strong>.</div>`:'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Transcrição carregada. Clique abaixo para a IA preencher o formulário.</div>'}
-  <button class="btn btn-primary" id="btn-ia-preencher" onclick="_rodarIAReuniao()">
-    <i class="fa-solid fa-robot"></i> Ler transcrição e preencher formulário com IA
-  </button>
-  <div class="hint" style="margin-top:6px;">A IA não sobrescreve respostas que o proprietário já confirmou. Ela só preenche o rascunho.</div>
-
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-lines"></i> Texto Extraído</div>
-  <textarea class="input" id="reuniao-texto" rows="8" style="font-size:12px;" onchange="_salvarTextoReuniao()">${esc(r.texto)}</textarea>
-  <div class="hint">Você pode editar/colar o texto manualmente se precisar antes de rodar a IA.</div>
-  `:`
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-keyboard"></i> Ou cole o texto manualmente</div>
-  <textarea class="input" id="reuniao-texto" rows="6" placeholder="Cole aqui o texto da transcrição, se preferir não subir o PDF..." onchange="_salvarTextoReuniao()"></textarea>
-  <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="_salvarTextoReuniao(true)"><i class="fa-solid fa-save"></i> Salvar texto</button>
-  `}
-  </div>`;
-}
-
-async function _onUploadReuniaoPDF(ev){
-  const file=ev.target.files&&ev.target.files[0];
-  if(!file)return;
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  const status=document.getElementById('reuniao-status');
-  status.innerHTML='<div class="alert-info"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Lendo o PDF…</div>';
-  try{
-    const texto=await _extrairTextoPDF(file);
-    if(!texto||!texto.trim())throw new Error('Não consegui extrair texto deste PDF (pode ser uma imagem digitalizada).');
-    if(!im.reuniao)im.reuniao={};
-    im.reuniao.nomeArquivo=file.name;
-    im.reuniao.texto=texto;
-    im.reuniao.dataUpload=hoje();
-    im.reuniao.iaPreenchidoEm=null;
-    saveAll();
-    showToast('PDF lido com sucesso!','sage');
-    renderAba('reuniao');
-  }catch(e){
-    status.innerHTML=`<div class="alert-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(e.message||'Erro ao ler PDF')}. Tente colar o texto manualmente.</div>`;
-  }
-}
-async function _extrairTextoPDF(file){
-  if(!window.pdfjsLib)throw new Error('Leitor de PDF não carregou. Recarregue a página.');
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  let texto='';
-  for(let i=1;i<=pdf.numPages;i++){
-    const page=await pdf.getPage(i);
-    const content=await page.getTextContent();
-    texto+=content.items.map(it=>it.str).join(' ')+'\n';
-  }
-  return texto.trim();
-}
-function _salvarTextoReuniao(avisar){
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  const t=document.getElementById('reuniao-texto')?.value||'';
-  if(!im.reuniao)im.reuniao={};
-  im.reuniao.texto=t;
-  if(t&&!im.reuniao.dataUpload)im.reuniao.dataUpload=hoje();
-  saveAll();
-  if(avisar){showToast('Texto salvo!','sage');renderAba('reuniao');}
-}
-async function _rodarIAReuniao(){
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  const s=window.WC_SYNC||{};
-  if(!s.url){showToast('Worker não configurado.','peach');return;}
-  const texto=(im.reuniao&&im.reuniao.texto)||document.getElementById('reuniao-texto')?.value||'';
-  if(!texto.trim()){showToast('Sem transcrição para ler.','peach');return;}
-  const btn=document.getElementById('btn-ia-preencher');
-  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> A IA está lendo a reunião…';}
-  try{
-    const perguntas=(window.FORM_PERGUNTAS_FLAT||[]).map(p=>({id:p.id,label:p.label}));
-    const r=await fetch(s.url.replace(/\/$/,'')+'/extrair-formulario?token='+encodeURIComponent(s.token||''),
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript:texto,perguntas})});
-    const j=await r.json();
-    if(!j.ok)throw new Error(j.error||'Falha na IA');
-    const answers=j.answers||{};
-    // mescla no rascunho sem sobrescrever o que proprietário confirmou
-    if(!im.formRascunho)im.formRascunho={};
-    const conf=im.formConfirmados||{};
-    let n=0;
-    for(const k in answers){
-      if(conf[k])continue; // não mexe no que já foi confirmado
-      im.formRascunho[k]=answers[k];n++;
-    }
-    im.reuniao.iaPreenchidoEm=hoje();
-    im.reuniao.iaEncontrados=n;
-    saveAll();
-    showToast(`IA preencheu ${n} campos!`,'sage');
-    renderAba('reuniao');
-  }catch(e){
-    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Ler transcrição e preencher formulário com IA';}
-    showToast('Erro: '+(e.message||'IA indisponível'),'peach');
-  }
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -1293,6 +1174,9 @@ function renderAbaOperacional(im){
       <div class="form-group"><label>Custo (R$)</label><input id="op-${id}-custo" type="number" class="input" value="${op.custo||0}"></div>
     </div>
     ${hint?`<div class="hint">${hint}</div>`:''}
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('${id}')">
+      <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
+    </button>
   </div>`;
 
   return`<div class="form-grid">
@@ -1318,6 +1202,9 @@ function renderAbaOperacional(im){
         <option value="interior"${ops.vistoria?.localizacao==='interior'?' selected':''}>Interior</option>
       </select>
     </div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
+      <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
+    </button>
   </div>
   </div>`;
 }
@@ -1420,8 +1307,9 @@ function gerarPDFOrcamento(){
 
 // ═══════════════════ ABA FINAL ═══════════════════
 function renderAbaFinal(im){
+  const resp=im.responsavelCriacao||'';
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-flag-checkered"></i> Checklist de Ativação</div>
+  <div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist Final</div>
   ${_checklistItem('Contrato assinado',im.contratoAssinado)}
   ${_checklistItem('Formulário preenchido pelo proprietário',!!im.formPreenchidoEm)}
   ${_checklistItem('Fotos realizadas',!!(im.ops?.fotos?.data&&im.ops?.fotos?.responsavel))}
@@ -1429,25 +1317,128 @@ function renderAbaFinal(im){
   ${_checklistItem('Vistoria realizada',!!(im.ops?.vistoria?.data))}
   ${_checklistItem('Compras concluídas',_todasComprasFeitas(im))}
 
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-photo-film"></i> Links de Entrega</div>
-  <div class="form-group"><label>Pasta de Fotos (Drive / Dropbox)</label>
-    <div style="display:flex;gap:8px;"><input id="fn-link-fotos" class="input" value="${esc(im.linkFotos||'')}">
-    ${im.linkFotos?`<a href="${esc(im.linkFotos)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>`:''}</div></div>
-  <div class="form-group"><label>Relatório Final</label>
-    <div style="display:flex;gap:8px;"><input id="fn-link-rel" class="input" value="${esc(im.linkRelatorio||'')}">
-    ${im.linkRelatorio?`<a href="${esc(im.linkRelatorio)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>`:''}</div></div>
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-pdf"></i> Relatório Compilado</div>
+  <div class="hint" style="margin-bottom:8px;">PDF com todas as respostas do formulário preenchido pelo proprietário.</div>
+  <button class="btn btn-outline btn-sm" onclick="gerarPDFFormulario()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do formulário</button>
 
-  <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-user-check"></i> Criação do Anúncio</div>
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-user-check"></i> Criação do Anúncio</div>
   <div class="form-row">
-    <div class="form-group"><label>Responsável</label><input id="fn-resp-criacao" class="input" value="${esc(im.responsavelCriacao||'')}"></div>
+    <div class="form-group"><label>Responsável</label>
+      <input id="fn-resp-criacao" class="input" value="${esc(resp)}" placeholder="Nome do responsável" oninput="_onRespCriacaoChange(this)">
+    </div>
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
   <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
-  ${im.dataAtivacao?`<div style="background:var(--sage-light,#e8f5e9);border-radius:10px;padding:16px;margin-top:16px;text-align:center;">
+  <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
+    <button class="btn btn-primary btn-sm" onclick="criarTarefaClaire()">
+      <i class="fa-solid fa-circle-plus"></i> Criar tarefa na Claire para <span id="fn-resp-label">${esc(resp)}</span>
+    </button>
+    ${im.tarefaClaireId?`<span class="tag tag-sage" style="margin-left:8px;"><i class="fa-solid fa-check"></i> Tarefa criada</span>`:''}
+  </div>
+  ${im.dataAtivacao?`<div style="background:var(--sage-light,#e8f5e9);border-radius:10px;padding:16px;margin-top:20px;text-align:center;">
     <div style="font-size:28px;margin-bottom:6px;">🎉</div>
     <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
   </div>`:''}
   </div>`;
+}
+function _onRespCriacaoChange(inp){
+  const v=inp.value.trim();
+  const wrap=document.getElementById('fn-claire-wrap');
+  const label=document.getElementById('fn-resp-label');
+  if(wrap)wrap.style.display=v?'':'none';
+  if(label)label.textContent=v||'responsável';
+}
+async function criarTarefaClaire(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const resp=im.responsavelCriacao||'';
+  if(!resp){showToast('Informe o responsável primeiro.','peach');return;}
+  const respostas={...(im.formRascunho||{}),...(im.formRespostas||{})};
+  const perguntas=(window.FORM_PERGUNTAS_FLAT||[]);
+  const respostasTxt=perguntas.filter(p=>respostas[p.id]).map(p=>`• ${p.label}: ${respostas[p.id]}`).join('\n');
+  const camas=(im.camas||[]).map(c=>`${c.qtd}x ${c.tipo}`).join(', ');
+  const plataformas=(im.plataformas||[]).join(', ');
+  const texto=`📋 CRIAÇÃO DE ANÚNCIO — ${im.nome}
+
+🏠 Imóvel: ${im.nome}
+📍 Endereço: ${im.endereco||'—'}
+👤 Proprietário: ${im.proprietarioNome||'—'} | ${im.proprietarioTel||'—'}
+🛏 Camas: ${camas||'—'} | Banheiros: ${im.banheiros||'—'} | Quartos: ${im.quartos||'—'}
+💰 Valor mín/noite: R$ ${im.valorMinNoite||0}
+📱 Plataformas: ${plataformas||'—'}
+📁 Pasta captação: ${im.captacaoLink||'—'}
+📸 Fotos: ${im.ops?.fotos?.data||'—'} (${im.ops?.fotos?.responsavel||'—'})
+
+RESPOSTAS DO FORMULÁRIO:
+${respostasTxt||'(sem respostas ainda)'}`;
+  try{
+    const r=await fetch('https://claire-dados.nicole-0e7.workers.dev/api/tasks?token=wecare-claire-2026-k7x9q2',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:texto,cat:'onboarding',prio:'alta',due:im.dataEnvioParaCriacao||''})
+    });
+    const j=await r.json();
+    if(j.ok||j.id||j.task){
+      im.tarefaClaireId=j.id||j.task?.id||'criado';
+      saveAll();renderAba('final');
+      showToast('Tarefa criada na Claire para '+resp+'!','sage');
+    }else throw new Error(j.error||'Erro');
+  }catch(e){showToast('Erro: '+e.message,'peach');}
+}
+function gerarPDFFormulario(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const respostas={...(im.formRascunho||{}),...(im.formRespostas||{})};
+  const secoes=window.FORM_SECOES||[];
+  let html=`<html><head><title>Formulário — ${esc(im.nome)}</title>
+  <style>body{font-family:Arial;padding:24px;color:#333;}h1{color:#c7587a;font-size:20px;}h2{color:#a57ab5;font-size:14px;margin-top:20px;border-bottom:1px solid #ddd;padding-bottom:4px;}.q{margin:10px 0;}.ql{font-weight:600;font-size:12px;color:#555;}.qa{font-size:13px;padding:4px 0;}.empty{color:#bbb;font-style:italic;}</style></head><body>
+  <h1>Formulário — ${esc(im.nome)}</h1>
+  <p style="font-size:12px;color:#888;">Proprietário: ${esc(im.proprietarioNome||'—')} | Endereço: ${esc(im.endereco||'—')} | Gerado: ${fmtDate(hoje())}</p>`;
+  secoes.forEach(sec=>{
+    html+=`<h2>${esc(sec.secao)}</h2>`;
+    (sec.perguntas||[]).forEach(p=>{
+      const r=respostas[p.id];
+      html+=`<div class="q"><div class="ql">${esc(p.label)}</div><div class="qa">${r?esc(r):'<span class="empty">Não respondido</span>'}</div></div>`;
+    });
+  });
+  html+='</body></html>';
+  const win=window.open('','_blank');
+  win.document.write(html);win.document.close();win.print();
+}
+function pedirCotacaoJarvis(modo){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const msgs={
+    fotos:`Olá! Sou da WeCare Hosting.\nPrecisamos de sessão de fotos para o imóvel *${im.nome}* em ${im.endereco||'(verificar endereço)'}.\nSão ${im.quartos||'?'} quartos.\nQual a disponibilidade e valor da sessão?`,
+    limpeza:`Olá! Sou da WeCare Hosting.\nPrecisamos de primeira limpeza para o imóvel *${im.nome}* em ${im.endereco||'(verificar endereço)'}.\nSão ${im.quartos||'?'} quartos e ${im.banheiros||'?'} banheiros.\nQual disponibilidade e valor?`,
+    vistoria:`Olá! Sou da WeCare Hosting.\nPrecisamos de vistoria para o imóvel *${im.nome}* em ${im.endereco||'(verificar endereço)'}.\nQual o valor e disponibilidade?`,
+  };
+  const msg=msgs[modo]||`Cotação para ${modo} — ${im.nome}`;
+  const tipoFiltro={fotos:'Fotógrafo',limpeza:'Limpeza',vistoria:'Vistoria'};
+  const relevantes=prestadores.filter(p=>p.tipo===(tipoFiltro[modo]||modo));
+
+  // Envia ao Jarvis
+  const s=window.WC_SYNC||{};
+  if(s.url){
+    fetch(s.url.replace(/\/$/,'')+'/jarvis-notify?token='+encodeURIComponent(s.token||''),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:im.id,dados:{cotacaoSolicitada:{modo,mensagem:msg,solicitadoEm:new Date().toISOString()}}})
+    }).catch(()=>{});
+  }
+
+  // Mostra modal com prestadores e links WA
+  const listHtml=relevantes.length
+    ?relevantes.map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="flex:1;font-weight:600;font-size:13px;">${esc(p.nome)}</span>
+        <span style="font-size:12px;color:var(--text3);">${esc(p.cidade||'')}</span>
+        ${p.nota?`<span>${'⭐'.repeat(Math.min(+p.nota,5))}</span>`:''}
+        ${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;"><i class="fa-brands fa-whatsapp"></i> Enviar</a>`:'<span class="text-muted" style="font-size:12px;">sem tel</span>'}
+      </div>`).join('')
+    :`<div class="text-muted" style="padding:12px 0;font-size:13px;">Nenhum fornecedor de ${modo} cadastrado. <a onclick="showPanel('fornecedores',null);closeModal('modal-generico')" style="cursor:pointer;color:var(--rose);">Adicionar fornecedor →</a></div>`;
+
+  document.getElementById('generico-titulo').textContent='Cotação: '+modo.charAt(0).toUpperCase()+modo.slice(1)+' — '+im.nome;
+  document.getElementById('generico-body').innerHTML=`
+    <div class="hint" style="margin-bottom:12px;"><i class="fa-solid fa-robot"></i> Solicitação enviada ao Jarvis. Clique em "Enviar" para cada prestador desejado:</div>
+    <div style="background:var(--surface-2,#f8f4f9);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;font-family:monospace;white-space:pre-wrap;">${esc(msg)}</div>
+    ${listHtml}`;
+  document.getElementById('modal-generico').classList.add('open');
 }
 function _checklistItem(label,ok){
   return`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
@@ -1531,11 +1522,14 @@ function _salvarEnderecoIntel(){
   _intelEndereco=document.getElementById('intel-endereco')?.value||'';
   showToast('Endereço definido!','sage');
 }
-function _abrirMapas(query){
+function _buscarEmbeddedMapa(query){
   const end=_intelEndereco||document.getElementById('intel-endereco')?.value||'';
-  const q=end?`${query}+perto+de+${end}`:query;
-  window.open(`https://www.google.com/maps/search/${encodeURIComponent(q.replace(/\+/g,' '))}`,
-    '_blank');
+  const q=end?query+' perto de '+end:query;
+  const el=document.getElementById('intel-mapa-embed');
+  if(el){
+    el.innerHTML=`<iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed" width="100%" height="380" frameborder="0" style="border:0;border-radius:10px;" allowfullscreen loading="lazy"></iframe>`;
+    el.scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 function _renderPrestadoresList(){
   if(!prestadores.length)return`<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum prestador cadastrado ainda.</div>`;
@@ -1592,14 +1586,65 @@ function apagarPrestador(idx){
   prestadores.splice(idx,1);saveAll();renderIntel();showToast('Removido.','peach');
 }
 
+// ═══════════════════ FORNECEDORES ═══════════════════
+function renderFornecedores(){
+  const tipos=[...new Set(['Limpeza','Fotógrafo','Hidráulica','Elétrica','Vistoria','Fechadura','Internet','Reforma','Outros'])];
+  const filtroTipo=document.getElementById('forn-filtro-tipo')?.value||'';
+  const filtroCidade=document.getElementById('forn-filtro-cidade')?.value?.toLowerCase()||'';
+  const lista=prestadores.filter(p=>
+    (!filtroTipo||p.tipo===filtroTipo)&&
+    (!filtroCidade||((p.cidade||'').toLowerCase().includes(filtroCidade)))
+  );
+  const wrap=document.getElementById('fornecedores-wrap');
+  if(!wrap)return;
+  wrap.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Fornecedores</div>
+      <div class="text-muted">Banco de prestadores de serviço WeCare (${prestadores.length} cadastrados)</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirNovoPrestador()"><i class="fa-solid fa-plus"></i> Novo Fornecedor</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-filter" style="color:var(--text3)"></i> Filtros</span>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <select class="form-select" id="forn-filtro-tipo" onchange="renderFornecedores()" style="width:140px;padding:4px 8px;font-size:12px;">
+          <option value="">Todos os tipos</option>
+          ${tipos.map(t=>`<option${filtroTipo===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+        <input class="form-input" id="forn-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderFornecedores()" value="${filtroCidade}">
+      </div>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px 6px;">Nome</th><th>Tipo</th><th>Telefone</th><th>Cidade</th><th>Valor</th><th>Nota</th><th>Obs</th><th></th>
+        </tr></thead>
+        <tbody>${lista.map((p,i)=>{
+          const origIdx=prestadores.indexOf(p);
+          return`<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 6px;font-weight:600;">${esc(p.nome)}</td>
+            <td><span class="tag tag-lav">${esc(p.tipo)}</span></td>
+            <td>${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}" target="_blank" style="color:var(--sage);"><i class="fa-brands fa-whatsapp"></i> ${esc(p.telefone)}</a>`:'—'}</td>
+            <td>${esc(p.cidade||'—')}</td>
+            <td>${esc(p.valor||'—')}</td>
+            <td>${p.nota?'⭐'.repeat(Math.min(+p.nota,5)):'—'}</td>
+            <td style="max-width:180px;font-size:11.5px;color:var(--text3);">${esc((p.obs||'').slice(0,80))}${(p.obs||'').length>80?'…':''}</td>
+            <td style="white-space:nowrap;">
+              <button class="btn btn-xs btn-outline" onclick="editarPrestador(${origIdx})"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="apagarPrestador(${origIdx})"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;}).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
+        Nenhum fornecedor encontrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoPrestador()"><i class="fa-solid fa-plus"></i> Adicionar primeiro fornecedor</button>
+      </div>`}
+    </div>
+  </div>`;
+}
+
 // ═══════════════════ CONFIG ═══════════════════
 function renderConfig(){
-  const s=window.WC_SYNC||{};
-  const workerUrl=s.url||'';
-  const webhookUrl=workerUrl?workerUrl.replace(/\/$/,'')+'/zapsign-webhook':'(configure o Worker URL em index.html primeiro)';
-  // Preenche campos do HTML estático
-  const wurl=document.getElementById('cfg-webhook-url');
-  if(wurl)wurl.value=webhookUrl;
   // Renderiza a lista de membros (compatibilidade)
   const mb=document.getElementById('config-membros');
   if(mb)mb.innerHTML=`<div class="text-muted" style="font-size:12px;">Membros gerenciados no painel <strong>Usuários</strong>.</div>`;
@@ -1697,23 +1742,14 @@ function _salvarItemEdicao(idx){
 function abrirModalPrestador(){abrirNovoPrestador();}
 function buscarNoMaps(){
   const end=document.getElementById('intel-endereco')?.value||'';
-  if(end){_intelEndereco=end;renderIntel();}
+  if(end){_intelEndereco=end;renderIntel();_buscarEmbeddedMapa(end);}
 }
-function abrirMaps(query){
-  const end=_intelEndereco||document.getElementById('intel-endereco')?.value||'';
-  const q=end?`${query} perto de ${end}`:query;
-  window.open(`https://www.google.com/maps/search/${encodeURIComponent(q)}`, '_blank');
-}
+function abrirMaps(query){_buscarEmbeddedMapa(query);}
 function renderPrestadores(){renderIntel();}
 function abrirModalMembro(){} // membros não usados nesta versão
 function salvarMembro(){}
 function abrirModalItem(){} // itens editados inline na aba Compras
 function salvarItem(){}
-function copiarWebhookUrl(){
-  const el=document.getElementById('cfg-webhook-url');
-  if(el){navigator.clipboard.writeText(el.value).then(()=>showToast('Copiado!','sage'));}
-}
-function salvarConfigZapSign(){showToast('Salvo na interface (configure worker.js para persistir).','sage');}
 function renderItTipoPreco(){}
 function aplicarPresetPerfil(){}
 
