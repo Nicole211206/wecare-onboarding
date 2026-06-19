@@ -84,6 +84,27 @@
     .success-msg{color:var(--text-2);font-size:.95rem;line-height:1.6;max-width:380px;margin:0 auto;}
     .submit-error{margin-top:12px;padding:12px 16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;font-size:.85rem;color:#C0392B;display:none;}
     @media(max-width:480px){.container{padding:16px 12px 0;}.secao-body{padding:14px 16px;}}
+
+    /* ── Option pills (radio / checkbox) ── */
+    .option-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+    .option-pill{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:500;color:var(--text-2);background:var(--surface-2);transition:all .15s;user-select:none;line-height:1.35;}
+    .option-pill:hover{border-color:var(--brand-purple);color:var(--brand-purple);background:#fff;}
+    .option-pill.selected{background:var(--brand-purple);border-color:var(--brand-purple);color:#fff;}
+    .option-pill input{display:none;}
+
+    /* ── Number stepper ── */
+    .stepper{display:inline-flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);}
+    .stepper-btn{width:44px;height:44px;border:none;background:transparent;font-size:1.2rem;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
+    .stepper-btn:hover{background:var(--border);}
+    .stepper-val{min-width:52px;text-align:center;font-size:1.05rem;font-weight:700;color:var(--text);padding:0 8px;border-left:1px solid var(--border);border-right:1px solid var(--border);}
+
+    /* ── Voice input ── */
+    .voice-wrap{position:relative;}
+    .voice-wrap textarea,.voice-wrap input[type=text]{padding-right:46px;}
+    .voice-btn{position:absolute;right:10px;top:10px;width:28px;height:28px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;transition:all .15s;padding:0;}
+    .voice-btn:hover{background:var(--border);color:var(--brand-purple);}
+    .voice-btn.listening{color:#D63868!important;animation:vblink .7s infinite;}
+    @keyframes vblink{0%,100%{opacity:1}50%{opacity:.25}}
   </style>
 </head>
 <body>
@@ -128,7 +149,7 @@
   </div>
 </div>
 
-<script src="js/perguntas.js?v=4"></script>
+<script src="js/perguntas.js?v=6"></script>
 <script>
 (function(){
   function qs(s){return document.querySelector(s);}
@@ -138,13 +159,36 @@
   function showError(msg){hide('loading-state');hide('form-state');hide('success-state');if(msg)qs('#error-detail').textContent=msg;show('error-state');}
 
   let _valores={}, _confirmados={};
+  const _hasSR='SpeechRecognition' in window||'webkitSpeechRecognition' in window;
+
+  function _addVoiceBtn(wrap, getEl){
+    if(!_hasSR) return;
+    const vbtn=document.createElement('button');
+    vbtn.type='button'; vbtn.className='voice-btn'; vbtn.title='Falar ao invés de digitar';
+    vbtn.innerHTML='<i class="fa-solid fa-microphone"></i>';
+    vbtn.addEventListener('click',function(){
+      const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      const rec=new SR(); rec.lang='pt-BR'; rec.continuous=false; rec.interimResults=false;
+      vbtn.classList.add('listening'); vbtn.innerHTML='<i class="fa-solid fa-microphone-lines"></i>';
+      rec.onresult=function(e){
+        const el=getEl(); const t=e.results[0][0].transcript;
+        el.value=el.value?(el.value+' '+t):t;
+        el.dispatchEvent(new Event('input'));
+      };
+      rec.onend=rec.onerror=function(){
+        vbtn.classList.remove('listening'); vbtn.innerHTML='<i class="fa-solid fa-microphone"></i>';
+      };
+      rec.start();
+    });
+    wrap.appendChild(vbtn);
+  }
 
   function buildForm(secoes, rascunho, respostas, confirmados){
     const cont=qs('#secoes-container');
     cont.innerHTML='';
     _valores={}; _confirmados={};
 
-    secoes.forEach(function(sec,si){
+    secoes.forEach(function(sec){
       const val0=function(qid){
         if(respostas&&respostas[qid]!=null&&String(respostas[qid]).trim()) return respostas[qid];
         if(rascunho&&rascunho[qid]!=null) return rascunho[qid];
@@ -177,16 +221,65 @@
         lbl.textContent=p.label;
         field.appendChild(lbl);
 
-        let input;
-        if(p.tipo==='textarea'){input=document.createElement('textarea');}
-        else{input=document.createElement('input');input.type=(p.tipo==='number'?'number':'text');}
-        input.value=v;
-        input.placeholder='Digite aqui…';
-        input.addEventListener('input',function(){_valores[p.id]=input.value;});
-        field.appendChild(input);
+        // ── Radio / Checkbox pills ──────────────────────────────────────
+        if(p.tipo==='radio'||p.tipo==='checkbox'){
+          const selected=v?v.split(',').map(function(x){return x.trim();}).filter(Boolean):[];
+          const grid=document.createElement('div');
+          grid.className='option-grid';
+          (p.opcoes||[]).forEach(function(op){
+            const pill=document.createElement('label');
+            pill.className='option-pill'+(selected.includes(op)?' selected':'');
+            const inp=document.createElement('input');
+            inp.type=p.tipo==='radio'?'radio':'checkbox';
+            inp.name=p.id; inp.value=op;
+            if(selected.includes(op)) inp.checked=true;
+            inp.addEventListener('change',function(){
+              if(p.tipo==='radio'){
+                grid.querySelectorAll('.option-pill').forEach(function(x){x.classList.remove('selected');});
+                pill.classList.add('selected');
+                _valores[p.id]=op;
+              } else {
+                pill.classList.toggle('selected',inp.checked);
+                const cur=_valores[p.id]?_valores[p.id].split(',').map(function(x){return x.trim();}).filter(Boolean):[];
+                if(inp.checked){if(!cur.includes(op))cur.push(op);}
+                else{const i=cur.indexOf(op);if(i>-1)cur.splice(i,1);}
+                _valores[p.id]=cur.join(', ');
+              }
+            });
+            pill.appendChild(inp);
+            pill.appendChild(document.createTextNode(op));
+            grid.appendChild(pill);
+          });
+          field.appendChild(grid);
+        }
+        // ── Number stepper ──────────────────────────────────────────────
+        else if(p.tipo==='number'){
+          const stepper=document.createElement('div');
+          stepper.className='stepper';
+          const btnM=document.createElement('button'); btnM.type='button'; btnM.className='stepper-btn'; btnM.textContent='−';
+          const valEl=document.createElement('span'); valEl.className='stepper-val'; valEl.textContent=v||'0';
+          const btnP=document.createElement('button'); btnP.type='button'; btnP.className='stepper-btn'; btnP.textContent='+';
+          _valores[p.id]=v||'0';
+          btnM.addEventListener('click',function(){const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);});
+          btnP.addEventListener('click',function(){const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);});
+          stepper.appendChild(btnM); stepper.appendChild(valEl); stepper.appendChild(btnP);
+          field.appendChild(stepper);
+        }
+        // ── Text / Textarea + botão de voz ──────────────────────────────
+        else {
+          const wrap=document.createElement('div'); wrap.className='voice-wrap';
+          let input;
+          if(p.tipo==='textarea'){input=document.createElement('textarea');}
+          else{input=document.createElement('input'); input.type='text';}
+          input.value=v; input.placeholder='Digite aqui…';
+          input.addEventListener('input',function(){_valores[p.id]=input.value;});
+          wrap.appendChild(input);
+          _addVoiceBtn(wrap, function(){return input;});
+          field.appendChild(wrap);
+        }
 
-        const row=document.createElement('div');
-        row.className='confirm-row';
+        // ── Botão "Está correto" ─────────────────────────────────────────
+        const row=document.createElement('div'); row.className='confirm-row';
         const chk=document.createElement('label');
         chk.className='confirm-check'+(_confirmados[p.id]?' on':'');
         chk.innerHTML='<span class="box"><i class="fa-solid fa-check"></i></span> Está correto';
