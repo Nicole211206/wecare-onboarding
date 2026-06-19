@@ -317,6 +317,45 @@ Retorne SOMENTE um JSON válido, sem texto adicional:
       }
     }
 
+    // ── POST /imovel-fotos (Jarvis envia URLs externas de fotos) ─────────────
+    if (request.method === 'POST' && path === '/imovel-fotos') {
+      if (!checkAuth(token, env)) return unauthorized();
+      const imovelId = url.searchParams.get('id') || '';
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+      const urls = Array.isArray(body.urls) ? body.urls.filter(u => typeof u === 'string') : [];
+      if (!urls.length) return json({ ok: false, error: 'urls vazio' }, 400);
+
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+
+      if (!Array.isArray(im.fotos)) im.fotos = [];
+
+      let total = 0;
+      for (const fotoUrl of urls.slice(0, 20)) {
+        try {
+          const res = await fetch(fotoUrl, { cf: { cacheEverything: true } });
+          if (!res.ok) continue;
+          const ct   = res.headers.get('content-type') || 'image/jpeg';
+          const buf  = await res.arrayBuffer();
+          // Converte para base64 data URL (mesmo formato da aba Fotos do front)
+          const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          const data = `data:${ct};base64,${b64}`;
+          const nome = fotoUrl.split('/').pop().split('?')[0] || `foto_${Date.now()}.jpg`;
+          im.fotos.push({ nome, data, tipo: ct, fonte: body.fonte || 'externo' });
+          total++;
+        } catch {}
+      }
+
+      if (total > 0) await putState(env, state);
+      return json({ ok: true, total });
+    }
+
     // ── 404 ───────────────────────────────────────────────────────────────────
     return json({ ok: false, error: 'Not found' }, 404);
   },
