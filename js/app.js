@@ -401,6 +401,7 @@ function salvarNovoImovel(){
     // fotos
     fotos:[], fotosIaEm:null, fotosIaEncontrados:0,
     // contrato
+    gastosSetup:[],
     contratoLink:'', zapsignUuid:'', contratoAssinado:false, dataContratoAssinado:null,
     // definições
     seguroEasyCover:false, kitAmenities:false, internetClaro:false, ecohost:false, fechaduraEletronica:false,
@@ -523,6 +524,12 @@ function _coletarDadosAba(aba,im){
     im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
     im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
     im.taxaLimpeza=gn('ct-taxa-limpeza');
+    if(!im.ops)im.ops={fotos:{},limpeza:{},vistoria:{}};
+    ['fotos','limpeza','vistoria'].forEach(op=>{
+      if(!im.ops[op])im.ops[op]={};
+      const v=gn(`ct-op-${op}`);if(v!=null)im.ops[op].custo=v;
+    });
+    const mg=gn('ct-margem');if(mg!=null)im.margemWecare=mg;
   }
   if(aba==='definicoes'){
     im.seguroEasyCover=gc('def-seguro'); im.kitAmenities=gc('def-amenities');
@@ -788,6 +795,17 @@ async function _rodarIAFotos(){
 
 // ═══════════════════ ABA CONTRATO ═══════════════════
 function renderAbaContrato(im){
+  const ops=im.ops||{fotos:{},limpeza:{},vistoria:{}};
+  const gastosSetup=im.gastosSetup||[];
+  const custoFotos=+ops.fotos?.custo||0;
+  const custoLimpeza=+ops.limpeza?.custo||0;
+  const custoVistoria=+ops.vistoria?.custo||0;
+  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
+  const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
+  const margem=im.margemWecare||15;
+  const margemValor=totalSetupBase*(margem/100);
+  const totalSetup=totalSetupBase+margemValor;
+
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-file-signature"></i> Contrato</div>
   <div class="form-group">
@@ -802,7 +820,42 @@ function renderAbaContrato(im){
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
   </div>
 
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-chart-line"></i> Precificação Inicial</div>
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wrench"></i> Setup</div>
+  <div class="form-row">
+    <div class="form-group"><label>Fotos (R$)</label><input id="ct-op-fotos" type="number" class="input" value="${custoFotos}"></div>
+    <div class="form-group"><label>Limpeza (R$)</label><input id="ct-op-limpeza" type="number" class="input" value="${custoLimpeza}"></div>
+    <div class="form-group"><label>Vistoria (R$)</label><input id="ct-op-vistoria" type="number" class="input" value="${custoVistoria}"></div>
+  </div>
+
+  ${gastosSetup.length?`<div style="margin-bottom:8px;">
+    ${gastosSetup.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-size:13px;">${esc(g.nome)}</span>
+      <span style="font-weight:600;font-size:13px;">${fmtMoeda(+g.valor||0)}</span>
+      <button class="btn btn-xs btn-outline" onclick="removerGastoSetup('${g.id}')"><i class="fa-solid fa-xmark"></i></button>
+    </div>`).join('')}
+  </div>`:''}
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <input id="ct-gasto-nome" class="input" style="flex:1;min-width:140px;" placeholder="Nome do gasto extra">
+    <input id="ct-gasto-val" type="number" class="input" style="width:110px;" placeholder="R$ 0,00" min="0">
+    <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group"><label>Margem WeCare (%)</label><input id="ct-margem" type="number" class="input" value="${margem}" min="0" max="100"></div>
+    <div class="form-group"><label>Valor da Margem</label><input class="input" readonly value="${fmtMoeda(margemValor)}"></div>
+  </div>
+  <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;">
+      <span>Total Setup ao Proprietário</span>
+      <span style="color:var(--brand-gold);">${fmtMoeda(totalSetup)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''} + Margem ${margem}%
+    </div>
+  </div>
+
+  <div class="form-section-title"><i class="fa-solid fa-chart-line"></i> Precificação Inicial</div>
   <div class="form-row">
     <div class="form-group"><label>Valor Mínimo / Noite (R$)</label><input id="ct-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
     <div class="form-group"><label>Valor Base / Noite (R$)</label><input id="ct-base-noite" type="number" class="input" value="${im.valorBaseNoite||0}"></div>
@@ -813,6 +866,21 @@ function renderAbaContrato(im){
   </div>
   <div class="form-group"><label>Taxa de Limpeza (R$)</label><input id="ct-taxa-limpeza" type="number" class="input" value="${im.taxaLimpeza||0}"></div>
   </div>`;
+}
+function addGastoSetup(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const nome=(document.getElementById('ct-gasto-nome')?.value||'').trim();
+  const val=parseFloat(document.getElementById('ct-gasto-val')?.value||'0');
+  if(!nome){showToast('Informe o nome do gasto.','');return;}
+  if(!val||isNaN(val)){showToast('Informe o valor do gasto.','');return;}
+  if(!im.gastosSetup)im.gastosSetup=[];
+  im.gastosSetup.push({id:uid(),nome,valor:val});
+  saveAll();renderAba('contrato');
+}
+function removerGastoSetup(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.gastosSetup=(im.gastosSetup||[]).filter(g=>g.id!==id);
+  saveAll();renderAba('contrato');
 }
 function marcarContratoAssinadoManual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -953,16 +1021,43 @@ function renderAbaCompras(im){
   const compras=im.compras||{};
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
-  const rows=ITENS_COMPRAS.map((item,idx)=>{
-    const qtdNec=calcNecessario(item,camas,banheiros,quartos);
-    let precoUn=0;
-    if(item.tipoPreco==='fixo')precoUn=item.preco||0;
-    else if(item.tipoPreco==='enxoval')precoUn=getPrecoEnxovalUn(item.nome,camas);
-    const qtdReal=compras[idx]?.qtdReal!=null?compras[idx].qtdReal:qtdNec;
-    const total=precoUn*qtdReal;
-    totalEstimado+=total;
-    const comprado=compras[idx]?.comprado||false;
-    return{idx,item,qtdNec,qtdReal,precoUn,total,comprado};
+
+  // Gerar linhas — itens de enxoval expandidos por tamanho de cama
+  const rows=[];
+  ITENS_COMPRAS.forEach((item,idx)=>{
+    if(item.tipoPreco==='enxoval'&&camas.length){
+      // agrupar camas por tipo enxoval
+      const porTipo={};
+      camas.forEach(c=>{
+        const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';
+        porTipo[t]=(porTipo[t]||[]);
+        porTipo[t].push(c);
+      });
+      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+        const [n,base]=(item.qtdRule||'1-colchao').split('-');
+        const q=parseInt(n)||1;
+        let qtdNec=0;
+        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(+c.qtd||1),0);
+        else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else qtdNec=q;
+        const precoUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
+        const subKey=`${idx}_${tipoEnx}`;
+        const qtdReal=compras[subKey]?.qtdReal!=null?compras[subKey].qtdReal:qtdNec;
+        const total=precoUn*qtdReal;
+        totalEstimado+=total;
+        const comprado=compras[subKey]?.comprado||false;
+        rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdReal,precoUn,total,comprado});
+      });
+    } else {
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos);
+      const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
+      const subKey=String(idx);
+      const qtdReal=compras[subKey]?.qtdReal!=null?compras[subKey].qtdReal:qtdNec;
+      const total=precoUn*qtdReal;
+      totalEstimado+=total;
+      const comprado=compras[subKey]?.comprado||false;
+      rows.push({subKey,item,label:item.nome,qtdNec,qtdReal,precoUn,total,comprado});
+    }
   });
 
   const tabelasCat=cats.map(cat=>{
@@ -973,11 +1068,11 @@ function renderAbaCompras(im){
       <table class="compras-table" style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">✓</th><th>Item</th><th>Nec.</th><th>Real</th><th>R$/Un</th><th>Total</th><th>Link</th></tr></thead>
         <tbody>
-        ${itensC.map(({idx,item,qtdNec,qtdReal,precoUn,total,comprado})=>`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
-          <td style="padding:4px 8px;"><input type="checkbox" class="compra-check" ${comprado?'checked':''} onchange="_onCompraCheck(this,${idx})"></td>
-          <td style="padding:4px 8px;">${esc(item.nome)}</td>
+        ${itensC.map(({subKey,item,label,qtdNec,qtdReal,precoUn,total,comprado})=>`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+          <td style="padding:4px 8px;"><input type="checkbox" class="compra-check" ${comprado?'checked':''} data-idx="${subKey}" onchange="_onCompraCheck(this,'${subKey}')"></td>
+          <td style="padding:4px 8px;">${esc(label)}</td>
           <td style="text-align:center;">${qtdNec}</td>
-          <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdReal}" data-idx="${idx}" onchange="_onCompraQtd(this,${idx})"></td>
+          <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdReal}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:right;padding:0 8px;">${fmtMoeda(precoUn)}</td>
           <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
@@ -1015,18 +1110,18 @@ function _onFreteChange(inp){
   im.freteTotal=+inp.value||0;
   saveAll();
 }
-function _onCompraCheck(cb,idx){
+function _onCompraCheck(cb,key){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
-  if(!im.compras[idx])im.compras[idx]={};
-  im.compras[idx].comprado=cb.checked;
+  if(!im.compras[key])im.compras[key]={};
+  im.compras[key].comprado=cb.checked;
   saveAll();
 }
-function _onCompraQtd(inp,idx){
+function _onCompraQtd(inp,key){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
-  if(!im.compras[idx])im.compras[idx]={};
-  im.compras[idx].qtdReal=+inp.value||0;
+  if(!im.compras[key])im.compras[key]={};
+  im.compras[key].qtdReal=+inp.value||0;
   saveAll();
 }
 function _gerarMsgWhatsAppEnxoval(im,rows){
@@ -1212,9 +1307,8 @@ function renderAbaCustos(im){
     const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
     totalCompras+=precoUn*qtdReal;
   });
-  const totalOps=(+im.ops?.fotos?.custo||0)+(+im.ops?.limpeza?.custo||0)+(+im.ops?.vistoria?.custo||0);
   const freteCustos=im.freteTotal||0;
-  const subtotal=totalCompras+totalOps+freteCustos;
+  const subtotal=totalCompras+freteCustos;
   const margem=im.margemWecare||15;
   const comissao=subtotal*(margem/100);
   let desc=0;
@@ -1223,13 +1317,13 @@ function renderAbaCustos(im){
   const total=subtotal+comissao-desc;
 
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-calculator"></i> Resumo de Custos</div>
+  <div class="form-section-title"><i class="fa-solid fa-calculator"></i> Resumo de Custos (Compras)</div>
   <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
     <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Total Compras</td><td style="text-align:right;">${fmtMoeda(totalCompras)}</td></tr>
-    <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Operacional (Fotos + Limpeza + Vistoria)</td><td style="text-align:right;">${fmtMoeda(totalOps)}</td></tr>
     ${freteCustos?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Frete</td><td style="text-align:right;">${fmtMoeda(freteCustos)}</td></tr>`:''}
     <tr style="border-top:2px solid var(--border)"><td style="padding:8px 4px;font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${fmtMoeda(subtotal)}</td></tr>
   </table>
+  <div class="hint" style="margin-bottom:12px;"><i class="fa-solid fa-circle-info"></i> Fotos, limpeza, vistoria e gastos de setup estão na aba <strong>Contrato</strong>.</div>
 
   <div class="form-section-title"><i class="fa-solid fa-percent"></i> Margem WeCare</div>
   <div class="form-row">
