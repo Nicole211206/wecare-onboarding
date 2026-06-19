@@ -132,12 +132,13 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',config:'Configurações',usuarios:'Usuários'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',config:'Configurações',usuarios:'Usuários'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban')renderKanban();
   if(id==='dashboard')renderDashboard();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
+  if(id==='vistoria')renderVistoria();
   if(id==='config')renderConfig();
   if(id==='usuarios')renderUsuarios();
 }
@@ -362,13 +363,6 @@ function renderCard(im){
       ${im.status==='ativo'?`<span class="tag tag-sage">Ativo</span>`:`<span class="tag tag-${cor}">${FASE_LABEL[im.status]||im.status}</span>`}
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formPreenchidoEm?'<span class="tag tag-lav" title="Formulário preenchido"><i class="fa-solid fa-clipboard-check"></i></span>':''}
-    </div>
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-      <a href="vistoria.html?id=${encodeURIComponent(im.id)}&nome=${encodeURIComponent(im.nome||'')}" target="_blank"
-        onclick="event.stopPropagation()"
-        class="btn btn-outline btn-sm" style="font-size:11px;padding:5px 10px;">
-        <i class="fa-solid fa-clipboard-list"></i> Vistoria
-      </a>
     </div>
   </div>`;
 }
@@ -1746,6 +1740,66 @@ function salvarPrestador(){
 function apagarPrestador(idx){
   if(!confirm('Apagar este prestador?'))return;
   prestadores.splice(idx,1);saveAll();renderIntel();showToast('Removido.','peach');
+}
+
+// ═══════════════════ VISTORIA ═══════════════════
+function renderVistoria(){
+  const imoveis=(JSON.parse(localStorage.getItem('wc_imoveis')||'[]')).filter(im=>im.status!=='perdido');
+  const vistorias=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
+
+  const linhas=vistorias.length?vistorias.slice().reverse().map(v=>{
+    const im=imoveis.find(i=>i.id===v.imovelId);
+    const cor=v.apto==='sim'?'sage':v.apto==='nao'?'rose':'gold';
+    const label=v.apto==='sim'?'Apto':'nao'==='nao'?'Não apto':'Parcial';
+    return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">
+      <td style="padding:10px 8px;font-weight:600;">${esc(im?.nome||v.imovelId)}</td>
+      <td style="padding:10px 8px;">${fmtDate(v.data)}</td>
+      <td style="padding:10px 8px;">${esc(v.vistoriador||'—')}</td>
+      <td style="padding:10px 8px;"><span class="tag tag-${cor}">${label}</span></td>
+      <td style="padding:10px 8px;">${v.pendencias?.length||0} pendência(s)</td>
+    </tr>`;
+  }).join(''):
+  `<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--text-muted);">Nenhuma vistoria registrada ainda.</td></tr>`;
+
+  document.getElementById('vistoria-wrap').innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Vistorias de Onboarding</div>
+      <div class="text-muted">Formulário digital de inspeção dos imóveis</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <select id="vistoria-select-imovel" class="input" style="min-width:200px;">
+        <option value="">Selecionar imóvel…</option>
+        ${imoveis.map(im=>`<option value="${esc(im.id)}">${esc(im.nome)}</option>`).join('')}
+      </select>
+      <button class="btn btn-rose" onclick="iniciarVistoria()">
+        <i class="fa-solid fa-plus"></i> Nova Vistoria
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Histórico</span></div>
+    <div class="card-body" style="padding:0;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--surface-2);">
+          <th style="padding:8px;text-align:left;">Imóvel</th>
+          <th style="padding:8px;text-align:left;">Data</th>
+          <th style="padding:8px;text-align:left;">Vistoriador</th>
+          <th style="padding:8px;text-align:left;">Status</th>
+          <th style="padding:8px;text-align:left;">Pendências</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function iniciarVistoria(){
+  const id=document.getElementById('vistoria-select-imovel')?.value;
+  const imoveis=JSON.parse(localStorage.getItem('wc_imoveis')||'[]');
+  const im=imoveis.find(i=>i.id===id);
+  const url='vistoria.html'+(id?`?id=${encodeURIComponent(id)}&nome=${encodeURIComponent(im?.nome||'')}`:``);
+  window.open(url,'_blank');
 }
 
 // ═══════════════════ FORNECEDORES ═══════════════════
