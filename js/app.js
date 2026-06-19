@@ -284,7 +284,7 @@ async function _publicarStats(){
   const s=window.WC_SYNC||{};if(!s.url)return;
   try{
     const stats=imoveis.map(im=>({
-      nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status,
+      id:im.id,nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status,
       diasOnboarding:im.dataCriacao&&im.dataAtivacao?diasEntre(im.dataCriacao,im.dataAtivacao):null
     }));
     await fetch(s.url.replace(/\/$/,'')+'/stats?token='+encodeURIComponent(s.token||''),
