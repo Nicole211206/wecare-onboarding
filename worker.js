@@ -10,7 +10,8 @@
 //   GET  /form-load?id=X&t=TOKEN        → carrega formulário do imóvel
 //   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
 //   POST /extrair-formulario            → IA extrai dados de transcrição
-//   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (inclui fotos)
+//   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (metadados das fotos, sem base64)
+//   GET  /imovel-fotos?id=X&page=1&limit=5&token=T → fotos paginadas com base64
 //   POST /jarvis-notify?id=X&token=T    → webhook de notificação do Jarvis
 //   GET  /jarvis-pending?token=T        → lista de imóveis com análise de fotos pendente
 
@@ -247,6 +248,7 @@ Regras:
       const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
       const im      = imoveis.find(i => String(i.id) === imovelId);
       if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+      const fotosArr = Array.isArray(im.fotos) ? im.fotos : [];
       return json({ ok: true, imovel: {
         id: im.id, nome: im.nome, endereco: im.endereco,
         proprietarioNome: im.proprietarioNome, proprietarioTel: im.proprietarioTel,
@@ -254,8 +256,30 @@ Regras:
         captacaoLink: im.captacaoLink, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao,
         observacoes: im.observacoes, formRespostas: im.formRespostas ?? {},
         jarvisPreenchidoEm: im.jarvisPreenchidoEm,
-        fotos: Array.isArray(im.fotos) ? im.fotos : [],
+        fotosTotal: fotosArr.length,
+        fotosMeta: fotosArr.map((f, i) => ({ index: i, nome: f.nome || `foto_${i}`, tipo: f.tipo || 'image/jpeg', fonte: f.fonte || 'upload' })),
       }});
+    }
+
+    // ── GET /imovel-fotos?id=X&page=1&limit=5&token=T (paginação de fotos) ───
+    if (request.method === 'GET' && path === '/imovel-fotos') {
+      if (!checkAuth(token, env)) return unauthorized();
+      const imovelId = url.searchParams.get('id') || '';
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+      const page  = Math.max(1, parseInt(url.searchParams.get('page')  || '1', 10));
+      const limit = Math.min(20, Math.max(1, parseInt(url.searchParams.get('limit') || '5', 10)));
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+      const fotosArr = Array.isArray(im.fotos) ? im.fotos : [];
+      const total = fotosArr.length;
+      const start = (page - 1) * limit;
+      const fotos = fotosArr.slice(start, start + limit).map((f, i) => ({
+        index: start + i, nome: f.nome || `foto_${start + i}`, tipo: f.tipo || 'image/jpeg',
+        fonte: f.fonte || 'upload', data: f.data || '',
+      }));
+      return json({ ok: true, total, page, limit, pages: Math.ceil(total / limit), fotos });
     }
 
     // ── GET /jarvis-pending (fila de análises pendentes) ─────────────────────
