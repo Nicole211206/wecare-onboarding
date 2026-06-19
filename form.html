@@ -11,10 +11,12 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     :root{
-      --brand-red:#D63868; --brand-purple:#8B35C5;
-      --brand-grad:linear-gradient(135deg,#D63868 0%,#8B35C5 100%);
-      --bg:#F4F2F8; --surface:#fff; --surface-2:#F9F7FC;
-      --border:#E8E3F0; --text:#1A1033; --text-2:#4A3F6B; --text-muted:#8878AA;
+      --brand-navy:#132030; --brand-gold:#C49A5E;
+      --brand-red:#C49A5E; --brand-purple:#132030;
+      --brand-grad:linear-gradient(135deg,#132030 0%,#1E3448 100%);
+      --bg:#EDE6D6; --surface:#fff; --surface-2:#F5F0E8;
+      --border:#D8CEBC; --border-focus:#C49A5E;
+      --text:#132030; --text-2:#2E4558; --text-muted:#7A8B95;
       --green:#22C55E; --green-bg:#F0FDF4; --green-text:#15803D;
       --r:14px; --font:'Plus Jakarta Sans',system-ui,sans-serif;
       --shadow:0 4px 16px rgba(0,0,0,.08);
@@ -22,7 +24,7 @@
     html{scroll-behavior:smooth;}
     body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px;-webkit-font-smoothing:antialiased;}
 
-    .page-header{background:linear-gradient(135deg,#160A2A 0%,#2B1245 100%);padding:22px 20px;text-align:center;position:sticky;top:0;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.2);}
+    .page-header{background:linear-gradient(135deg,#0D1C2A 0%,#132030 100%);padding:22px 20px;text-align:center;position:sticky;top:0;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.2);}
     .logo{font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.5px;}
     .logo span{background:var(--brand-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
     .logo-sub{font-size:.7rem;color:rgba(255,255,255,.4);letter-spacing:.14em;text-transform:uppercase;margin-top:3px;}

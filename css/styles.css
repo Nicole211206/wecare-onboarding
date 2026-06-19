@@ -1,32 +1,36 @@
 /* ═══════════════════════════════════════════════════════════════
    WeCare Hosting — Onboarding System
-   Paleta: gradiente coral #D63868 → violeta #8B35C5 (logo WeCare)
+   Paleta: Navy #132030 + Dourado #C49A5E + Creme #EDE6D6
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─── Tokens ─── */
 :root {
   /* Brand */
-  --brand-red:    #D63868;
-  --brand-purple: #8B35C5;
-  --brand-grad:   linear-gradient(135deg, #D63868 0%, #8B35C5 100%);
-  --brand-grad-h: linear-gradient(135deg, #C02F5C 0%, #7A2CB0 100%);
+  --brand-navy:   #132030;
+  --brand-gold:   #C49A5E;
+  --brand-grad:   linear-gradient(135deg, #132030 0%, #1E3448 100%);
+  --brand-grad-h: linear-gradient(135deg, #0D1C2A 0%, #162B3C 100%);
+
+  /* Compat legado (usados em app.js / templates) */
+  --brand-red:    #C49A5E;
+  --brand-purple: #132030;
 
   /* UI surfaces */
-  --bg:           #F4F2F8;
+  --bg:           #EDE6D6;
   --surface:      #FFFFFF;
-  --surface-2:    #F9F7FC;
-  --border:       #E8E3F0;
-  --border-focus: #A855F7;
+  --surface-2:    #F5F0E8;
+  --border:       #D8CEBC;
+  --border-focus: #C49A5E;
 
   /* Sidebar */
-  --sidebar-bg:   #160A2A;
+  --sidebar-bg:   #0D1C2A;
   --sidebar-text: rgba(255,255,255,0.72);
 
   /* Text */
-  --text:         #1A1033;
-  --text-2:       #4A3F6B;
-  --text-muted:   #8878AA;
-  --text3:        #8878AA;
+  --text:         #132030;
+  --text-2:       #2E4558;
+  --text-muted:   #7A8B95;
+  --text3:        #7A8B95;
 
   /* Semantic colors */
   --green:        #22C55E;
@@ -38,27 +42,27 @@
   --red-bg:       #FEF2F2;
   --sky:          #0EA5E9;
   --sky-bg:       #F0F9FF;
-  --purple-bg:    #F3EEFF;
-  --purple-text:  #7C3AED;
+  --purple-bg:    #F0EBE0;
+  --purple-text:  #C49A5E;
 
   /* Legacy compat */
-  --rose:         #D63868;
-  --lavender:     #8B35C5;
+  --rose:         #C49A5E;
+  --lavender:     #132030;
   --sage:         #22C55E;
   --peach:        #F97316;
-  --gold:         #F59E0B;
+  --gold:         #C49A5E;
   --lav:          var(--purple-bg);
   --vermelha:     #EF4444;
   --vermelha-bg:  #FEF2F2;
   --card-bg:      #FFFFFF;
-  --bg3:          #F9F7FC;
+  --bg3:          #F5F0E8;
   --font-display: 'Plus Jakarta Sans', sans-serif;
 
   /* Shadows */
   --shadow-sm:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
   --shadow-md:    0 4px 12px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.05);
   --shadow-lg:    0 10px 30px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.06);
-  --shadow-brand: 0 4px 16px rgba(214,56,104,.30);
+  --shadow-brand: 0 4px 16px rgba(196,154,94,.30);
 
   /* Layout */
   --sidebar-w:    240px;
