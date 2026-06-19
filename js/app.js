@@ -530,6 +530,9 @@ function _coletarDadosAba(aba,im){
       const v=gn(`ct-op-${op}`);if(v!=null)im.ops[op].custo=v;
     });
     const mg=gn('ct-margem');if(mg!=null)im.margemWecare=mg;
+    im.descontoTipo=g('ct-desc-tipo');
+    im.descontoValor=gn('ct-desc-val');
+    im.formasPagamento=g('ct-pagamento');
   }
   if(aba==='definicoes'){
     im.seguroEasyCover=gc('def-seguro'); im.kitAmenities=gc('def-amenities');
@@ -865,6 +868,61 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Acima de (nº hóspedes)</label><input id="ct-extra-acima" type="number" class="input" value="${im.taxaHospedeExtraAcimaDe||0}"></div>
   </div>
   <div class="form-group"><label>Taxa de Limpeza (R$)</label><input id="ct-taxa-limpeza" type="number" class="input" value="${im.taxaLimpeza||0}"></div>
+
+  <div class="form-section-title" style="margin-top:24px;"><i class="fa-solid fa-calculator"></i> Resumo do Orçamento</div>
+  ${(()=>{
+    let totalCompras=0;
+    ITENS_COMPRAS.forEach((item,idx)=>{
+      const camas=im.camas||[];
+      const qtdNec=calcNecessario(item,camas,im.banheiros||1,im.quartos||1);
+      const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
+      const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
+      totalCompras+=precoUn*qtdReal;
+    });
+    const frete=im.freteTotal||0;
+    const custoFotos2=+ops.fotos?.custo||0;
+    const custoLimpeza2=+ops.limpeza?.custo||0;
+    const custoVistoria2=+ops.vistoria?.custo||0;
+    const custosExtras2=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
+    const subtotalOrc=totalCompras+frete+custoFotos2+custoLimpeza2+custoVistoria2+custosExtras2;
+    const margemOrc=im.margemWecare||15;
+    const margemValorOrc=subtotalOrc*(margemOrc/100);
+    const subtotalComMargem=subtotalOrc+margemValorOrc;
+    const descTipo=im.descontoTipo||'reais';
+    const descVal=im.descontoValor||0;
+    const descValor=descTipo==='reais'?descVal:subtotalComMargem*(descVal/100);
+    const totalProp=subtotalComMargem-descValor;
+    return`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Total de Compras</td><td style="text-align:right;">${fmtMoeda(totalCompras)}</td></tr>
+      ${frete?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Frete</td><td style="text-align:right;">${fmtMoeda(frete)}</td></tr>`:''}
+      ${custoFotos2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Fotos</td><td style="text-align:right;">${fmtMoeda(custoFotos2)}</td></tr>`:''}
+      ${custoLimpeza2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Limpeza</td><td style="text-align:right;">${fmtMoeda(custoLimpeza2)}</td></tr>`:''}
+      ${custoVistoria2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Vistoria</td><td style="text-align:right;">${fmtMoeda(custoVistoria2)}</td></tr>`:''}
+      ${gastosSetup.map(g=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">${esc(g.nome)}</td><td style="text-align:right;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('')}
+      <tr style="border-top:2px solid var(--border)"><td style="padding:7px 4px;font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${fmtMoeda(subtotalOrc)}</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Margem WeCare (${margemOrc}%)</td><td style="text-align:right;">${fmtMoeda(margemValorOrc)}</td></tr>
+    </table>
+    <div class="form-section-title"><i class="fa-solid fa-tag"></i> Desconto</div>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo</label>
+        <select id="ct-desc-tipo" class="input">
+          <option value="reais"${descTipo==='reais'?' selected':''}>R$ (reais)</option>
+          <option value="percent"${descTipo==='percent'?' selected':''}>% (porcentagem)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Valor</label><input id="ct-desc-val" type="number" class="input" value="${descVal}" min="0"></div>
+    </div>
+    <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;">
+        <span>Total ao Proprietário</span><span style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
+      </div>
+    </div>
+    <div class="form-section-title"><i class="fa-solid fa-credit-card"></i> Formas de Pagamento</div>
+    <div class="form-group">
+      <textarea id="ct-pagamento" class="input" rows="3" placeholder="Ex: 50% na assinatura + 50% na entrega das chaves">${esc(im.formasPagamento||'')}</textarea>
+    </div>
+    <button class="btn btn-sm" style="margin-top:8px;" onclick="gerarPDFOrcamento()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do Orçamento</button>`;
+  })()}
   </div>`;
 }
 function addGastoSetup(){
@@ -1366,8 +1424,15 @@ function gerarPDFOrcamento(){
     const tot=pUn*qtd;totalC+=tot;
     return`<tr><td>${item.nome}</td><td style="text-align:center;">${qtd}</td><td style="text-align:right;">${fmtMoeda(pUn)}</td><td style="text-align:right;">${fmtMoeda(tot)}</td></tr>`;
   }).join('');
-  const ops=(+im.ops?.fotos?.custo||0)+(+im.ops?.limpeza?.custo||0)+(+im.ops?.vistoria?.custo||0);
-  const sub=totalC+ops;const marg=sub*(im.margemWecare||15)/100;
+  const frete=im.freteTotal||0;
+  const custoFotos=+im.ops?.fotos?.custo||0;
+  const custoLimpeza=+im.ops?.limpeza?.custo||0;
+  const custoVistoria=+im.ops?.vistoria?.custo||0;
+  const gastosSetup=im.gastosSetup||[];
+  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
+  const linhasExtras=gastosSetup.map(g=>`<tr><td>${esc(g.nome)}</td><td style="text-align:right;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('');
+  const sub=totalC+frete+custoFotos+custoLimpeza+custoVistoria+custosExtras;
+  const marg=sub*(im.margemWecare||15)/100;
   const desc=im.descontoTipo==='reais'?(im.descontoValor||0):(sub+marg)*(im.descontoValor||0)/100;
   const total=sub+marg-desc;
   const win=window.open('','_blank');
@@ -1377,11 +1442,14 @@ function gerarPDFOrcamento(){
   <p><strong>Proprietário:</strong> ${esc(im.proprietarioNome||'—')} &nbsp;|&nbsp; <strong>Data:</strong> ${fmtDate(hoje())}</p>
   <h2>Lista de Compras</h2>
   <table><thead><tr><th>Item</th><th>Qtd</th><th>R$/Un</th><th>Total</th></tr></thead><tbody>${linhasComp}</tbody></table>
-  <h2>Operacional</h2>
+  <div class="total">Total Compras: ${fmtMoeda(totalC)}</div>
+  <h2>Produção e Setup</h2>
   <table><thead><tr><th>Serviço</th><th>Custo</th></tr></thead><tbody>
-    <tr><td>Fotos</td><td style="text-align:right;">${fmtMoeda(im.ops?.fotos?.custo||0)}</td></tr>
-    <tr><td>Primeira Limpeza</td><td style="text-align:right;">${fmtMoeda(im.ops?.limpeza?.custo||0)}</td></tr>
-    <tr><td>Vistoria</td><td style="text-align:right;">${fmtMoeda(im.ops?.vistoria?.custo||0)}</td></tr>
+    ${frete?`<tr><td>Frete</td><td style="text-align:right;">${fmtMoeda(frete)}</td></tr>`:''}
+    ${custoFotos?`<tr><td>Fotos</td><td style="text-align:right;">${fmtMoeda(custoFotos)}</td></tr>`:''}
+    ${custoLimpeza?`<tr><td>Primeira Limpeza</td><td style="text-align:right;">${fmtMoeda(custoLimpeza)}</td></tr>`:''}
+    ${custoVistoria?`<tr><td>Vistoria</td><td style="text-align:right;">${fmtMoeda(custoVistoria)}</td></tr>`:''}
+    ${linhasExtras}
   </tbody></table>
   <div class="total">Subtotal: ${fmtMoeda(sub)}</div>
   <div class="total">Margem WeCare (${im.margemWecare||15}%): ${fmtMoeda(marg)}</div>
