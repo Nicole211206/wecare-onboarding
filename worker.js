@@ -11,7 +11,8 @@
 //   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
 //   POST /extrair-formulario            → IA extrai dados de transcrição
 //   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (metadados das fotos, sem base64)
-//   GET  /imovel-fotos?id=X&page=1&limit=5&token=T → fotos paginadas com base64
+//   GET  /foto?id=X&index=N&token=T     → serve foto como binário (image/jpeg) diretamente do KV
+//   GET  /imovel-fotos?id=X&page=1&limit=5&token=T → índice paginado com URLs de /foto
 //   POST /jarvis-notify?id=X&token=T    → webhook de notificação do Jarvis
 //   GET  /jarvis-pending?token=T        → lista de imóveis com análise de fotos pendente
 
@@ -261,7 +262,28 @@ Regras:
       }});
     }
 
-    // ── GET /imovel-fotos?id=X&page=1&limit=5&token=T (paginação de fotos) ───
+    // ── GET /foto?id=X&index=N&token=T (serve foto como binário — sem base64) ──
+    if (request.method === 'GET' && path === '/foto') {
+      if (!checkAuth(token, env)) return unauthorized();
+      const imovelId = url.searchParams.get('id') || '';
+      const idx      = parseInt(url.searchParams.get('index') || '0', 10);
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return new Response('Imóvel não encontrado', { status: 404, headers: CORS });
+      const fotosArr = Array.isArray(im.fotos) ? im.fotos : [];
+      const foto = fotosArr[idx];
+      if (!foto) return new Response('Foto não encontrada', { status: 404, headers: CORS });
+      const dataUrl = foto.data || '';
+      const match   = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) return new Response('Foto sem dados', { status: 422, headers: CORS });
+      const ct  = match[1] || 'image/jpeg';
+      const bin = Uint8Array.from(atob(match[2]), c => c.charCodeAt(0));
+      return new Response(bin, { headers: { ...CORS, 'Content-Type': ct, 'Cache-Control': 'public, max-age=3600' } });
+    }
+
+    // ── GET /imovel-fotos?id=X&page=1&limit=5&token=T (índice paginado de fotos) ─
     if (request.method === 'GET' && path === '/imovel-fotos') {
       if (!checkAuth(token, env)) return unauthorized();
       const imovelId = url.searchParams.get('id') || '';
@@ -275,9 +297,11 @@ Regras:
       const fotosArr = Array.isArray(im.fotos) ? im.fotos : [];
       const total = fotosArr.length;
       const start = (page - 1) * limit;
+      const base  = new URL(request.url).origin;
       const fotos = fotosArr.slice(start, start + limit).map((f, i) => ({
         index: start + i, nome: f.nome || `foto_${start + i}`, tipo: f.tipo || 'image/jpeg',
-        fonte: f.fonte || 'upload', data: f.data || '',
+        fonte: f.fonte || 'upload',
+        url: `${base}/foto?id=${encodeURIComponent(imovelId)}&index=${start + i}&token=${encodeURIComponent(token)}`,
       }));
       return json({ ok: true, total, page, limit, pages: Math.ceil(total / limit), fotos });
     }
