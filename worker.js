@@ -10,8 +10,9 @@
 //   GET  /form-load?id=X&t=TOKEN        → carrega formulário do imóvel
 //   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
 //   POST /extrair-formulario            → IA extrai dados de transcrição
-//   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis
+//   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (inclui fotos)
 //   POST /jarvis-notify?id=X&token=T    → webhook de notificação do Jarvis
+//   GET  /jarvis-pending?token=T        → lista de imóveis com análise de fotos pendente
 
 const KV_KEY   = 'wc_state';
 const STATS_KEY = 'wc_stats';
@@ -253,7 +254,19 @@ Regras:
         captacaoLink: im.captacaoLink, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao,
         observacoes: im.observacoes, formRespostas: im.formRespostas ?? {},
         jarvisPreenchidoEm: im.jarvisPreenchidoEm,
+        fotos: Array.isArray(im.fotos) ? im.fotos : [],
       }});
+    }
+
+    // ── GET /jarvis-pending (fila de análises pendentes) ─────────────────────
+    if (request.method === 'GET' && path === '/jarvis-pending') {
+      if (!checkAuth(token, env)) return unauthorized();
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const pending = imoveis
+        .filter(im => im.fotosIaSolicitadoEm)
+        .map(im => ({ id: im.id, nome: im.nome, solicitadoEm: im.fotosIaSolicitadoEm, fotosCount: Array.isArray(im.fotos) ? im.fotos.length : 0 }));
+      return json({ ok: true, pending });
     }
 
     // ── POST /jarvis-notify (webhook do Jarvis) ────────────────────────────────
