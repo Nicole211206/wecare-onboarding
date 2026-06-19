@@ -363,6 +363,13 @@ function renderCard(im){
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formPreenchidoEm?'<span class="tag tag-lav" title="Formulário preenchido"><i class="fa-solid fa-clipboard-check"></i></span>':''}
     </div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+      <a href="vistoria.html?id=${encodeURIComponent(im.id)}&nome=${encodeURIComponent(im.nome||'')}" target="_blank"
+        onclick="event.stopPropagation()"
+        class="btn btn-outline btn-sm" style="font-size:11px;padding:5px 10px;">
+        <i class="fa-solid fa-clipboard-list"></i> Vistoria
+      </a>
+    </div>
   </div>`;
 }
 function _verificarAtrasado(im){
