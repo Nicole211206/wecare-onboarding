@@ -25,9 +25,10 @@
     body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px;-webkit-font-smoothing:antialiased;}
 
     .page-header{background:linear-gradient(135deg,#0D1C2A 0%,#132030 100%);padding:22px 20px;text-align:center;position:sticky;top:0;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.2);}
-    .logo{font-size:1.7rem;font-weight:800;color:#fff;letter-spacing:-.5px;}
-    .logo span{background:var(--brand-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-    .logo-sub{font-size:.7rem;color:rgba(255,255,255,.4);letter-spacing:.14em;text-transform:uppercase;margin-top:3px;}
+    .logo{display:inline-flex;align-items:center;gap:10px;}
+    .logo-mark{font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:-.2px;}
+    .logo-mark .dot{color:#C49A5E;}
+    .logo-sub{font-size:.65rem;color:rgba(255,255,255,.35);letter-spacing:.18em;text-transform:uppercase;margin-top:3px;}
 
     .container{max-width:680px;margin:0 auto;padding:24px 16px 0;}
 
@@ -43,7 +44,7 @@
 
     .secao{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden;}
     .secao-header{display:flex;align-items:center;gap:10px;padding:16px 20px;background:var(--surface-2);border-bottom:1px solid var(--border);cursor:pointer;}
-    .secao-header i.sec-icon{width:34px;height:34px;display:grid;place-items:center;background:var(--brand-grad);color:#fff;border-radius:9px;font-size:.95rem;}
+    .secao-header i.sec-icon{width:34px;height:34px;display:grid;place-items:center;background:rgba(196,154,94,.15);color:#C49A5E;border-radius:9px;font-size:.95rem;border:1px solid rgba(196,154,94,.25);}
     .secao-title{font-weight:700;font-size:1rem;flex:1;}
     .secao-count{font-size:.75rem;color:var(--text-muted);font-weight:600;}
     .secao-chevron{color:var(--text-muted);transition:transform .2s;}
@@ -114,8 +115,16 @@
 <script>window.WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';</script>
 
 <header class="page-header">
-  <div class="logo">We<span>Care</span></div>
-  <div class="logo-sub">Cadastro do Imóvel</div>
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 2C9.582 2 6 5.686 6 10.222c0 6.334 8 15.778 8 15.778s8-9.444 8-15.778C22 5.686 18.418 2 14 2z" fill="#C49A5E" opacity=".3" stroke="#C49A5E" stroke-width="1.5"/>
+      <path d="M10 13l4-4 4 4v5h-3v-3h-2v3h-3v-5z" fill="#fff" opacity=".9"/>
+    </svg>
+    <div>
+      <div class="logo-mark">wecare<span class="dot">.</span></div>
+      <div class="logo-sub">Cadastro do Imóvel</div>
+    </div>
+  </div>
 </header>
 
 <div class="container">
@@ -190,19 +199,20 @@
     cont.innerHTML='';
     _valores={}; _confirmados={};
 
-    secoes.forEach(function(sec){
+    secoes.forEach(function(sec, secIdx){
       const val0=function(qid){
         if(respostas&&respostas[qid]!=null&&String(respostas[qid]).trim()) return respostas[qid];
         if(rascunho&&rascunho[qid]!=null) return rascunho[qid];
         return '';
       };
       const box=document.createElement('div');
-      box.className='secao';
+      box.className='secao'+(secIdx>0?' collapsed':'');
+      box.dataset.secaoIdx=secIdx;
       box.innerHTML=
         '<div class="secao-header" onclick="this.parentNode.classList.toggle(\'collapsed\')">'+
           '<i class="sec-icon fa-solid fa-'+sec.icon+'"></i>'+
           '<span class="secao-title">'+sec.secao+'</span>'+
-          '<span class="secao-count">'+sec.perguntas.length+' itens</span>'+
+          '<span class="secao-count">0/'+sec.perguntas.length+' confirmados</span>'+
           '<i class="secao-chevron fa-solid fa-chevron-down"></i>'+
         '</div>'+
         '<div class="secao-body"></div>';
@@ -217,6 +227,13 @@
         const field=document.createElement('div');
         field.className='field'+(_confirmados[p.id]?' confirmado':'');
         field.dataset.qid=p.id;
+        if(p.dependeDe){
+          field.dataset.dependeDe=p.dependeDe;
+          field.dataset.dependeContem=p.dependeContem||'';
+          const curDep=_valores[p.dependeDe]||'';
+          const satisfaz=curDep.split(',').map(function(x){return x.trim();}).includes(p.dependeContem||'');
+          field.style.display=satisfaz?'':'none';
+        }
 
         const lbl=document.createElement('label');
         lbl.className='field-label';
@@ -247,6 +264,7 @@
                 else{const i=cur.indexOf(op);if(i>-1)cur.splice(i,1);}
                 _valores[p.id]=cur.join(', ');
               }
+              if(p.id==='q24') _atualizarCondicionais();
             });
             pill.appendChild(inp);
             pill.appendChild(document.createTextNode(op));
@@ -301,6 +319,40 @@
     });
     window._wcSecoes=secoes;
     updateProgress();
+
+    // Auto-save silencioso a cada 30s
+    const{id:_asId,t:_asT}=getParams();
+    if(_asId&&_asT){
+      if(window._autoSaveInterval) clearInterval(window._autoSaveInterval);
+      window._autoSaveInterval=setInterval(function(){
+        const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
+        if(!workerUrl) return;
+        const url=workerUrl+'/form-save?id='+encodeURIComponent(_asId)+'&t='+encodeURIComponent(_asT);
+        fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
+        .then(function(){console.log('[WeCare] auto-save ok',new Date().toLocaleTimeString());})
+        .catch(function(e){console.warn('[WeCare] auto-save falhou',e);});
+      },30000);
+    }
+  }
+
+  function updateSecaoProgress(boxEl, sec){
+    const countEl=boxEl.querySelector('.secao-count');
+    if(!countEl) return;
+    const total=sec.perguntas.length;
+    let conf=0;
+    sec.perguntas.forEach(function(p){ if(_confirmados[p.id]) conf++; });
+    countEl.textContent=conf+'/'+total+' confirmados';
+  }
+
+  function _atualizarCondicionais(){
+    document.querySelectorAll('[data-depende-de]').forEach(function(field){
+      const depDe=field.dataset.dependeDe;
+      const depContem=field.dataset.dependeContem||'';
+      const curVal=_valores[depDe]||'';
+      const satisfaz=curVal.split(',').map(function(x){return x.trim();}).includes(depContem);
+      field.style.display=satisfaz?'':'none';
+    });
   }
 
   function updateProgress(){
@@ -310,6 +362,10 @@
     const pct=total?Math.round(conf/total*100):0;
     qs('#progress-fill').style.width=pct+'%';
     qs('#progress-label').textContent=conf+' de '+total+' confirmados';
+    // Atualiza badge de progresso de cada seção
+    const boxes=document.querySelectorAll('#secoes-container .secao');
+    const secoes=window._wcSecoes||[];
+    boxes.forEach(function(box,i){ if(secoes[i]) updateSecaoProgress(box, secoes[i]); });
   }
 
   window.submitForm=function(){
@@ -322,7 +378,7 @@
     fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
     .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Erro ao salvar');});return r.json();})
-    .then(function(){hide('form-state');show('success-state');window.scrollTo(0,0);})
+    .then(function(){if(window._autoSaveInterval){clearInterval(window._autoSaveInterval);window._autoSaveInterval=null;}hide('form-state');show('success-state');window.scrollTo(0,0);})
     .catch(function(err){btn.disabled=false;btn.textContent='Enviar informações';errEl.textContent=err.message||'Erro ao enviar. Tente novamente.';errEl.style.display='block';});
   };
 

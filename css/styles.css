@@ -115,39 +115,51 @@ a:hover { text-decoration: underline; }
 
 /* ─── Sidebar ─── */
 .sidebar-logo {
-  padding: 22px 20px 18px;
+  padding: 22px 20px 20px;
   border-bottom: 1px solid rgba(255,255,255,.07);
 }
+.wc-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wc-logo-icon {
+  flex-shrink: 0;
+  color: #fff;
+  opacity: .9;
+}
+.wc-logo-text { line-height: 1.15; }
 .logo-mark {
   font-family: var(--font);
-  font-weight: 800;
-  font-size: 20px;
+  font-weight: 700;
+  font-size: 17px;
   color: #fff;
-  letter-spacing: -.3px;
+  letter-spacing: -.2px;
 }
-.logo-mark span {
-  background: var(--brand-grad);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+.logo-mark .dot { color: #C49A5E; }
 .logo-sub {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: rgba(255,255,255,.32);
-  margin-top: 2px;
+  color: rgba(255,255,255,.3);
+  margin-top: 1px;
 }
+
+/* Login logo */
+.login-logo { display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:4px; }
+.login-logo .logo-mark { font-size:22px; color:#132030; }
+.login-logo .dot { color:#C49A5E; }
+.login-logo svg { color: #132030; }
 
 .sidebar-nav { flex: 1; padding: 10px; }
 .nav-section {
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 1.1px;
+  letter-spacing: 1.3px;
   text-transform: uppercase;
-  color: rgba(255,255,255,.28);
-  padding: 16px 10px 6px;
+  color: rgba(255,255,255,.22);
+  padding: 16px 10px 5px;
 }
 .nav-item {
   display: flex;
@@ -156,20 +168,20 @@ a:hover { text-decoration: underline; }
   width: 100%;
   padding: 9px 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: none;
-  color: var(--sidebar-text);
+  color: rgba(255,255,255,.6);
   font-family: var(--font);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
   transition: background .15s, color .15s;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
-.nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.nav-item:hover { background: rgba(255,255,255,.06); color: rgba(255,255,255,.9); }
 .nav-item.active {
-  background: rgba(255,255,255,.08);
+  background: rgba(196,154,94,.10);
   color: #fff;
   font-weight: 600;
   position: relative;
@@ -178,12 +190,12 @@ a:hover { text-decoration: underline; }
   content: '';
   position: absolute;
   left: 0; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 60%;
-  background: var(--brand-grad);
+  width: 2px; height: 55%;
+  background: #C49A5E;
   border-radius: 2px;
 }
-.nav-item i { width: 16px; text-align: center; opacity: .72; }
-.nav-item.active i { opacity: 1; }
+.nav-item.active i { color: #C49A5E; opacity: 1; }
+.nav-item i { width: 16px; text-align: center; opacity: .5; }
 
 .sidebar-user {
   display: flex;
@@ -259,15 +271,16 @@ a:hover { text-decoration: underline; }
 .btn:active { transform: scale(.98); }
 
 .btn-rose, .btn-primary {
-  background: var(--brand-grad);
-  color: #fff;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
   border-color: transparent;
   box-shadow: var(--shadow-brand);
+  font-weight: 700;
 }
 .btn-rose:hover, .btn-primary:hover {
-  background: var(--brand-grad-h);
+  background: #B8893F;
   border-color: transparent;
-  color: #fff;
+  color: var(--brand-navy);
   text-decoration: none;
 }
 
