@@ -12,7 +12,6 @@
 //   POST /extrair-formulario            → IA extrai dados de transcrição
 //   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis
 //   POST /jarvis-notify?id=X&token=T    → webhook de notificação do Jarvis
-//   POST /analisar-fotos                → IA analisa fotos e preenche campos
 
 const KV_KEY   = 'wc_state';
 const STATS_KEY = 'wc_stats';
@@ -288,33 +287,6 @@ Regras:
       im.jarvisPreenchidoEm = new Date().toISOString();
       await putState(env, state);
       return json({ ok: true, imovel: { id: im.id, nome: im.nome, status: im.status } });
-    }
-
-    // ── POST /analisar-fotos (IA analisa fotos e preenche campos) ─────────────
-    if (request.method === 'POST' && path === '/analisar-fotos') {
-      if (!checkAuth(token, env)) return unauthorized();
-      if (!env.AI) return json({ ok: false, error: 'Workers AI não configurado' }, 500);
-      let body;
-      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
-      const fotos = Array.isArray(body.fotos) ? body.fotos.slice(0, 3) : [];
-      if (!fotos.length) return json({ ok: false, error: 'Nenhuma foto enviada' }, 400);
-
-      const base64 = fotos[0].replace(/^data:image\/\w+;base64,/, '');
-      const imageArr = [...atob(base64)].map(c => c.charCodeAt(0));
-      const prompt = `Você é especialista em análise de imóveis para aluguel por temporada.
-Analise esta foto e extraia APENAS o que for claramente visível.
-Retorne SOMENTE um JSON válido, sem texto adicional:
-{"quartos":"numero ou vazio","banheiros":"numero ou vazio","tipo_cama":"Solteiro/Casal/Queen/King ou vazio","descricao":"descricao objetiva do ambiente","condicao":"excelente/boa/regular","observacoes":"outros detalhes relevantes"}`;
-      try {
-        const out = await env.AI.run('@cf/llava-1.5-7b-hf-gguf', { image: imageArr, prompt, max_tokens: 400 });
-        const texto = (out?.response || out?.result || '') + '';
-        let dados = {};
-        const ini = texto.indexOf('{'); const fim = texto.lastIndexOf('}');
-        if (ini >= 0 && fim > ini) { try { dados = JSON.parse(texto.slice(ini, fim + 1)); } catch {} }
-        return json({ ok: true, dados });
-      } catch (e) {
-        return json({ ok: false, error: 'Falha na IA: ' + (e?.message || 'desconhecido') }, 500);
-      }
     }
 
     // ── POST /imovel-fotos (Jarvis envia URLs externas de fotos) ─────────────

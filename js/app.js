@@ -711,12 +711,12 @@ function renderAbaFotos(im){
     </div>`).join('')}
   </div>
 
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Análise com IA</div>
-  ${im.fotosIaEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> IA analisou as fotos em <strong>${fmtDate(im.fotosIaEm)}</strong> — encontrou <strong>${im.fotosIaEncontrados||0}</strong> informações. Confira na aba <strong>Dados</strong> e <strong>Formulário</strong>.</div>`:'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Clique abaixo para a IA analisar as fotos e preencher os campos automaticamente.</div>'}
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Análise com Jarvis</div>
+  ${im.fotosIaSolicitadoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Solicitação enviada ao Jarvis em <strong>${fmtDate(im.fotosIaSolicitadoEm)}</strong>. Os campos serão preenchidos automaticamente quando ele processar as fotos.</div>`:'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Clique abaixo para o Jarvis analisar as fotos e preencher os campos automaticamente.</div>'}
   <button class="btn btn-primary" id="btn-ia-fotos" onclick="_rodarIAFotos()" style="margin-top:8px;">
-    <i class="fa-solid fa-robot"></i> Analisar fotos com IA e preencher campos
+    <i class="fa-solid fa-robot"></i> Solicitar análise de fotos ao Jarvis
   </button>
-  <div class="hint" style="margin-top:6px;">A IA lê detalhes visíveis: tipo de camas, quantidade de cômodos, estado de conservação, itens presentes, etc.</div>
+  <div class="hint" style="margin-top:6px;">O Jarvis analisa detalhes visíveis nas fotos: tipo de camas, cômodos, estado de conservação, itens presentes, etc., e preenche os campos automaticamente.</div>
   `:''}
   </div>`;
 }
@@ -767,29 +767,22 @@ async function _rodarIAFotos(){
   const s=window.WC_SYNC||{};
   if(!s.url){showToast('Worker não configurado.','peach');return;}
   const btn=document.getElementById('btn-ia-fotos');
-  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> A IA está analisando as fotos…';}
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Enviando solicitação ao Jarvis…';}
   try{
-    const r=await fetch(s.url.replace(/\/$/,'')+'/analisar-fotos?token='+encodeURIComponent(s.token||''),{
+    const r=await fetch(s.url.replace(/\/$/,'')+'/jarvis-notify?id='+encodeURIComponent(im.id)+'&token='+encodeURIComponent(s.token||''),{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({fotos:fotos.slice(0,5).map(f=>f.data),imovelNome:im.nome})
+      body:JSON.stringify({id:im.id,dados:{solicitarFotoAnalise:true,fotosCount:fotos.length,imovelNome:im.nome}})
     });
     const j=await r.json();
-    if(!j.ok)throw new Error(j.error||'Falha na IA');
-    const dados=j.dados||{};
-    let n=0;
-    if(dados.quartos&&!im.quartos){im.quartos=+dados.quartos;n++;}
-    if(dados.banheiros&&!im.banheiros){im.banheiros=+dados.banheiros;n++;}
-    if(dados.descricao){im.observacoes=im.observacoes||dados.descricao;n++;}
-    if(j.formAnswers){
-      if(!im.formRascunho)im.formRascunho={};
-      const conf=im.formConfirmados||{};
-      for(const k in j.formAnswers){if(!conf[k]){im.formRascunho[k]=j.formAnswers[k];n++;}}
-    }
-    im.fotosIaEm=hoje();im.fotosIaEncontrados=n;
-    saveAll();showToast('IA identificou '+n+' informações!','sage');renderAba('fotos');
+    if(!j.ok)throw new Error(j.error||'Falha ao notificar Jarvis');
+    im.fotosIaSolicitadoEm=new Date().toISOString();
+    saveAll();
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Solicitar análise de fotos ao Jarvis';}
+    showToast('Solicitação enviada ao Jarvis! Os campos serão preenchidos automaticamente em breve.','sage');
+    renderAba('fotos');
   }catch(e){
-    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Analisar fotos com IA e preencher campos';}
-    showToast('Erro: '+(e.message||'IA indisponível'),'peach');
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-robot"></i> Solicitar análise de fotos ao Jarvis';}
+    showToast('Erro: '+(e.message||'Jarvis indisponível'),'peach');
   }
 }
 
