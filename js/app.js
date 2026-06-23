@@ -134,7 +134,7 @@ function showPanel(id,btn){
   if(btn)btn.classList.add('active');
   const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',config:'Configurações',usuarios:'Usuários'};
   document.getElementById('panel-title').textContent=titles[id]||id;
-  if(id==='kanban')renderKanban();
+  if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
@@ -807,8 +807,6 @@ function renderAbaContrato(im){
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
   const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
   const margem=im.margemWecare||15;
-  const margemValor=totalSetupBase*(margem/100);
-  const totalSetup=totalSetupBase+margemValor;
 
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-file-signature"></i> Contrato</div>
@@ -845,17 +843,14 @@ function renderAbaContrato(im){
     <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
   </div>
 
-  <div class="form-row">
-    <div class="form-group"><label>Margem WeCare (%)</label><input id="ct-margem" type="number" class="input" value="${margem}" min="0" max="100"></div>
-    <div class="form-group"><label>Valor da Margem</label><input class="input" readonly value="${fmtMoeda(margemValor)}"></div>
-  </div>
-  <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:20px;">
-    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;">
-      <span>Total Setup ao Proprietário</span>
-      <span style="color:var(--brand-gold);">${fmtMoeda(totalSetup)}</span>
+  <div class="form-group"><label>Margem WeCare (%)</label><input id="ct-margem" type="number" class="input" value="${margem}" min="0" max="100"></div>
+  <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px;color:var(--text-muted);">
+      <span>Subtotal Setup (sem compras)</span>
+      <span>${fmtMoeda(totalSetupBase)}</span>
     </div>
-    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''} + Margem ${margem}%
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
     </div>
   </div>
 

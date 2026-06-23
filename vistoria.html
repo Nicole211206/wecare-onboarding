@@ -2115,8 +2115,28 @@ function closeModal() {
 
 function confirmarEnvio() {
   const data = collectFormData();
-  const key = `vistoria_final_${currentImovel.id}_${data.data}`;
-  localStorage.setItem(key, JSON.stringify({ ...data, status: 'enviado', sentAt: new Date().toISOString() }));
+  const sentAt = new Date().toISOString();
+  const id = `vistoria_${currentImovel.id}_${data.data}_${Date.now()}`;
+  const registro = { ...data, id, status: 'enviado', sentAt };
+
+  // Salva registro completo
+  localStorage.setItem(`vistoria_final_${id}`, JSON.stringify(registro));
+
+  // Adiciona ao array wc_vistorias (lido pelo módulo no kanban)
+  try {
+    const lista = JSON.parse(localStorage.getItem('wc_vistorias') || '[]');
+    lista.push({
+      id,
+      imovelId: currentImovel.id,
+      imovelNome: currentImovel.nome || currentImovel.id,
+      data: data.data,
+      vistoriador: data.vistoriador,
+      apto: data.aptoPara,
+      pendencias: data.pendencias || [],
+      sentAt
+    });
+    localStorage.setItem('wc_vistorias', JSON.stringify(lista));
+  } catch(e) { console.warn('Erro ao salvar em wc_vistorias', e); }
 
   // Atualiza badge
   document.getElementById('status-badge').className = 'status-badge status-sent';
