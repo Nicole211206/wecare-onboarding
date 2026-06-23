@@ -1738,9 +1738,40 @@ function apagarPrestador(idx){
 }
 
 // ═══════════════════ VISTORIA ═══════════════════
+function _migrarVistoriasAntigas(){
+  // Recupera vistorias salvas no formato antigo (vistoria_final_* e vistoria_draft_*)
+  const lista=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
+  const idsExistentes=new Set(lista.map(v=>v.id));
+  let alterou=false;
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key||(!key.startsWith('vistoria_final_')&&!key.startsWith('vistoria_draft_')))continue;
+    try{
+      const d=JSON.parse(localStorage.getItem(key)||'{}');
+      if(!d.imovelId&&!d.currentImovel?.id)continue;
+      const imovelId=d.imovelId||d.currentImovel?.id||'';
+      const vid=key;
+      if(idsExistentes.has(vid))continue;
+      lista.push({
+        id:vid,
+        imovelId,
+        imovelNome:d.imovelNome||imovelId,
+        data:d.data||d.dataVistoria||'',
+        vistoriador:d.vistoriador||'',
+        apto:d.aptoPara||d.apto||'',
+        pendencias:d.pendencias||[],
+        sentAt:d.sentAt||d.savedAt||new Date().toISOString()
+      });
+      idsExistentes.add(vid);
+      alterou=true;
+    }catch(e){}
+  }
+  if(alterou)localStorage.setItem('wc_vistorias',JSON.stringify(lista));
+  return lista;
+}
 function renderVistoria(){
   const imoveis=(JSON.parse(localStorage.getItem('wc_imoveis')||'[]')).filter(im=>im.status!=='perdido');
-  const vistorias=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
+  const vistorias=_migrarVistoriasAntigas();
 
   const linhas=vistorias.length?vistorias.slice().reverse().map(v=>{
     const im=imoveis.find(i=>i.id===v.imovelId);
