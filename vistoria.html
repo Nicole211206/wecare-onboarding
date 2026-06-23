@@ -2210,10 +2210,10 @@ async function _pushFormRascunho(data) {
 
   if (!Object.keys(rascunho).length) return;
 
-  await fetch(`${WC_WORKER_URL}/jarvis-notify?t=${WC_TOKEN}`, {
+  await fetch(`${WC_WORKER_URL}/jarvis-notify?token=${WC_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: currentImovel.id, formRascunho: rascunho })
+    body: JSON.stringify({ id: currentImovel.id, dados: { formRascunho: rascunho } })
   });
 }
 

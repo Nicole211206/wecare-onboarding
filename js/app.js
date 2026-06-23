@@ -518,6 +518,12 @@ function _coletarDadosAba(aba,im){
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
     im.observacoes=g('d-obs');
     im.camas=_coletarCamas();
+    // Acesso & Operação
+    im.wifi={rede:g('d-wifi-rede'),senha:g('d-wifi-senha')};
+    im.acesso=g('d-acesso'); im.senhaPorta=g('d-senha-porta'); im.vaga=g('d-vaga');
+    im.zeladorNome=g('d-zelador-nome'); im.zeladorTel=g('d-zelador-tel');
+    // Auto-preenche formRascunho com os dados de acesso
+    _autoRascunhoFromDados(im);
     document.getElementById('detalhe-titulo').textContent=im.nome;
   }
   if(aba==='contrato'){
@@ -559,6 +565,22 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
+}
+function _autoRascunhoFromDados(im){
+  if(!im.formRascunho)im.formRascunho={};
+  const conf=im.formConfirmados||{};
+  const set=(qid,val)=>{ if(!conf[qid]&&val&&String(val).trim()) im.formRascunho[qid]=String(val).trim(); };
+  // q81: como hóspedes acessam o imóvel
+  const acessoParts=[im.acesso,im.senhaPorta?`Senha da porta: ${im.senhaPorta}`:'',im.vaga?`Vaga: ${im.vaga}`:''].filter(Boolean);
+  if(acessoParts.length) set('q81',acessoParts.join('\n'));
+  // q83: contato portaria / zelador
+  const zelParts=[im.zeladorNome,im.zeladorTel].filter(Boolean);
+  if(zelParts.length) set('q83',zelParts.join(' — '));
+  // q86: dados de Wi-Fi
+  const wifiRede=(im.wifi||{}).rede; const wifiSenha=(im.wifi||{}).senha;
+  if(wifiRede||wifiSenha) set('q86',[wifiRede?`Rede: ${wifiRede}`:'',wifiSenha?`Senha: ${wifiSenha}`:''].filter(Boolean).join('\n'));
+  // q9: endereço
+  if(im.endereco) set('q9',im.endereco);
 }
 function _coletarCamas(){
   const rows=document.querySelectorAll('.cama-row');
@@ -612,6 +634,21 @@ function renderAbaDados(im){
   <div class="form-section-title"><i class="fa-solid fa-globe"></i> Plataformas</div>
   <div class="form-row" style="flex-wrap:wrap;gap:12px;">
     ${plataformas.map(p=>`<label class="checkbox-label"><input type="checkbox" class="pltf-check" value="${p}"${(im.plataformas||[]).includes(p)?' checked':''}> ${p}</label>`).join('')}
+  </div>
+
+  <div class="form-section-title"><i class="fa-solid fa-wifi"></i> Acesso & Operação</div>
+  <div class="form-row">
+    <div class="form-group"><label>Wi-Fi — Nome da rede</label><input id="d-wifi-rede" class="input" value="${esc((im.wifi||{}).rede||'')}"></div>
+    <div class="form-group"><label>Wi-Fi — Senha</label><input id="d-wifi-senha" class="input" value="${esc((im.wifi||{}).senha||'')}"></div>
+  </div>
+  <div class="form-group"><label>Como hóspedes acessam o imóvel</label><textarea id="d-acesso" class="input" rows="2" placeholder="Ex: Portaria 24h. Informar nome. Fechadura eletrônica…">${esc(im.acesso||'')}</textarea></div>
+  <div class="form-row">
+    <div class="form-group"><label>Senha da porta / fechadura</label><input id="d-senha-porta" class="input" value="${esc(im.senhaPorta||'')}"></div>
+    <div class="form-group"><label>Vaga de garagem</label><input id="d-vaga" class="input" value="${esc(im.vaga||'')}"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Zelador / Portaria — Nome</label><input id="d-zelador-nome" class="input" value="${esc(im.zeladorNome||'')}"></div>
+    <div class="form-group"><label>Zelador / Portaria — Telefone</label><input id="d-zelador-tel" class="input" value="${esc(im.zeladorTel||'')}"></div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-comment-dots"></i> Observações</div>
