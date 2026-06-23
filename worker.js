@@ -415,6 +415,69 @@ Regras:
       return json({ ok: true, total });
     }
 
+    // ── POST /analisar-midia — analisa imagens/frames com Gemini ─────────────
+    if (request.method === 'POST' && path === '/analisar-midia') {
+      if (!checkAuth(token, env)) return unauthorized();
+      if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'GEMINI_API_KEY não configurada' }, 500);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'JSON inválido' }, 400); }
+
+      const frames = Array.isArray(body.frames) ? body.frames.slice(0, 12) : [];
+      if (!frames.length) return json({ ok: false, error: 'Nenhum frame enviado' }, 400);
+
+      const prompt = `Você é um assistente que extrai dados de imóveis para short stay a partir de imagens ou frames de vídeo.
+Analise cuidadosamente todas as imagens enviadas e extraia SOMENTE o que for claramente visível.
+Retorne um JSON válido com esta estrutura (use null para campos não encontrados):
+{
+  "wifi_rede": "nome da rede wifi",
+  "wifi_senha": "senha do wifi",
+  "acesso": "como hóspedes entram no imóvel (portaria, fechadura, chave, etc.)",
+  "senha_porta": "código/senha da fechadura eletrônica",
+  "vaga": "informação sobre vaga de garagem",
+  "zelador_nome": "nome do zelador ou porteiro",
+  "zelador_tel": "telefone do zelador ou portaria",
+  "quartos": 0,
+  "banheiros": 0,
+  "camas": [{"tipo": "Queen", "qtd": 1}],
+  "observacoes": "outras informações úteis para hospedagem"
+}
+Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
+Retorne APENAS o JSON, sem markdown, sem texto extra.`;
+
+      const parts = [{ text: prompt }];
+      for (const frame of frames) {
+        const mimeType = frame.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+        parts.push({ inline_data: { mime_type: mimeType, data: frame } });
+      }
+
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.1 } })
+        }
+      );
+
+      if (!geminiRes.ok) {
+        const err = await geminiRes.text();
+        return json({ ok: false, error: 'Erro Gemini: ' + err }, 502);
+      }
+
+      const geminiJson = await geminiRes.json();
+      const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let dados;
+      try {
+        const clean = text.replace(/```json|```/g, '').trim();
+        dados = JSON.parse(clean);
+      } catch {
+        return json({ ok: false, error: 'Gemini não retornou JSON válido', raw: text }, 502);
+      }
+
+      return json({ ok: true, dados });
+    }
+
     // ── 404 ───────────────────────────────────────────────────────────────────
     return json({ ok: false, error: 'Not found' }, 404);
   },

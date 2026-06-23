@@ -1072,35 +1072,20 @@ function renderAbaFormulario(im){
   `).join('');
 
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-robot"></i> Importar do Jarvis</div>
+  <div class="form-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Analisar com IA (Gemini)</div>
   <div class="form-group">
-    <div class="hint" style="margin-bottom:8px;">Cole abaixo o JSON que o Jarvis enviar e clique em Importar. Os campos serão preenchidos automaticamente.</div>
-    <textarea id="jarvis-json-input" class="input" rows="4" placeholder='{ "dados": { "wifi_rede": "MinhaRede", "wifi_senha": "1234", "acesso": "Portaria 24h...", "zelador_nome": "Carlos", "zelador_tel": "(11) 99999-9999" } }'></textarea>
-    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-      <button class="btn btn-sm btn-primary" onclick="importarDeJarvis()"><i class="fa-solid fa-wand-magic-sparkles"></i> Importar</button>
-      <span id="jarvis-import-status" style="font-size:12px;color:var(--text-muted);"></span>
+    <div class="hint" style="margin-bottom:10px;">Suba vídeos ou fotos da vistoria. A IA extrai automaticamente wifi, acesso, zelador, camas e preenche o formulário.</div>
+    <label id="midia-drop-area" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:12px;padding:28px 16px;cursor:pointer;transition:border-color .2s;background:var(--surface-2);" ondragover="event.preventDefault();this.style.borderColor='var(--brand-gold)'" ondragleave="this.style.borderColor=''" ondrop="_midiaDrop(event)">
+      <i class="fa-solid fa-photo-film" style="font-size:28px;color:var(--brand-gold);"></i>
+      <span style="font-weight:600;">Arraste vídeos ou fotos aqui</span>
+      <span style="font-size:12px;color:var(--text-muted);">ou clique para selecionar — MP4, MOV, JPG, PNG</span>
+      <input id="midia-file-input" type="file" accept="video/*,image/*" multiple style="display:none" onchange="_midiaFileSelected(this.files)">
+    </label>
+    <div id="midia-preview" style="display:none;margin-top:10px;"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+      <button id="btn-analisar-midia" class="btn btn-primary" style="display:none;" onclick="analisarMidiaComIA()"><i class="fa-solid fa-wand-magic-sparkles"></i> Analisar com IA</button>
+      <span id="midia-status" style="font-size:12px;color:var(--text-muted);"></span>
     </div>
-    <details style="margin-top:10px;">
-      <summary style="font-size:12px;color:var(--text-muted);cursor:pointer;">Como configurar o Jarvis para enviar automaticamente ▸</summary>
-      <div style="background:var(--surface-2);border-radius:8px;padding:12px;margin-top:8px;font-size:12px;font-family:monospace;white-space:pre-wrap;color:var(--text);">URL: POST https://wecare-onboarding.nicole-0e7.workers.dev/jarvis-notify?token=wecare_sync_7k2p9m
-
-Corpo (JSON):
-{
-  "id": "${esc(im.id)}",
-  "dados": {
-    "wifi_rede": "nome da rede",
-    "wifi_senha": "senha do wifi",
-    "acesso": "como entrar no imóvel",
-    "senha_porta": "1234#",
-    "vaga": "Vaga 10 — subsolo",
-    "zelador_nome": "Nome do zelador",
-    "zelador_tel": "(11) 99999-9999",
-    "quartos": 2,
-    "banheiros": 2,
-    "camas": [{"tipo": "Queen", "qtd": 1}, {"tipo": "Solteiro", "qtd": 2}]
-  }
-}</div>
-    </details>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-clipboard"></i> Link Público do Formulário</div>
@@ -1130,6 +1115,120 @@ Corpo (JSON):
   </div>
   </div>`;
 }
+// ═══════════════════ ANÁLISE DE MÍDIA COM GEMINI ═══════════════════
+let _midiaFrames=[];
+function _midiaFileSelected(files){_midiaProcessarArquivos(Array.from(files));}
+function _midiaDrop(e){e.preventDefault();document.querySelector('#midia-drop-area').style.borderColor='';_midiaProcessarArquivos(Array.from(e.dataTransfer.files));}
+document.addEventListener('click',e=>{if(e.target.closest('#midia-drop-area'))document.getElementById('midia-file-input').click();});
+
+async function _midiaProcessarArquivos(files){
+  if(!files.length)return;
+  _midiaFrames=[];
+  const preview=document.getElementById('midia-preview');
+  const status=document.getElementById('midia-status');
+  const btn=document.getElementById('btn-analisar-midia');
+  preview.style.display='block';
+  preview.innerHTML='<div style="color:var(--text-muted);font-size:12px;">Processando arquivos…</div>';
+  status.textContent='';
+  let totalFrames=0;
+  for(const file of files){
+    const isVideo=file.type.startsWith('video/');
+    if(isVideo){
+      status.textContent=`Extraindo frames de ${file.name}…`;
+      const frames=await _extrairFramesVideo(file,4);
+      _midiaFrames.push(...frames);
+      totalFrames+=frames.length;
+    } else if(file.type.startsWith('image/')){
+      const b64=await _fileToBase64(file);
+      _midiaFrames.push(b64);
+      totalFrames++;
+    }
+  }
+  // Limita a 12 frames no total (custo de API)
+  if(_midiaFrames.length>12)_midiaFrames=_midiaFrames.slice(0,12);
+  preview.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap;">${_midiaFrames.map(f=>`<img src="data:image/jpeg;base64,${f}" style="width:72px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`).join('')}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${_midiaFrames.length} imagens prontas para análise</div>`;
+  btn.style.display='inline-flex';
+  status.textContent='';
+}
+
+async function _extrairFramesVideo(file, intervaloSeg){
+  return new Promise(resolve=>{
+    const video=document.createElement('video');
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d');
+    const frames=[];
+    video.muted=true;
+    video.preload='auto';
+    video.onloadedmetadata=()=>{
+      canvas.width=Math.min(video.videoWidth,1280);
+      canvas.height=Math.round(canvas.width*(video.videoHeight/video.videoWidth));
+      const times=[];
+      for(let t=0;t<video.duration;t+=intervaloSeg)times.push(t);
+      if(!times.length)times.push(0);
+      let i=0;
+      const next=()=>{
+        if(i>=times.length){URL.revokeObjectURL(video.src);resolve(frames);return;}
+        video.currentTime=times[i++];
+      };
+      video.onseeked=()=>{
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        frames.push(canvas.toDataURL('image/jpeg',0.75).split(',')[1]);
+        next();
+      };
+      next();
+    };
+    video.onerror=()=>resolve(frames);
+    video.src=URL.createObjectURL(file);
+  });
+}
+
+function _fileToBase64(file){
+  return new Promise(resolve=>{
+    const r=new FileReader();
+    r.onload=e=>resolve(e.target.result.split(',')[1]);
+    r.readAsDataURL(file);
+  });
+}
+
+async function analisarMidiaComIA(){
+  if(!_midiaFrames.length)return;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const status=document.getElementById('midia-status');
+  const btn=document.getElementById('btn-analisar-midia');
+  btn.disabled=true;
+  status.style.color='var(--text-muted)';
+  status.textContent='Enviando para o Gemini…';
+  try{
+    const r=await fetch(`${WC_SYNC.url}/analisar-midia?token=${WC_SYNC.token}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({frames:_midiaFrames})
+    });
+    const j=await r.json();
+    if(!j.ok){status.style.color='var(--rose)';status.textContent='Erro: '+(j.error||'desconhecido');btn.disabled=false;return;}
+    // Salva os dados no imóvel via jarvis-notify
+    const payload={id:im.id,dados:j.dados};
+    const r2=await fetch(`${WC_SYNC.url}/jarvis-notify?token=${WC_SYNC.token}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+    });
+    const j2=await r2.json();
+    if(j2.ok){
+      status.style.color='var(--green)';
+      status.textContent='✓ Formulário preenchido pela IA!';
+      await kvPull(false);
+      renderAba('formulario');
+      showToast('IA preencheu o formulário automaticamente!','sage');
+    } else {
+      status.style.color='var(--rose)';
+      status.textContent='Erro ao salvar: '+(j2.error||'desconhecido');
+    }
+  }catch(e){
+    status.style.color='var(--rose)';
+    status.textContent='Falha: '+e.message;
+  }
+  btn.disabled=false;
+}
+
 async function importarDeJarvis(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const raw=document.getElementById('jarvis-json-input')?.value?.trim();
