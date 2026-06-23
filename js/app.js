@@ -144,7 +144,7 @@ function showPanel(id,btn){
 }
 
 // Cálculo de quantidades
-function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(+c.qtd||1),0);}
+function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function calcNecessario(item,camas,banheiros,quartos){
   const[n,base]=(item.qtdRule||'1-unidade').split('-');
@@ -861,9 +861,9 @@ function renderAbaContrato(im){
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wrench"></i> Setup</div>
   <div class="form-row">
-    <div class="form-group"><label>Fotos (R$)</label><input id="ct-op-fotos" type="number" class="input" value="${custoFotos}"></div>
-    <div class="form-group"><label>Limpeza (R$)</label><input id="ct-op-limpeza" type="number" class="input" value="${custoLimpeza}"></div>
-    <div class="form-group"><label>Vistoria (R$)</label><input id="ct-op-vistoria" type="number" class="input" value="${custoVistoria}"></div>
+    <div class="form-group"><label>Fotos (R$)</label><input id="ct-op-fotos" type="number" class="input" value="${custoFotos}" oninput="_atualizarSubtotalSetup()"></div>
+    <div class="form-group"><label>Limpeza (R$)</label><input id="ct-op-limpeza" type="number" class="input" value="${custoLimpeza}" oninput="_atualizarSubtotalSetup()"></div>
+    <div class="form-group"><label>Vistoria (R$)</label><input id="ct-op-vistoria" type="number" class="input" value="${custoVistoria}" oninput="_atualizarSubtotalSetup()"></div>
   </div>
 
   ${gastosSetup.length?`<div style="margin-bottom:8px;">
@@ -884,9 +884,9 @@ function renderAbaContrato(im){
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px;color:var(--text-muted);">
       <span>Subtotal Setup (sem compras)</span>
-      <span>${fmtMoeda(totalSetupBase)}</span>
+      <span id="ct-subtotal-val">${fmtMoeda(totalSetupBase)}</span>
     </div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+    <div id="ct-subtotal-detail" style="font-size:11px;color:var(--text-muted);margin-top:4px;">
       Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
     </div>
   </div>
@@ -957,6 +957,18 @@ function renderAbaContrato(im){
     <button class="btn btn-sm" style="margin-top:8px;" onclick="gerarPDFOrcamento()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do Orçamento</button>`;
   })()}
   </div>`;
+}
+function _atualizarSubtotalSetup(){
+  const f=+document.getElementById('ct-op-fotos')?.value||0;
+  const l=+document.getElementById('ct-op-limpeza')?.value||0;
+  const v=+document.getElementById('ct-op-vistoria')?.value||0;
+  const im=getImovel(_imovelAtivoId);
+  const extras=(im?.gastosSetup||[]).reduce((s,g)=>s+(+g.valor||0),0);
+  const total=f+l+v+extras;
+  const valEl=document.getElementById('ct-subtotal-val');
+  const detEl=document.getElementById('ct-subtotal-detail');
+  if(valEl)valEl.textContent=fmtMoeda(total);
+  if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
 }
 function addGastoSetup(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
