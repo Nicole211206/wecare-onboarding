@@ -1776,13 +1776,14 @@ function renderVistoria(){
   const linhas=vistorias.length?vistorias.slice().reverse().map(v=>{
     const im=imoveis.find(i=>i.id===v.imovelId);
     const cor=v.apto==='sim'?'sage':v.apto==='nao'?'rose':'gold';
-    const label=v.apto==='sim'?'Apto':'nao'==='nao'?'Não apto':'Parcial';
-    return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">
-      <td style="padding:10px 8px;font-weight:600;">${esc(im?.nome||v.imovelId)}</td>
-      <td style="padding:10px 8px;">${fmtDate(v.data)}</td>
-      <td style="padding:10px 8px;">${esc(v.vistoriador||'—')}</td>
-      <td style="padding:10px 8px;"><span class="tag tag-${cor}">${label}</span></td>
-      <td style="padding:10px 8px;">${v.pendencias?.length||0} pendência(s)</td>
+    const label=v.apto==='sim'?'Apto':v.apto==='nao'?'Não apto':'Parcial';
+    return`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 8px;font-weight:600;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${esc(im?.nome||v.imovelId)}</td>
+      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${fmtDate(v.data)}</td>
+      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${esc(v.vistoriador||'—')}</td>
+      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')"><span class="tag tag-${cor}">${label}</span></td>
+      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${v.pendencias?.length||0} pendência(s)</td>
+      <td style="padding:10px 8px;text-align:center;"><button onclick="removerVistoria('${esc(v.id)}')" title="Apagar vistoria" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 6px;border-radius:4px;" onmouseover="this.style.color='var(--rose)'" onmouseout="this.style.color='var(--text-muted)'"><i class="fa-solid fa-trash"></i></button></td>
     </tr>`;
   }).join(''):
   `<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--text-muted);">Nenhuma vistoria registrada ainda.</td></tr>`;
@@ -1814,11 +1815,22 @@ function renderVistoria(){
           <th style="padding:8px;text-align:left;">Vistoriador</th>
           <th style="padding:8px;text-align:left;">Status</th>
           <th style="padding:8px;text-align:left;">Pendências</th>
+          <th style="padding:8px;width:40px;"></th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
   </div>`;
+}
+function removerVistoria(id){
+  if(!confirm('Apagar esta vistoria? Esta ação não pode ser desfeita.'))return;
+  try{
+    const lista=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
+    localStorage.setItem('wc_vistorias',JSON.stringify(lista.filter(v=>v.id!==id)));
+    localStorage.removeItem('vistoria_final_'+id);
+    localStorage.removeItem('vistoria_draft_'+id);
+  }catch(e){console.warn('Erro ao remover vistoria',e);}
+  renderVistoria();
 }
 function iniciarVistoria(){
   const id=document.getElementById('vistoria-select-imovel')?.value;

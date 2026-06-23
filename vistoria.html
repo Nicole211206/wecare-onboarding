@@ -1413,6 +1413,12 @@ const PRAIA_ITEMS = [
 const DECO_ROOMS = ['Sala', 'Cozinha', 'Quarto 1', 'Quarto 2', 'Banheiro 1', 'Banheiro 2'];
 
 // ═══════════════════════════════════════════════════════
+// WORKER CONFIG
+// ═══════════════════════════════════════════════════════
+const WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';
+const WC_TOKEN = 'wecare_sync_7k2p9m';
+
+// ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
 let currentImovel = MOCK_IMOVEL;
@@ -1420,7 +1426,36 @@ let sigCanvas, sigCtx, sigDrawing = false, sigHasData = false;
 let extraRowCount = 0;
 let pendenciaCount = 0;
 
+function _carregarImovelReal() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (!id) return;
+  try {
+    const lista = JSON.parse(localStorage.getItem('wc_imoveis') || '[]');
+    const im = lista.find(i => String(i.id) === String(id));
+    if (!im) return;
+    // Monta estrutura compatível com vistoria usando dados reais
+    currentImovel = {
+      id: im.id,
+      nome: im.nome || im.id,
+      endereco: im.endereco || '',
+      quartos: im.quartos || 0,
+      banheiros: im.banheiros || 0,
+      camas: im.camas || [],
+      wifi: im.wifi || { rede: '', senha: '' },
+      acesso: im.acesso || '',
+      senhaPorta: im.senhaPorta || '',
+      vaga: im.vaga || '',
+      zelador: im.zelador || '',
+      equipamentos: im.equipamentos || MOCK_IMOVEL.equipamentos,
+      inventarioPadrao: im.inventarioPadrao || MOCK_IMOVEL.inventarioPadrao,
+      enxoval: im.enxoval || MOCK_IMOVEL.enxoval
+    };
+  } catch(e) { console.warn('Erro ao carregar imóvel real', e); }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  _carregarImovelReal();
   initDates();
   prefillAcesso();
   buildEquipamentos();
@@ -2142,9 +2177,44 @@ function confirmarEnvio() {
   document.getElementById('status-badge').className = 'status-badge status-sent';
   document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-circle-check"></i> Enviado';
 
+  // Pré-preenche formRascunho do imóvel com dados da vistoria
+  _pushFormRascunho(data).catch(e => console.warn('Erro ao enviar rascunho', e));
+
   closeModal();
   showToast('Vistoria salva! Preparando PDF...');
   setTimeout(() => window.print(), 800);
+}
+
+// ═══════════════════════════════════════════════════════
+// PUSH RASCUNHO PARA O WORKER
+// ═══════════════════════════════════════════════════════
+async function _pushFormRascunho(data) {
+  if (!currentImovel.id || currentImovel.id === MOCK_IMOVEL.id) return;
+  const zeladorNome = document.getElementById('field-zelador-nome').value.trim();
+  const zeladorTel  = document.getElementById('field-zelador-tel').value.trim();
+  const wifiRede    = document.getElementById('field-wifi-rede').value.trim();
+  const wifiSenha   = document.getElementById('field-wifi-senha').value.trim();
+  const acesso      = document.getElementById('field-acesso').value.trim();
+  const senhaPorta  = document.getElementById('field-senha-porta').value.trim();
+
+  const rascunho = {};
+  if (acesso || senhaPorta) {
+    rascunho['q81'] = [acesso, senhaPorta ? `Senha da porta: ${senhaPorta}` : ''].filter(Boolean).join('\n');
+  }
+  if (zeladorNome || zeladorTel) {
+    rascunho['q83'] = [zeladorNome, zeladorTel].filter(Boolean).join(' — ');
+  }
+  if (wifiRede || wifiSenha) {
+    rascunho['q86'] = `Rede: ${wifiRede}\nSenha: ${wifiSenha}`;
+  }
+
+  if (!Object.keys(rascunho).length) return;
+
+  await fetch(`${WC_WORKER_URL}/jarvis-notify?t=${WC_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: currentImovel.id, formRascunho: rascunho })
+  });
 }
 
 // ═══════════════════════════════════════════════════════
