@@ -1116,96 +1116,110 @@ function renderAbaFormulario(im){
   </div>`;
 }
 // ═══════════════════ ANÁLISE DE MÍDIA COM GEMINI ═══════════════════
-let _midiaArquivos=[];
+let _midiaFrames=[], _midiaArquivos=[];
 function _midiaFileSelected(files){_midiaProcessarArquivos(Array.from(files));}
 function _midiaDrop(e){e.preventDefault();document.querySelector('#midia-drop-area')?.style&&(document.querySelector('#midia-drop-area').style.borderColor='');_midiaProcessarArquivos(Array.from(e.dataTransfer.files));}
 document.addEventListener('click',e=>{if(e.target.closest('#midia-drop-area'))document.getElementById('midia-file-input')?.click();});
 
-function _midiaProcessarArquivos(files){
+async function _midiaProcessarArquivos(files){
   if(!files.length)return;
-  _midiaArquivos=files.filter(f=>f.type.startsWith('video/')||f.type.startsWith('image/'));
+  _midiaArquivos=Array.from(files).filter(f=>f.type.startsWith('video/')||f.type.startsWith('image/'));
+  _midiaFrames=[];
   const preview=document.getElementById('midia-preview');
   const btn=document.getElementById('btn-analisar-midia');
   const status=document.getElementById('midia-status');
   if(!_midiaArquivos.length){status.textContent='Formato não suportado.';return;}
+  preview.style.display='block';
+  btn.style.display='none';
+  status.style.color='var(--text-muted)';
+
   const videos=_midiaArquivos.filter(f=>f.type.startsWith('video/'));
   const imgs=_midiaArquivos.filter(f=>f.type.startsWith('image/'));
-  const items=[
-    ...videos.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:8px;"><i class="fa-solid fa-video" style="color:var(--brand-gold)"></i><span style="font-size:13px;flex:1;">${f.name}</span><span style="font-size:11px;color:var(--text-muted);">${(f.size/1024/1024).toFixed(1)} MB</span></div>`),
-    ...imgs.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:8px;"><i class="fa-solid fa-image" style="color:var(--sky)"></i><span style="font-size:13px;flex:1;">${f.name}</span><span style="font-size:11px;color:var(--text-muted);">${(f.size/1024/1024).toFixed(1)} MB</span></div>`)
-  ];
-  preview.style.display='block';
-  preview.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;">${items.join('')}</div><div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${videos.length} vídeo(s) + ${imgs.length} foto(s) selecionados</div>`;
+
+  // Mostra lista de arquivos imediatamente
+  preview.innerHTML=`<div style="display:flex;flex-direction:column;gap:4px;">
+    ${videos.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:8px;">
+      <i class="fa-solid fa-video" style="color:var(--brand-gold)"></i>
+      <span style="font-size:13px;flex:1;">${f.name}</span>
+      <span style="font-size:11px;color:var(--text-muted);">${(f.size/1024/1024).toFixed(1)} MB</span>
+    </div>`).join('')}
+    ${imgs.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border-radius:8px;">
+      <i class="fa-solid fa-image" style="color:var(--sky)"></i>
+      <span style="font-size:13px;flex:1;">${f.name}</span>
+      <span style="font-size:11px;color:var(--text-muted);">${(f.size/1024/1024).toFixed(1)} MB</span>
+    </div>`).join('')}
+  </div><div id="midia-progress" style="font-size:12px;color:var(--text-muted);margin-top:8px;">Extraindo frames…</div>`;
+
+  // Extrai frames dos vídeos — 1 frame a cada 8s, max 10 frames por vídeo
+  for(const file of videos){
+    document.getElementById('midia-progress').textContent=`Extraindo frames: ${file.name}…`;
+    const frames=await _extrairFrames(file,8,10);
+    _midiaFrames.push(...frames);
+  }
+  // Fotos direto como base64
+  for(const file of imgs){
+    const b64=await _fileToBase64(file);
+    _midiaFrames.push(b64);
+  }
+  // Máximo 15 frames no total para caber no free tier
+  if(_midiaFrames.length>15)_midiaFrames=_midiaFrames.slice(0,15);
+
+  const prog=document.getElementById('midia-progress');
+  if(prog)prog.textContent=`${_midiaFrames.length} frames extraídos de ${videos.length} vídeo(s). Pronto para análise.`;
   btn.style.display='inline-flex';
   status.textContent='';
 }
 
+async function _extrairFrames(file, intervaloSeg, maxFrames){
+  return new Promise(resolve=>{
+    const video=document.createElement('video');
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d');
+    const frames=[];
+    video.muted=true; video.preload='auto';
+    video.onloadedmetadata=()=>{
+      const w=Math.min(video.videoWidth,960);
+      canvas.width=w; canvas.height=Math.round(w*(video.videoHeight/video.videoWidth));
+      const times=[];
+      for(let t=1;t<video.duration&&times.length<maxFrames;t+=intervaloSeg)times.push(t);
+      if(!times.length)times.push(0);
+      let i=0;
+      const next=()=>{if(i>=times.length){URL.revokeObjectURL(video.src);resolve(frames);return;}video.currentTime=times[i++];};
+      video.onseeked=()=>{ctx.drawImage(video,0,0,canvas.width,canvas.height);frames.push(canvas.toDataURL('image/jpeg',0.6).split(',')[1]);next();};
+      video.onerror=()=>resolve(frames);
+      next();
+    };
+    video.onerror=()=>resolve(frames);
+    video.src=URL.createObjectURL(file);
+  });
+}
+
+function _fileToBase64(file){
+  return new Promise(resolve=>{const r=new FileReader();r.onload=e=>resolve(e.target.result.split(',')[1]);r.readAsDataURL(file);});
+}
+
 async function analisarMidiaComIA(){
-  if(!_midiaArquivos.length)return;
+  if(!_midiaFrames.length)return;
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const status=document.getElementById('midia-status');
   const btn=document.getElementById('btn-analisar-midia');
   btn.disabled=true;
-
-  const PROMPT=`Você analisa imóveis para short stay. Examine todos os arquivos (vídeos e fotos) e extraia os dados visíveis.
-Retorne APENAS um JSON válido (sem markdown):
-{"wifi_rede":null,"wifi_senha":null,"acesso":null,"senha_porta":null,"vaga":null,"zelador_nome":null,"zelador_tel":null,"quartos":null,"banheiros":null,"camas":[],"observacoes":null}
-Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche.
-Use null para o que não encontrar. Para camas: [{"tipo":"Queen","qtd":1}].`;
-
+  status.style.color='var(--text-muted)';
+  status.textContent='Enviando para o Gemini…';
   try{
-    // Busca API key do worker
-    status.style.color='var(--text-muted)'; status.textContent='Conectando ao Gemini…';
-    const cfgRes=await fetch(`${WC_SYNC.url}/gemini-config?token=${WC_SYNC.token}`);
-    const cfg=await cfgRes.json();
-    if(!cfg.ok||!cfg.apiKey){status.style.color='var(--rose)';status.textContent='Chave Gemini não encontrada.';btn.disabled=false;return;}
-    const KEY=cfg.apiKey;
-
-    // Faz upload de cada arquivo na File API do Google
-    const fileParts=[];
-    for(let i=0;i<_midiaArquivos.length;i++){
-      const file=_midiaArquivos[i];
-      status.textContent=`Enviando ${file.name} (${i+1}/${_midiaArquivos.length})…`;
-      const uploadRes=await fetch(
-        `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${KEY}`,
-        {method:'POST',headers:{'Content-Type':file.type,'X-Goog-Upload-File-Name':file.name,'X-Goog-Upload-Protocol':'raw'},body:file}
-      );
-      if(!uploadRes.ok){const t=await uploadRes.text();status.style.color='var(--rose)';status.textContent='Erro upload: '+t.slice(0,120);btn.disabled=false;return;}
-      const upJson=await uploadRes.json();
-      const uri=upJson?.file?.uri;
-      if(uri)fileParts.push({fileData:{mimeType:file.type,fileUri:uri}});
-    }
-
-    if(!fileParts.length){status.style.color='var(--rose)';status.textContent='Nenhum arquivo enviado.';btn.disabled=false;return;}
-
-    // Aguarda processamento dos vídeos
-    status.textContent='Aguardando processamento dos vídeos…';
-    await new Promise(r=>setTimeout(r,3000));
-
-    // Chama generateContent com os arquivos
-    status.textContent='Analisando com IA…';
-    const genRes=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${KEY}`,
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        contents:[{parts:[{text:PROMPT},...fileParts]}],
-        generationConfig:{temperature:0.1}
-      })}
-    );
-    if(!genRes.ok){const t=await genRes.text();status.style.color='var(--rose)';status.textContent='Erro Gemini: '+t.slice(0,120);btn.disabled=false;return;}
-    const genJson=await genRes.json();
-    const text=genJson?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    let dados;
-    try{dados=JSON.parse(text.replace(/```json|```/g,'').trim());}
-    catch{status.style.color='var(--rose)';status.textContent='IA não retornou JSON válido.';console.error(text);btn.disabled=false;return;}
-
-    // Salva via jarvis-notify
-    status.textContent='Salvando…';
-    const saveRes=await fetch(`${WC_SYNC.url}/jarvis-notify?token=${WC_SYNC.token}`,{
+    const r=await fetch(`${WC_SYNC.url}/analisar-midia?token=${WC_SYNC.token}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:im.id,dados})
+      body:JSON.stringify({frames:_midiaFrames})
     });
-    const saveJson=await saveRes.json();
-    if(saveJson.ok){
+    const j=await r.json();
+    if(!j.ok){status.style.color='var(--rose)';status.textContent='Erro: '+(j.error||'desconhecido');btn.disabled=false;return;}
+    status.textContent='Salvando dados…';
+    const r2=await fetch(`${WC_SYNC.url}/jarvis-notify?token=${WC_SYNC.token}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:im.id,dados:j.dados})
+    });
+    const j2=await r2.json();
+    if(j2.ok){
       status.style.color='var(--green)';
       status.textContent='✓ Formulário preenchido automaticamente!';
       await kvPull(false);
@@ -1213,12 +1227,9 @@ Use null para o que não encontrar. Para camas: [{"tipo":"Queen","qtd":1}].`;
       showToast('IA preencheu o formulário!','sage');
     } else {
       status.style.color='var(--rose)';
-      status.textContent='Erro ao salvar: '+(saveJson.error||'desconhecido');
+      status.textContent='Erro ao salvar: '+(j2.error||'desconhecido');
     }
-  }catch(e){
-    status.style.color='var(--rose)';
-    status.textContent='Erro: '+e.message;
-  }
+  }catch(e){status.style.color='var(--rose)';status.textContent='Erro: '+e.message;}
   btn.disabled=false;
 }
 
