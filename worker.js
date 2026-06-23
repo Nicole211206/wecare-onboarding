@@ -415,6 +415,12 @@ Regras:
       return json({ ok: true, total });
     }
 
+    // ── GET /gemini-config — retorna chave para upload direto no browser ────
+    if (request.method === 'GET' && path === '/gemini-config') {
+      if (!checkAuth(token, env)) return unauthorized();
+      return json({ ok: true, apiKey: env.GEMINI_API_KEY });
+    }
+
     // ── POST /analisar-midia — analisa imagens/frames com Gemini ─────────────
     if (request.method === 'POST' && path === '/analisar-midia') {
       if (!checkAuth(token, env)) return unauthorized();
