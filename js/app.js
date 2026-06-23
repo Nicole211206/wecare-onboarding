@@ -1072,6 +1072,37 @@ function renderAbaFormulario(im){
   `).join('');
 
   return`<div class="form-grid">
+  <div class="form-section-title"><i class="fa-solid fa-robot"></i> Importar do Jarvis</div>
+  <div class="form-group">
+    <div class="hint" style="margin-bottom:8px;">Cole abaixo o JSON que o Jarvis enviar e clique em Importar. Os campos serão preenchidos automaticamente.</div>
+    <textarea id="jarvis-json-input" class="input" rows="4" placeholder='{ "dados": { "wifi_rede": "MinhaRede", "wifi_senha": "1234", "acesso": "Portaria 24h...", "zelador_nome": "Carlos", "zelador_tel": "(11) 99999-9999" } }'></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+      <button class="btn btn-sm btn-primary" onclick="importarDeJarvis()"><i class="fa-solid fa-wand-magic-sparkles"></i> Importar</button>
+      <span id="jarvis-import-status" style="font-size:12px;color:var(--text-muted);"></span>
+    </div>
+    <details style="margin-top:10px;">
+      <summary style="font-size:12px;color:var(--text-muted);cursor:pointer;">Como configurar o Jarvis para enviar automaticamente ▸</summary>
+      <div style="background:var(--surface-2);border-radius:8px;padding:12px;margin-top:8px;font-size:12px;font-family:monospace;white-space:pre-wrap;color:var(--text);">URL: POST https://wecare-onboarding.nicole-0e7.workers.dev/jarvis-notify?token=wecare_sync_7k2p9m
+
+Corpo (JSON):
+{
+  "id": "${esc(im.id)}",
+  "dados": {
+    "wifi_rede": "nome da rede",
+    "wifi_senha": "senha do wifi",
+    "acesso": "como entrar no imóvel",
+    "senha_porta": "1234#",
+    "vaga": "Vaga 10 — subsolo",
+    "zelador_nome": "Nome do zelador",
+    "zelador_tel": "(11) 99999-9999",
+    "quartos": 2,
+    "banheiros": 2,
+    "camas": [{"tipo": "Queen", "qtd": 1}, {"tipo": "Solteiro", "qtd": 2}]
+  }
+}</div>
+    </details>
+  </div>
+
   <div class="form-section-title"><i class="fa-solid fa-clipboard"></i> Link Público do Formulário</div>
   <div class="form-group">
     <label>Link para enviar ao proprietário</label>
@@ -1098,6 +1129,39 @@ function renderAbaFormulario(im){
     <button class="btn btn-sm btn-primary" onclick="salvarRascunhoForm()"><i class="fa-solid fa-save"></i> Salvar pré-preenchimento</button>
   </div>
   </div>`;
+}
+async function importarDeJarvis(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const raw=document.getElementById('jarvis-json-input')?.value?.trim();
+  const status=document.getElementById('jarvis-import-status');
+  if(!raw){if(status)status.textContent='Cole o JSON primeiro.';return;}
+  let payload;
+  try{ payload=JSON.parse(raw); }catch(e){if(status)status.textContent='JSON inválido: '+e.message;return;}
+  // Aceita tanto o JSON completo quanto só o objeto "dados"
+  if(!payload.dados&&(payload.wifi_rede||payload.acesso||payload.zelador_nome||payload.quartos)){
+    payload={dados:payload};
+  }
+  payload.id=im.id;
+  if(status)status.textContent='Enviando…';
+  try{
+    const r=await fetch(`${WC_SYNC.url}/jarvis-notify?token=${WC_SYNC.token}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+    });
+    const j=await r.json();
+    if(j.ok){
+      if(status)status.style.color='var(--green)';
+      if(status)status.textContent='✓ Importado! Sincronizando…';
+      await kvPull(false);
+      renderAba('formulario');
+      showToast('Dados do Jarvis importados!','sage');
+    } else {
+      if(status)status.style.color='var(--rose)';
+      if(status)status.textContent='Erro: '+(j.error||'desconhecido');
+    }
+  }catch(e){
+    if(status)status.style.color='var(--rose)';
+    if(status)status.textContent='Falha na conexão: '+e.message;
+  }
 }
 function _coletarRascunho(){
   const r={};

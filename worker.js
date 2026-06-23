@@ -329,18 +329,44 @@ Regras:
       const im      = imoveis.find(i => String(i.id) === imovelId);
       if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
       const dados = body.dados || {};
-      // Pré-preenche sem sobrescrever dados já existentes
+      // Pré-preenche campos diretos do imóvel sem sobrescrever existentes
       if (dados.captacaoLink)    im.captacaoLink    = dados.captacaoLink;
       if (dados.proprietarioNome && !im.proprietarioNome) im.proprietarioNome = dados.proprietarioNome;
       if (dados.proprietarioTel  && !im.proprietarioTel)  im.proprietarioTel  = dados.proprietarioTel;
       if (dados.endereco         && !im.endereco)          im.endereco         = dados.endereco;
-      if (dados.quartos          && !im.quartos)           im.quartos          = +dados.quartos;
-      if (dados.banheiros        && !im.banheiros)         im.banheiros        = +dados.banheiros;
+      if (dados.quartos)         im.quartos          = +dados.quartos;
+      if (dados.banheiros)       im.banheiros        = +dados.banheiros;
       if (dados.observacoes      && !im.observacoes)       im.observacoes      = dados.observacoes;
-      // Preenche rascunho do formulário sem sobrescrever confirmados
+      // Campos nomeados de acesso (formato amigável para o Jarvis)
+      if (dados.wifi_rede || dados.wifi_senha) {
+        if (!im.wifi) im.wifi = {};
+        if (dados.wifi_rede)  im.wifi.rede  = dados.wifi_rede;
+        if (dados.wifi_senha) im.wifi.senha = dados.wifi_senha;
+      }
+      if (dados.acesso)        im.acesso       = dados.acesso;
+      if (dados.senha_porta)   im.senhaPorta   = dados.senha_porta;
+      if (dados.vaga)          im.vaga         = dados.vaga;
+      if (dados.zelador_nome)  im.zeladorNome  = dados.zelador_nome;
+      if (dados.zelador_tel)   im.zeladorTel   = dados.zelador_tel;
+      if (Array.isArray(dados.camas) && dados.camas.length) im.camas = dados.camas;
+      // Mapeia campos nomeados → formRascunho automaticamente
+      if (!im.formRascunho) im.formRascunho = {};
+      const conf = im.formConfirmados || {};
+      const _set = (qid, val) => { if (!conf[qid] && val) im.formRascunho[qid] = String(val); };
+      const wifiRede  = dados.wifi_rede  || im.wifi?.rede  || '';
+      const wifiSenha = dados.wifi_senha || im.wifi?.senha || '';
+      const acesso    = dados.acesso     || im.acesso      || '';
+      const senhaPorta= dados.senha_porta|| im.senhaPorta  || '';
+      const vaga      = dados.vaga       || im.vaga        || '';
+      const zelNome   = dados.zelador_nome || im.zeladorNome || '';
+      const zelTel    = dados.zelador_tel  || im.zeladorTel  || '';
+      const acessoParts = [acesso, senhaPorta ? `Senha da porta: ${senhaPorta}` : '', vaga ? `Vaga: ${vaga}` : ''].filter(Boolean);
+      if (acessoParts.length) _set('q81', acessoParts.join('\n'));
+      if (zelNome || zelTel) _set('q83', [zelNome, zelTel].filter(Boolean).join(' — '));
+      if (wifiRede || wifiSenha) _set('q86', [wifiRede ? `Rede: ${wifiRede}` : '', wifiSenha ? `Senha: ${wifiSenha}` : ''].filter(Boolean).join('\n'));
+      if (dados.endereco || im.endereco) _set('q9', dados.endereco || im.endereco);
+      // Aceita formRascunho direto (q-ids) se vier junto
       if (dados.formRascunho && typeof dados.formRascunho === 'object') {
-        if (!im.formRascunho) im.formRascunho = {};
-        const conf = im.formConfirmados || {};
         for (const k in dados.formRascunho) {
           if (!conf[k]) im.formRascunho[k] = dados.formRascunho[k];
         }
