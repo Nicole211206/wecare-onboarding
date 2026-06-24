@@ -146,7 +146,7 @@ function showPanel(id,btn){
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos){
-  const[n,base]=(item.qtdRule||'1-unidade').split('-');
+  const rule=item.qtdRule||'1-unidade';const dashIdx=rule.indexOf('-');const n=rule.slice(0,dashIdx);const base=rule.slice(dashIdx+1);
   const q=parseInt(n)||1;
   if(base==='colchao')return q*totalColchoes(camas);
   if(base==='leito')return q*totalLeitos(camas);
