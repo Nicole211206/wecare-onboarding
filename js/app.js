@@ -26,7 +26,7 @@ let ITENS_COMPRAS=[
   {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388'},
   {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',preco:285,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
   {cat:'Cama',nome:'Travesseiro Toque de Pluma',tipoPreco:'fixo',preco:99,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',preco:52,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
+  {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',preco:52,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388'},
   // BANHEIRO
   {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',preco:64,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388'},
   {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',preco:30,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388'},
