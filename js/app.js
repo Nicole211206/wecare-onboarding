@@ -142,6 +142,18 @@ function showPanel(id,btn){
   if(id==='usuarios')renderUsuarios();
 }
 
+// ─── Componente numérico com +/- ───
+function numInput({id,value=0,min=0,max='',step=1,style='',oninput='',onchange=''}={}){
+  const minAttr=min!==''?`min="${min}"`:'';
+  const maxAttr=max!==''?`max="${max}"`:'';
+  const evts=(oninput?`oninput="${oninput}"`:'')+' '+(onchange?`onchange="${onchange}"`:'');
+  return`<div class="num-input-wrap" style="display:inline-flex;align-items:center;gap:0;${style}">
+    <button type="button" class="num-btn" onclick="(function(b){var i=b.parentElement.querySelector('input');var v=parseFloat(i.value)||0;var mn=parseFloat(i.min);if(!isNaN(mn)&&v-${step}<mn)return;i.value=+(v-${step}).toFixed(4);i.dispatchEvent(new Event('input'));i.dispatchEvent(new Event('change'));})(this)" style="width:32px;height:36px;border:1px solid var(--border);border-right:none;border-radius:8px 0 0 8px;background:var(--surface-2);color:var(--text);font-size:18px;cursor:pointer;line-height:1;">−</button>
+    <input id="${id}" type="number" class="input" value="${value}" ${minAttr} ${maxAttr} step="${step}" ${evts} style="width:72px;border-radius:0;text-align:center;-moz-appearance:textfield;" oninput="this.style.width=Math.max(72,this.value.length*12+24)+'px';${oninput?oninput.replace(/"/g,"'"):''}">
+    <button type="button" class="num-btn" onclick="(function(b){var i=b.parentElement.querySelector('input');var v=parseFloat(i.value)||0;var mx=parseFloat(i.max);if(!isNaN(mx)&&v+${step}>mx)return;i.value=+(v+${step}).toFixed(4);i.dispatchEvent(new Event('input'));i.dispatchEvent(new Event('change'));})(this)" style="width:32px;height:36px;border:1px solid var(--border);border-left:none;border-radius:0 8px 8px 0;background:var(--surface-2);color:var(--text);font-size:18px;cursor:pointer;line-height:1;">+</button>
+  </div>`;
+}
+
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
@@ -589,7 +601,7 @@ function _coletarCamas(){
   const camas=[];
   rows.forEach(r=>{
     const tipo=r.querySelector('.cama-tipo')?.value;
-    const qtd=+r.querySelector('.cama-qtd')?.value||1;
+    const qtd=+r.querySelector('.num-input-wrap input')?.value||1;
     if(tipo)camas.push({tipo,qtd});
   });
   return camas;
@@ -612,9 +624,9 @@ function renderAbaDados(im){
   <div class="form-group"><label>Nome do Imóvel</label><input id="d-nome" class="input" value="${esc(im.nome)}"></div>
   <div class="form-group"><label>Endereço</label><input id="d-endereco" class="input" value="${esc(im.endereco||'')}"></div>
   <div class="form-row">
-    <div class="form-group"><label>Quartos</label><input id="d-quartos" type="number" class="input" value="${im.quartos||1}" min="1"></div>
-    <div class="form-group"><label>Banheiros completos</label><input id="d-banheiros-completos" type="number" class="input" value="${im.banheirosCompletos!=null?im.banheirosCompletos:(im.banheiros||1)}" min="0"></div>
-    <div class="form-group"><label>Lavabos</label><input id="d-banheiros-lavabo" type="number" class="input" value="${im.banheirosLavabo||0}" min="0"></div>
+    <div class="form-group"><label>Quartos</label>${numInput({id:'d-quartos',value:im.quartos||1,min:1})}</div>
+    <div class="form-group"><label>Banheiros completos</label>${numInput({id:'d-banheiros-completos',value:im.banheirosCompletos!=null?im.banheirosCompletos:(im.banheiros||1),min:0})}</div>
+    <div class="form-group"><label>Lavabos</label>${numInput({id:'d-banheiros-lavabo',value:im.banheirosLavabo||0,min:0})}</div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
@@ -623,7 +635,7 @@ function renderAbaDados(im){
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label>Comissão WeCare (%)</label><input id="d-comissao" type="number" class="input" value="${im.comissaoWecare||20}" min="0" max="100"></div>
+    <div class="form-group"><label>Comissão WeCare (%)</label>${numInput({id:'d-comissao',value:im.comissaoWecare||20,min:0,max:100})}</div>
     <div class="form-group"><label>Base de Cálculo</label><select id="d-comissao-base" class="input">
       <option value="liquida"${im.comissaoBase==='liquida'?' selected':''}>Líquida (após plataforma)</option>
       <option value="bruta"${im.comissaoBase==='bruta'?' selected':''}>Bruta</option>
@@ -663,18 +675,18 @@ function renderAbaDados(im){
 }
 function _htmlCamas(camas){
   const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
-  return camas.map((c,i)=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;">
+  return camas.map((c,i)=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
     <select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
-    <input class="input cama-qtd" type="number" min="1" value="${c.qtd||1}" style="width:64px;">
+    ${numInput({id:`cama-qtd-${i}`,value:c.qtd||1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
   </div>`).join('');
 }
 function adicionarCama(){
   const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
   const div=document.createElement('div');div.className='cama-row';
-  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;';
+  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;';
   div.innerHTML=`<select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option>${t}</option>`).join('')}</select>
-    <input class="input cama-qtd" type="number" min="1" value="1" style="width:64px;">
+    ${numInput({value:1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
   document.getElementById('camas-list').appendChild(div);
 }
@@ -867,9 +879,9 @@ function renderAbaContrato(im){
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wrench"></i> Setup</div>
   <div class="form-row">
-    <div class="form-group"><label>Fotos (R$)</label><input id="ct-op-fotos" type="number" class="input" value="${custoFotos}" oninput="_atualizarSubtotalSetup()"></div>
-    <div class="form-group"><label>Limpeza (R$)</label><input id="ct-op-limpeza" type="number" class="input" value="${custoLimpeza}" oninput="_atualizarSubtotalSetup()"></div>
-    <div class="form-group"><label>Vistoria (R$)</label><input id="ct-op-vistoria" type="number" class="input" value="${custoVistoria}" oninput="_atualizarSubtotalSetup()"></div>
+    <div class="form-group"><label>Fotos (R$)</label>${numInput({id:'ct-op-fotos',value:custoFotos,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
+    <div class="form-group"><label>Limpeza (R$)</label>${numInput({id:'ct-op-limpeza',value:custoLimpeza,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
+    <div class="form-group"><label>Vistoria (R$)</label>${numInput({id:'ct-op-vistoria',value:custoVistoria,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
   </div>
 
   ${gastosSetup.length?`<div style="margin-bottom:8px;">
@@ -882,11 +894,11 @@ function renderAbaContrato(im){
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
     <input id="ct-gasto-nome" class="input" style="flex:1;min-width:140px;" placeholder="Nome do gasto extra">
-    <input id="ct-gasto-val" type="number" class="input" style="width:110px;" placeholder="R$ 0,00" min="0">
+    ${numInput({id:'ct-gasto-val',value:'',min:0,step:50,style:'width:auto;'})}
     <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
   </div>
 
-  <div class="form-group"><label>Margem WeCare (%)</label><input id="ct-margem" type="number" class="input" value="${margem}" min="0" max="100"></div>
+  <div class="form-group"><label>Margem WeCare (%)</label>${numInput({id:'ct-margem',value:margem,min:0,max:100})}</div>
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px;color:var(--text-muted);">
       <span>Subtotal Setup (sem compras)</span>
@@ -899,14 +911,14 @@ function renderAbaContrato(im){
 
   <div class="form-section-title"><i class="fa-solid fa-chart-line"></i> Precificação Inicial</div>
   <div class="form-row">
-    <div class="form-group"><label>Valor Mínimo / Noite (R$)</label><input id="ct-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
-    <div class="form-group"><label>Valor Base / Noite (R$)</label><input id="ct-base-noite" type="number" class="input" value="${im.valorBaseNoite||0}"></div>
+    <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'ct-min-noite',value:im.valorMinNoite||0,min:0,step:10})}</div>
+    <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'ct-base-noite',value:im.valorBaseNoite||0,min:0,step:10})}</div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label>Taxa Hóspede Extra (R$)</label><input id="ct-taxa-extra" type="number" class="input" value="${im.taxaHospedeExtra||0}"></div>
-    <div class="form-group"><label>Acima de (nº hóspedes)</label><input id="ct-extra-acima" type="number" class="input" value="${im.taxaHospedeExtraAcimaDe||0}"></div>
+    <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'ct-taxa-extra',value:im.taxaHospedeExtra||0,min:0,step:10})}</div>
+    <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'ct-extra-acima',value:im.taxaHospedeExtraAcimaDe||0,min:0})}</div>
   </div>
-  <div class="form-group"><label>Taxa de Limpeza (R$)</label><input id="ct-taxa-limpeza" type="number" class="input" value="${im.taxaLimpeza||0}"></div>
+  <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10})}</div>
 
   <div class="form-section-title" style="margin-top:24px;"><i class="fa-solid fa-calculator"></i> Resumo do Orçamento</div>
   ${(()=>{
@@ -1376,7 +1388,7 @@ function renderAbaCompras(im){
   ${tabelasCat}
   <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
     <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
-    <input type="number" id="compras-frete" class="input" style="width:120px;" min="0" step="0.01" value="${frete}" onchange="_onFreteChange(this)">
+    ${numInput({id:'compras-frete',value:frete,min:0,step:10,onchange:'_onFreteChange(this)'})}
     <span class="text-muted" style="font-size:12px;">Itens: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} = <strong>${fmtMoeda(totalEstimado+frete)}</strong></span>
   </div>
 
