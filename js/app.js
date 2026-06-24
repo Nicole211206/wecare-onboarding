@@ -1435,20 +1435,104 @@ function _tipoEnxovalPrincipal(camas){
   const tipos=(camas||[]).map(c=>CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro');
   return ordem.find(t=>tipos.includes(t))||'Solteiro';
 }
+function _rowsComprasFalta(im){
+  const camas=im.camas||[];
+  const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
+  const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);
+  const quartos=im.quartos||1;
+  const rows=[];
+  ITENS_COMPRAS.forEach((item,idx)=>{
+    if(item.tipoPreco==='enxoval'&&camas.length){
+      const porTipo={};
+      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
+      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+        const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
+        let qtdNec=0;
+        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else qtdNec=q;
+        const subKey=`${idx}_${tipoEnx}`;
+        const qtdTem=im.compras?.[subKey]?.qtdTem??0;
+        const falta=Math.max(0,qtdNec-qtdTem);
+        if(falta>0){const pUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
+      });
+    } else {
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos);
+      const pUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
+      const subKey=String(idx);
+      const qtdTem=im.compras?.[subKey]?.qtdTem??0;
+      const falta=Math.max(0,qtdNec-qtdTem);
+      if(falta>0)rows.push({label:item.nome,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});
+    }
+  });
+  return rows;
+}
 function gerarPDFCompras(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const win=window.open('','_blank');
-  const linhas=ITENS_COMPRAS.map((item,idx)=>{
-    const camas=im.camas||[];const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
-    const pUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
-    const qtdReal=im.compras?.[idx]?.qtdReal??qtdNec;const comprado=im.compras?.[idx]?.comprado||false;
-    return`<tr><td>${item.nome}</td><td style="text-align:center;">${qtdReal}</td><td style="text-align:right;">${fmtMoeda(pUn)}</td><td style="text-align:right;">${fmtMoeda(pUn*qtdReal)}</td><td style="text-align:center;">${comprado?'✅':''}</td></tr>`;
+  const rows=_rowsComprasFalta(im);
+  const frete=im.freteTotal||0;
+  const totalItens=rows.reduce((s,r)=>s+r.total,0);
+  const cats=[...new Set(rows.map(r=>r.cat))];
+  const tabelas=cats.map(cat=>{
+    const itens=rows.filter(r=>r.cat===cat);
+    return`<tr style="background:#fdf0f4"><td colspan="5" style="padding:8px 10px;font-weight:700;font-size:12px;color:#9b4c6e;letter-spacing:.5px;">${cat.toUpperCase()}</td></tr>
+    ${itens.map(r=>`<tr>
+      <td style="padding:7px 10px;">${esc(r.label)}</td>
+      <td style="text-align:center;color:#888;">${r.qtdNec}</td>
+      <td style="text-align:center;color:#888;">${r.qtdTem}</td>
+      <td style="text-align:center;font-weight:600;color:#c7587a;">${r.falta}</td>
+      <td style="text-align:right;font-weight:600;">${fmtMoeda(r.total)}</td>
+    </tr>`).join('')}`;
   }).join('');
-  win.document.write(`<html><head><title>Compras — ${im.nome}</title>
-  <style>body{font-family:Arial;padding:24px;}h2{color:#c7587a;}table{width:100%;border-collapse:collapse;margin-top:16px;}th,td{border:1px solid #ccc;padding:6px 10px;font-size:12px;}th{background:#f7e4ec;}</style></head><body>
-  <h2>Lista de Compras — ${esc(im.nome)}</h2>
-  <p>${esc(im.endereco||'')} | ${im.quartos} quartos / ${im.banheiros} banheiros</p>
-  <table><thead><tr><th>Item</th><th>Qtd</th><th>R$/Un</th><th>Total</th><th>Comprado</th></tr></thead><tbody>${linhas}</tbody></table></body></html>`);
+  const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><meta charset="utf-8"><title>Lista de Compras — ${esc(im.nome)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
+    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
+    .brand span{color:#a57ab5;}
+    .meta{font-size:12px;color:#888;text-align:right;line-height:1.6;}
+    .imovel-nome{font-size:18px;font-weight:700;color:#333;margin-bottom:4px;}
+    .tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
+    .tag{background:#fdf0f4;color:#9b4c6e;border:1px solid #f0d0de;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600;}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12.5px;}
+    th{background:#2d1f2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    tr:nth-child(even):not(.cat-header){background:#fafafa;}
+    td{padding:6px 10px;border-bottom:1px solid #f0e0e8;vertical-align:middle;}
+    .total-row{background:#fdf0f4!important;font-weight:700;}
+    .summary{background:#2d1f2e;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;}
+    .summary-line{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}
+    .summary-total{display:flex;justify-content:space-between;font-size:18px;font-weight:800;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.2);}
+    .summary-total span:last-child{color:#f4a8c0;}
+    @media print{body{padding:16px;}@page{margin:1cm;}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="brand">We<span>Care</span> Hosting</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">Lista de Compras — Onboarding</div>
+    </div>
+    <div class="meta">
+      <div><strong>${esc(im.nome)}</strong></div>
+      <div>${esc(im.endereco||'')}</div>
+      <div>${im.quartos||1} quartos · ${banhTotal} banheiros</div>
+      <div>${fmtDate(hoje())}</div>
+    </div>
+  </div>
+  ${rows.length===0?'<p style="color:#888;text-align:center;padding:40px;">Nenhum item para comprar — tudo já disponível!</p>':`
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Nec.</th><th style="text-align:center;">Já tem</th><th style="text-align:center;">Falta</th><th style="text-align:right;">Total</th></tr></thead>
+    <tbody>${tabelas}
+    <tr class="total-row"><td colspan="4" style="padding:10px;text-align:right;">Subtotal itens</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalItens)}</td></tr>
+    </tbody>
+  </table>
+  <div class="summary">
+    <div class="summary-line"><span>Itens</span><span>${fmtMoeda(totalItens)}</span></div>
+    ${frete?`<div class="summary-line"><span>Frete estimado</span><span>${fmtMoeda(frete)}</span></div>`:''}
+    <div class="summary-total"><span>Total a comprar</span><span>${fmtMoeda(totalItens+frete)}</span></div>
+  </div>`}
+  </body></html>`);
   win.document.close();win.print();
 }
 
@@ -1651,47 +1735,91 @@ function renderAbaCustos(im){
 }
 function gerarPDFOrcamento(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  let totalC=0;
-  const linhasComp=ITENS_COMPRAS.map((item,idx)=>{
-    const camas=im.camas||[];
-    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
-    const pUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
-    const qtd=im.compras?.[idx]?.qtdReal??qtdNec;
-    const tot=pUn*qtd;totalC+=tot;
-    return`<tr><td>${item.nome}</td><td style="text-align:center;">${qtd}</td><td style="text-align:right;">${fmtMoeda(pUn)}</td><td style="text-align:right;">${fmtMoeda(tot)}</td></tr>`;
-  }).join('');
+  const rows=_rowsComprasFalta(im);
+  const totalC=rows.reduce((s,r)=>s+r.total,0);
+  const linhasComp=rows.map(r=>`<tr>
+    <td style="padding:7px 10px;">${esc(r.label)}</td>
+    <td style="text-align:center;color:#888;">${r.falta}</td>
+    <td style="text-align:right;color:#888;">${fmtMoeda(r.pUn)}</td>
+    <td style="text-align:right;font-weight:600;">${fmtMoeda(r.total)}</td>
+  </tr>`).join('');
   const frete=im.freteTotal||0;
   const custoFotos=+im.ops?.fotos?.custo||0;
   const custoLimpeza=+im.ops?.limpeza?.custo||0;
   const custoVistoria=+im.ops?.vistoria?.custo||0;
   const gastosSetup=im.gastosSetup||[];
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
-  const linhasExtras=gastosSetup.map(g=>`<tr><td>${esc(g.nome)}</td><td style="text-align:right;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('');
+  const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('');
   const sub=totalC+frete+custoFotos+custoLimpeza+custoVistoria+custosExtras;
   const marg=sub*(im.margemWecare||15)/100;
   const desc=im.descontoTipo==='reais'?(im.descontoValor||0):(sub+marg)*(im.descontoValor||0)/100;
   const total=sub+marg-desc;
+  const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const win=window.open('','_blank');
-  win.document.write(`<html><head><title>Orçamento — ${im.nome}</title>
-  <style>body{font-family:Arial;padding:24px;color:#333;}h1{color:#c7587a;font-size:20px;}h2{color:#a57ab5;font-size:15px;margin-top:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:6px 10px;font-size:11px;}th{background:#f7e4ec;}.total{font-size:15px;font-weight:700;text-align:right;margin-top:8px;}</style></head><body>
-  <h1>Orçamento de Onboarding — ${esc(im.nome)}</h1>
-  <p><strong>Proprietário:</strong> ${esc(im.proprietarioNome||'—')} &nbsp;|&nbsp; <strong>Data:</strong> ${fmtDate(hoje())}</p>
+  win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
+    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
+    .brand span{color:#a57ab5;}
+    .meta{font-size:12px;color:#888;text-align:right;line-height:1.6;}
+    h2{font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:12.5px;}
+    th{background:#2d1f2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    tr:nth-child(even){background:#fafafa;}
+    td{border-bottom:1px solid #f0e0e8;vertical-align:middle;}
+    .section-divider{height:16px;}
+    .summary{background:#2d1f2e;color:#fff;border-radius:12px;padding:20px 24px;margin-top:20px;}
+    .summary-line{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;color:rgba(255,255,255,.8);}
+    .summary-sub{display:flex;justify-content:space-between;font-size:13px;font-weight:600;padding:8px 0;border-top:1px solid rgba(255,255,255,.15);margin-top:4px;}
+    .summary-total{display:flex;justify-content:space-between;font-size:20px;font-weight:800;padding-top:10px;margin-top:6px;border-top:1px solid rgba(255,255,255,.3);}
+    .summary-total span:last-child{color:#f4a8c0;}
+    .pagamento{background:#fdf0f4;border-radius:8px;padding:12px 16px;margin-top:16px;font-size:12px;color:#9b4c6e;}
+    @media print{body{padding:16px;}@page{margin:1cm;}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="brand">We<span>Care</span> Hosting</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">Orçamento de Onboarding</div>
+    </div>
+    <div class="meta">
+      <div style="font-weight:700;color:#333;">${esc(im.nome)}</div>
+      <div><strong>Proprietário:</strong> ${esc(im.proprietarioNome||'—')}</div>
+      <div>${esc(im.endereco||'')}</div>
+      <div>${im.quartos||1} quartos · ${banhTotal} banheiros &nbsp;|&nbsp; ${fmtDate(hoje())}</div>
+    </div>
+  </div>
+
   <h2>Lista de Compras</h2>
-  <table><thead><tr><th>Item</th><th>Qtd</th><th>R$/Un</th><th>Total</th></tr></thead><tbody>${linhasComp}</tbody></table>
-  <div class="total">Total Compras: ${fmtMoeda(totalC)}</div>
+  ${rows.length?`<table>
+    <thead><tr><th>Item</th><th style="text-align:center;width:60px;">Qtd</th><th style="text-align:right;width:80px;">R$/Un</th><th style="text-align:right;width:90px;">Total</th></tr></thead>
+    <tbody>${linhasComp}</tbody>
+  </table>`:'<p style="color:#888;font-size:12px;padding:8px 0;">Nenhum item para comprar.</p>'}
+
   <h2>Produção e Setup</h2>
-  <table><thead><tr><th>Serviço</th><th>Custo</th></tr></thead><tbody>
-    ${frete?`<tr><td>Frete</td><td style="text-align:right;">${fmtMoeda(frete)}</td></tr>`:''}
-    ${custoFotos?`<tr><td>Fotos</td><td style="text-align:right;">${fmtMoeda(custoFotos)}</td></tr>`:''}
-    ${custoLimpeza?`<tr><td>Primeira Limpeza</td><td style="text-align:right;">${fmtMoeda(custoLimpeza)}</td></tr>`:''}
-    ${custoVistoria?`<tr><td>Vistoria</td><td style="text-align:right;">${fmtMoeda(custoVistoria)}</td></tr>`:''}
+  <table><thead><tr><th>Serviço</th><th style="text-align:right;width:120px;">Valor</th></tr></thead><tbody>
+    ${frete?`<tr><td style="padding:7px 10px;">Frete</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(frete)}</td></tr>`:''}
+    ${custoFotos?`<tr><td style="padding:7px 10px;">Fotos profissionais</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoFotos)}</td></tr>`:''}
+    ${custoLimpeza?`<tr><td style="padding:7px 10px;">Primeira limpeza</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoLimpeza)}</td></tr>`:''}
+    ${custoVistoria?`<tr><td style="padding:7px 10px;">Vistoria</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoVistoria)}</td></tr>`:''}
     ${linhasExtras}
+    ${(!frete&&!custoFotos&&!custoLimpeza&&!custoVistoria&&!linhasExtras)?'<tr><td style="padding:7px 10px;color:#aaa;" colspan="2">Nenhum custo de setup informado</td></tr>':''}
   </tbody></table>
-  <div class="total">Subtotal: ${fmtMoeda(sub)}</div>
-  <div class="total">Margem WeCare (${im.margemWecare||15}%): ${fmtMoeda(marg)}</div>
-  ${desc?`<div class="total">Desconto: –${fmtMoeda(desc)}</div>`:''}
-  <div class="total" style="font-size:20px;color:#c7587a;border-top:2px solid #c7587a;padding-top:8px;margin-top:8px;">Total ao Proprietário: ${fmtMoeda(total)}</div>
-  ${im.formasPagamento?`<p style="margin-top:12px;font-size:12px;"><strong>Forma de Pagamento:</strong> ${esc(im.formasPagamento)}</p>`:''}
+
+  <div class="summary">
+    <div class="summary-line"><span>Compras (${rows.length} itens)</span><span>${fmtMoeda(totalC)}</span></div>
+    ${frete?`<div class="summary-line"><span>Frete</span><span>${fmtMoeda(frete)}</span></div>`:''}
+    ${custoFotos?`<div class="summary-line"><span>Fotos</span><span>${fmtMoeda(custoFotos)}</span></div>`:''}
+    ${custoLimpeza?`<div class="summary-line"><span>Primeira limpeza</span><span>${fmtMoeda(custoLimpeza)}</span></div>`:''}
+    ${custoVistoria?`<div class="summary-line"><span>Vistoria</span><span>${fmtMoeda(custoVistoria)}</span></div>`:''}
+    ${custosExtras?`<div class="summary-line"><span>Outros</span><span>${fmtMoeda(custosExtras)}</span></div>`:''}
+    <div class="summary-sub"><span>Subtotal</span><span>${fmtMoeda(sub)}</span></div>
+    <div class="summary-line"><span>Margem WeCare (${im.margemWecare||15}%)</span><span>${fmtMoeda(marg)}</span></div>
+    ${desc?`<div class="summary-line"><span>Desconto</span><span>–${fmtMoeda(desc)}</span></div>`:''}
+    <div class="summary-total"><span>Total ao Proprietário</span><span>${fmtMoeda(total)}</span></div>
+  </div>
+  ${im.formasPagamento?`<div class="pagamento"><strong>Forma de Pagamento:</strong> ${esc(im.formasPagamento)}</div>`:''}
   </body></html>`);
   win.document.close();win.print();
 }
