@@ -656,6 +656,9 @@ function renderAbaDados(im){
 
   <div class="form-section-title"><i class="fa-solid fa-comment-dots"></i> Observações</div>
   <div class="form-group"><textarea id="d-obs" class="input" rows="3">${esc(im.observacoes||'')}</textarea></div>
+  <div style="margin-top:16px;">
+    <button class="btn btn-sage" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar dados</button>
+  </div>
   </div>`;
 }
 function _htmlCamas(camas){
