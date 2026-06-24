@@ -33,7 +33,7 @@ let ITENS_COMPRAS=[
   {cat:'Banheiro',nome:'Tapete Piso Luxor Hotel',tipoPreco:'fixo',preco:42,enxovalDep:false,qtdRule:'3-banheiro',link:'https://wa.me/5511995563388'},
   {cat:'Banheiro',nome:'Lixeira Inox com Pedal 3L',tipoPreco:'fixo',preco:38.99,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB25959263'},
   {cat:'Banheiro',nome:'Dispenser de Sabonete',tipoPreco:'fixo',preco:23.90,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB22437413'},
-  {cat:'Banheiro',nome:'Secador de Cabelo',tipoPreco:'fixo',preco:102,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/secador-de-cabelos-mondial/p/MLB22448898'},
+  {cat:'Banheiro',nome:'Secador de Cabelo',tipoPreco:'fixo',preco:102,enxovalDep:false,qtdRule:'1-banheiro-completo',link:'https://www.mercadolivre.com.br/secador-de-cabelos-mondial/p/MLB22448898'},
   // LAVANDERIA
   {cat:'Lavanderia',nome:'Passadeira a Vapor',tipoPreco:'fixo',preco:151,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/vaporizador-de-roupas-portatil/p/MLB17993699'},
   // COZINHA
@@ -72,7 +72,6 @@ let ITENS_COMPRAS=[
   {cat:'Limpeza',nome:'Panos de Microfibra (kit 10)',tipoPreco:'fixo',preco:59,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/mfl-kit-10-panos-de-microfibra/p/MLB20987654'},
   // OUTROS
   {cat:'Outros',nome:'Detector de Fumaça',tipoPreco:'fixo',preco:59.90,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/detector-optico-de-fumaca/p/MLB22334567'},
-  {cat:'Outros',nome:'Kit Amenities WeCare',tipoPreco:'fixo',preco:5.46,enxovalDep:false,qtdRule:'1-banheiro',link:''},
 ];
 
 let PRECOS_ENXOVAL={
@@ -146,11 +145,12 @@ function showPanel(id,btn){
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
-function calcNecessario(item,camas,banheiros,quartos){
+function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos){
   const[n,base]=(item.qtdRule||'1-unidade').split('-');
   const q=parseInt(n)||1;
   if(base==='colchao')return q*totalColchoes(camas);
   if(base==='leito')return q*totalLeitos(camas);
+  if(base==='banheiro-completo')return q*(+banheirosCompletos||1);
   if(base==='banheiro')return q*(+banheiros||1);
   if(base==='quarto')return q*(+quartos||1);
   return q;
@@ -377,7 +377,8 @@ function abrirNovoImovel(){
   document.getElementById('ni-comissao').value='20';
   document.getElementById('ni-comissao-base').value='liquida';
   document.getElementById('ni-quartos').value='1';
-  document.getElementById('ni-banheiros').value='1';
+  document.getElementById('ni-banheiros-completos').value='1';
+  document.getElementById('ni-banheiros-lavabo').value='0';
   document.getElementById('ni-data-criacao').value=hoje();
   document.getElementById('modal-imovel-novo').classList.add('open');
   setTimeout(()=>document.getElementById('ni-nome').focus(),100);
@@ -393,7 +394,8 @@ function salvarNovoImovel(){
     comissaoWecare:+document.getElementById('ni-comissao').value||20,
     comissaoBase:document.getElementById('ni-comissao-base').value,
     quartos:+document.getElementById('ni-quartos').value||1,
-    banheiros:+document.getElementById('ni-banheiros').value||1,
+    banheirosCompletos:+document.getElementById('ni-banheiros-completos').value||1,
+    banheirosLavabo:+document.getElementById('ni-banheiros-lavabo').value||0,
     dataCriacao:document.getElementById('ni-data-criacao').value||hoje(),
     plataformas:[], camas:[], status:'contrato',
     dataAtivacao:null, statusAnterior:null,
@@ -513,7 +515,7 @@ function _coletarDadosAba(aba,im){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
-    im.quartos=gn('d-quartos')||1; im.banheiros=gn('d-banheiros')||1;
+    im.quartos=gn('d-quartos')||1; im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
     im.observacoes=g('d-obs');
@@ -611,7 +613,8 @@ function renderAbaDados(im){
   <div class="form-group"><label>Endereço</label><input id="d-endereco" class="input" value="${esc(im.endereco||'')}"></div>
   <div class="form-row">
     <div class="form-group"><label>Quartos</label><input id="d-quartos" type="number" class="input" value="${im.quartos||1}" min="1"></div>
-    <div class="form-group"><label>Banheiros</label><input id="d-banheiros" type="number" class="input" value="${im.banheiros||1}" min="1"></div>
+    <div class="form-group"><label>Banheiros completos</label><input id="d-banheiros-completos" type="number" class="input" value="${im.banheirosCompletos!=null?im.banheirosCompletos:(im.banheiros||1)}" min="0"></div>
+    <div class="form-group"><label>Lavabos</label><input id="d-banheiros-lavabo" type="number" class="input" value="${im.banheirosLavabo||0}" min="0"></div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
@@ -907,7 +910,7 @@ function renderAbaContrato(im){
     let totalCompras=0;
     ITENS_COMPRAS.forEach((item,idx)=>{
       const camas=im.camas||[];
-      const qtdNec=calcNecessario(item,camas,im.banheiros||1,im.quartos||1);
+      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
       const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
       const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
       totalCompras+=precoUn*qtdReal;
@@ -1287,7 +1290,7 @@ function importarRespostasParaRascunho(){
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
 function renderAbaCompras(im){
-  const camas=im.camas||[];const banheiros=im.banheiros||1;const quartos=im.quartos||1;
+  const camas=im.camas||[];const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);const quartos=im.quartos||1;
   const compras=im.compras||{};
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
@@ -1321,7 +1324,7 @@ function renderAbaCompras(im){
         rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdTem,falta,precoUn,total,comprado});
       });
     } else {
-      const qtdNec=calcNecessario(item,camas,banheiros,quartos);
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos);
       const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
       const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
@@ -1433,7 +1436,7 @@ function gerarPDFCompras(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const win=window.open('','_blank');
   const linhas=ITENS_COMPRAS.map((item,idx)=>{
-    const camas=im.camas||[];const qtdNec=calcNecessario(item,camas,im.banheiros||1,im.quartos||1);
+    const camas=im.camas||[];const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
     const pUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
     const qtdReal=im.compras?.[idx]?.qtdReal??qtdNec;const comprado=im.compras?.[idx]?.comprado||false;
     return`<tr><td>${item.nome}</td><td style="text-align:center;">${qtdReal}</td><td style="text-align:right;">${fmtMoeda(pUn)}</td><td style="text-align:right;">${fmtMoeda(pUn*qtdReal)}</td><td style="text-align:center;">${comprado?'✅':''}</td></tr>`;
@@ -1458,7 +1461,7 @@ function renderAbaEnxoval(im){
   const linhasBud=Object.entries(PRECOS_ENXOVAL).map(([nome,tabela])=>{
     const itemDef=ITENS_COMPRAS.find(i=>i.nome===nome);
     const qtdRule=itemDef?.qtdRule||'1-colchao';
-    const qtd=calcNecessario({qtdRule},camas,im.banheiros||1,im.quartos||1);
+    const qtd=calcNecessario({qtdRule},camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
     const pUn=tabela[tipo]||Object.values(tabela)[0]||0;
     const total=pUn*qtd;totalBud+=total;
     return{nome,tipo,qtd,pUn,total};
@@ -1590,7 +1593,7 @@ function renderAbaCustos(im){
   let totalCompras=0;
   ITENS_COMPRAS.forEach((item,idx)=>{
     const camas=im.camas||[];
-    const qtdNec=calcNecessario(item,camas,im.banheiros||1,im.quartos||1);
+    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
     const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
     const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
     totalCompras+=precoUn*qtdReal;
@@ -1648,7 +1651,7 @@ function gerarPDFOrcamento(){
   let totalC=0;
   const linhasComp=ITENS_COMPRAS.map((item,idx)=>{
     const camas=im.camas||[];
-    const qtdNec=calcNecessario(item,camas,im.banheiros||1,im.quartos||1);
+    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
     const pUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
     const qtd=im.compras?.[idx]?.qtdReal??qtdNec;
     const tot=pUn*qtd;totalC+=tot;
