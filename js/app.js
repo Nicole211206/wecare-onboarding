@@ -1307,26 +1307,29 @@ function renderAbaCompras(im){
         const [n,base]=(item.qtdRule||'1-colchao').split('-');
         const q=parseInt(n)||1;
         let qtdNec=0;
-        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(+c.qtd||1),0);
+        // beliche conta como 2 colchões/leitos
+        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else qtdNec=q;
         const precoUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         const subKey=`${idx}_${tipoEnx}`;
-        const qtdReal=compras[subKey]?.qtdReal!=null?compras[subKey].qtdReal:qtdNec;
-        const total=precoUn*qtdReal;
+        const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
+        const falta=Math.max(0,qtdNec-qtdTem);
+        const total=precoUn*falta;
         totalEstimado+=total;
         const comprado=compras[subKey]?.comprado||false;
-        rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdReal,precoUn,total,comprado});
+        rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdTem,falta,precoUn,total,comprado});
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos);
       const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
-      const qtdReal=compras[subKey]?.qtdReal!=null?compras[subKey].qtdReal:qtdNec;
-      const total=precoUn*qtdReal;
+      const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
+      const falta=Math.max(0,qtdNec-qtdTem);
+      const total=precoUn*falta;
       totalEstimado+=total;
       const comprado=compras[subKey]?.comprado||false;
-      rows.push({subKey,item,label:item.nome,qtdNec,qtdReal,precoUn,total,comprado});
+      rows.push({subKey,item,label:item.nome,qtdNec,qtdTem,falta,precoUn,total,comprado});
     }
   });
 
@@ -1336,13 +1339,14 @@ function renderAbaCompras(im){
     return`<div style="margin-bottom:20px;">
       <div class="form-section-title"><i class="fa-solid fa-tag"></i> ${cat}</div>
       <table class="compras-table" style="width:100%;border-collapse:collapse;font-size:12.5px;">
-        <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">✓</th><th>Item</th><th>Nec.</th><th>Real</th><th>R$/Un</th><th>Total</th><th>Link</th></tr></thead>
+        <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">✓</th><th>Item</th><th style="text-align:center;">Nec.</th><th style="text-align:center;">Já tem</th><th style="text-align:center;">Falta</th><th style="text-align:right;padding:0 8px;">R$/Un</th><th style="text-align:right;padding:0 8px;">Total</th><th>Link</th></tr></thead>
         <tbody>
-        ${itensC.map(({subKey,item,label,qtdNec,qtdReal,precoUn,total,comprado})=>`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        ${itensC.map(({subKey,item,label,qtdNec,qtdTem,falta,precoUn,total,comprado})=>`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
           <td style="padding:4px 8px;"><input type="checkbox" class="compra-check" ${comprado?'checked':''} data-idx="${subKey}" onchange="_onCompraCheck(this,'${subKey}')"></td>
           <td style="padding:4px 8px;">${esc(label)}</td>
-          <td style="text-align:center;">${qtdNec}</td>
-          <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdReal}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
+          <td style="text-align:center;color:var(--text-muted);">${qtdNec}</td>
+          <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
+          <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 8px;">${fmtMoeda(precoUn)}</td>
           <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
@@ -1391,7 +1395,15 @@ function _onCompraQtd(inp,key){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
   if(!im.compras[key])im.compras[key]={};
-  im.compras[key].qtdReal=+inp.value||0;
+  im.compras[key].qtdTem=+inp.value||0;
+  // Atualiza a célula "Falta" na mesma linha sem re-render completo
+  const tr=inp.closest('tr');
+  if(tr){
+    const qtdNec=+tr.querySelector('td:nth-child(3)').textContent||0;
+    const falta=Math.max(0,qtdNec-(+inp.value||0));
+    const faltaTd=tr.querySelector('td:nth-child(5)');
+    if(faltaTd){faltaTd.textContent=falta;faltaTd.style.color=falta>0?'var(--rose)':'var(--green)';}
+  }
   saveAll();
 }
 function _gerarMsgWhatsAppEnxoval(im,rows){
