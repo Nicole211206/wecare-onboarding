@@ -1403,6 +1403,12 @@ function _onCompraQtd(inp,key){
     const falta=Math.max(0,qtdNec-(+inp.value||0));
     const faltaTd=tr.querySelector('td:nth-child(5)');
     if(faltaTd){faltaTd.textContent=falta;faltaTd.style.color=falta>0?'var(--rose)':'var(--green)';}
+    const precoTd=tr.querySelector('td:nth-child(6)');
+    const totalTd=tr.querySelector('td:nth-child(7)');
+    if(precoTd&&totalTd){
+      const precoUn=parseFloat((precoTd.textContent||'').replace(/[^0-9,]/g,'').replace(',','.'))||0;
+      totalTd.textContent=fmtMoeda(precoUn*falta);
+    }
   }
   saveAll();
 }
