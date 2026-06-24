@@ -149,7 +149,14 @@
     </div>
 
     <div id="secoes-container"></div>
-    <button class="btn-submit" id="btn-submit" onclick="submitForm()">Enviar informações</button>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap;">
+      <button id="btn-save-draft" onclick="salvarRascunho()" style="flex:1;min-width:160px;padding:14px;background:#fff;color:var(--brand);border:2px solid var(--brand);border-radius:var(--r);font-family:var(--font);font-size:.97rem;font-weight:700;cursor:pointer;transition:background .15s;">
+        <i class="fa-solid fa-floppy-disk"></i> Salvar progresso
+      </button>
+      <button class="btn-submit" id="btn-submit" onclick="submitForm()" style="flex:2;min-width:200px;margin-top:0;">Enviar informações</button>
+    </div>
+    <div id="save-status" style="text-align:center;font-size:.82rem;color:#9b8fa8;margin-top:8px;min-height:20px;"></div>
     <div class="submit-error" id="submit-error"></div>
   </div>
 
@@ -320,19 +327,35 @@
     window._wcSecoes=secoes;
     updateProgress();
 
-    // Auto-save silencioso a cada 30s
+    // Auto-save a cada 60s com indicador visível
     const{id:_asId,t:_asT}=getParams();
+    function _mostrarStatus(msg,cor){
+      const el=document.getElementById('save-status');
+      if(el){el.textContent=msg;el.style.color=cor||'#9b8fa8';}
+    }
+    function _executarSave(callback){
+      const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
+      if(!workerUrl||!_asId||!_asT){_mostrarStatus('⚠ Link inválido, não foi possível salvar.','#C0392B');return;}
+      const url=workerUrl+'/form-save?id='+encodeURIComponent(_asId)+'&t='+encodeURIComponent(_asT);
+      fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
+      .then(function(r){if(!r.ok)throw new Error('erro');
+        const h=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        _mostrarStatus('✓ Salvo às '+h+' — você pode fechar e continuar depois pelo mesmo link.','#6b8f71');
+        if(callback)callback();
+      })
+      .catch(function(){_mostrarStatus('⚠ Falha ao salvar. Verifique a conexão.','#C0392B');});
+    }
+    window.salvarRascunho=function(){
+      const btn=document.getElementById('btn-save-draft');
+      if(btn){btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Salvando…';}
+      _executarSave(function(){
+        if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-floppy-disk"></i> Salvar progresso';}
+      });
+    };
     if(_asId&&_asT){
       if(window._autoSaveInterval) clearInterval(window._autoSaveInterval);
-      window._autoSaveInterval=setInterval(function(){
-        const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
-        if(!workerUrl) return;
-        const url=workerUrl+'/form-save?id='+encodeURIComponent(_asId)+'&t='+encodeURIComponent(_asT);
-        fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
-        .then(function(){console.log('[WeCare] auto-save ok',new Date().toLocaleTimeString());})
-        .catch(function(e){console.warn('[WeCare] auto-save falhou',e);});
-      },30000);
+      window._autoSaveInterval=setInterval(function(){_executarSave();},60000);
     }
   }
 
