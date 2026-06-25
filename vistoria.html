@@ -841,56 +841,7 @@ select.urg-select {
       Cabeçalho
       <span class="nav-check"><i class="fa-solid fa-check"></i></span>
     </a>
-    <a class="nav-item" href="#sec-acesso" onclick="navClick(this)">
-      <span class="nav-icon ic-acs"><i class="fa-solid fa-key"></i></span>
-      Acesso e Operação
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-equip" onclick="navClick(this)">
-      <span class="nav-icon ic-eqp"><i class="fa-solid fa-tv"></i></span>
-      Equipamentos
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-inv" onclick="navClick(this)">
-      <span class="nav-icon ic-inv"><i class="fa-solid fa-boxes-stacked"></i></span>
-      Inventário Padrão
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-externo" onclick="navClick(this)">
-      <span class="nav-icon ic-ext"><i class="fa-solid fa-plus"></i></span>
-      Inventário Extra
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-enxoval" onclick="navClick(this)">
-      <span class="nav-icon ic-enx"><i class="fa-solid fa-bed"></i></span>
-      Enxoval
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-limpeza" onclick="navClick(this)">
-      <span class="nav-icon ic-lim"><i class="fa-solid fa-broom"></i></span>
-      Pontos de Limpeza
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-cond" onclick="navClick(this)">
-      <span class="nav-icon ic-con"><i class="fa-solid fa-building"></i></span>
-      Áreas de Lazer
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-praia" onclick="navClick(this)">
-      <span class="nav-icon ic-pri"><i class="fa-solid fa-umbrella-beach"></i></span>
-      Serviço de Praia
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-deco" onclick="navClick(this)">
-      <span class="nav-icon ic-dec"><i class="fa-solid fa-couch"></i></span>
-      Decoração
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
-    <a class="nav-item" href="#sec-pend" onclick="navClick(this)">
-      <span class="nav-icon ic-pen"><i class="fa-solid fa-triangle-exclamation"></i></span>
-      Pendências
-      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
-    </a>
+    <div id="nav-comodos"></div>
     <a class="nav-item" href="#sec-conclusao" onclick="navClick(this)">
       <span class="nav-icon ic-fin"><i class="fa-solid fa-circle-check"></i></span>
       Conclusão
@@ -941,283 +892,21 @@ select.urg-select {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════
-     SEÇÃO 1 — ACESSO E OPERAÇÃO
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-acesso">
-  <div class="section-header" onclick="toggleSection('sec-acesso')">
-    <div class="section-icon ic-acs"><i class="fa-solid fa-key"></i></div>
-    <div class="section-title">Acesso e Operação</div>
-    <span class="section-num">1</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <p style="font-size:12px;color:var(--gray-400);margin-bottom:16px">
-      <i class="fa-solid fa-circle-info"></i> Campos pré-preenchidos do cadastro do imóvel. Edições serão salvas no perfil do imóvel.
-    </p>
-
-    <div class="wifi-row">
-      <div class="form-row">
-        <label>Wi-Fi — Rede</label>
-        <input type="text" id="field-wifi-rede" placeholder="Nome da rede">
-      </div>
-      <div class="form-row">
-        <label>Senha Wi-Fi</label>
-        <input type="text" id="field-wifi-senha" placeholder="Senha">
-      </div>
-      <div class="toggle-wrap">
-        <span class="toggle-label">Funcionando?</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="field-wifi-ok" checked>
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="form-row">
-      <label>Como entrar no imóvel</label>
-      <textarea id="field-acesso" placeholder="Instruções de acesso..."></textarea>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-row">
-        <label>Senha da porta / cofre de chaves</label>
-        <input type="text" id="field-senha-porta" placeholder="Ex: 4892#">
-      </div>
-      <div class="form-row">
-        <label>Vaga de garagem</label>
-        <input type="text" id="field-vaga" placeholder="Ex: Vaga 47 — Subsolo B1">
-      </div>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-row">
-        <label>Zelador / Portaria — Nome</label>
-        <input type="text" id="field-zelador-nome" placeholder="Nome do zelador">
-      </div>
-      <div class="form-row">
-        <label>Zelador / Portaria — Contato</label>
-        <input type="text" id="field-zelador-tel" placeholder="Telefone">
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Cômodos gerados dinamicamente via JS -->
+<div id="comodos-container"></div>
 
 <!-- ═══════════════════════════════════════
-     SEÇÃO 2 — EQUIPAMENTOS
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-equip">
-  <div class="section-header" onclick="toggleSection('sec-equip')">
-    <div class="section-icon ic-eqp"><i class="fa-solid fa-tv"></i></div>
-    <div class="section-title">Equipamentos por Cômodo</div>
-    <span class="section-num">2</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body" id="equip-body">
-    <!-- Gerado via JS -->
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 3 — INVENTÁRIO PADRÃO
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-inv">
-  <div class="section-header" onclick="toggleSection('sec-inv')">
-    <div class="section-icon ic-inv"><i class="fa-solid fa-boxes-stacked"></i></div>
-    <div class="section-title">Inventário Padrão</div>
-    <span class="section-num">3</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <div class="table-wrap">
-      <table class="inv-table" id="inv-padrao-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Esperado</th>
-            <th>Encontrado</th>
-            <th>Diferença</th>
-            <th>Observação</th>
-          </tr>
-        </thead>
-        <tbody id="inv-padrao-body">
-          <!-- Gerado via JS -->
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 4 — INVENTÁRIO EXTRA
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-externo">
-  <div class="section-header" onclick="toggleSection('sec-externo')">
-    <div class="section-icon ic-ext"><i class="fa-solid fa-plus"></i></div>
-    <div class="section-title">Inventário Fora do Padrão</div>
-    <span class="section-num">4</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <div class="table-wrap">
-      <table class="inv-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Local</th>
-            <th>Qtd</th>
-            <th>Observação</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="inv-extra-body">
-          <!-- Linhas adicionadas via JS -->
-        </tbody>
-      </table>
-    </div>
-    <div style="margin-top:12px">
-      <button class="btn btn-outline btn-sm" onclick="addExtraRow()">
-        <i class="fa-solid fa-plus"></i> Adicionar item
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 5 — ENXOVAL
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-enxoval">
-  <div class="section-header" onclick="toggleSection('sec-enxoval')">
-    <div class="section-icon ic-enx"><i class="fa-solid fa-bed"></i></div>
-    <div class="section-title">Enxoval</div>
-    <span class="section-num">5</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <div class="table-wrap">
-      <table class="inv-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Esperado</th>
-            <th>Encontrado</th>
-            <th>Diferença</th>
-            <th>Observação</th>
-          </tr>
-        </thead>
-        <tbody id="inv-enxoval-body">
-          <!-- Gerado via JS -->
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 6 — PONTOS DE LIMPEZA
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-limpeza">
-  <div class="section-header" onclick="toggleSection('sec-limpeza')">
-    <div class="section-icon ic-lim"><i class="fa-solid fa-broom"></i></div>
-    <div class="section-title">Pontos de Limpeza</div>
-    <span class="section-num">6</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body" id="limpeza-body">
-    <!-- Gerado via JS -->
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 7 — ÁREAS DE LAZER
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-cond">
-  <div class="section-header" onclick="toggleSection('sec-cond')">
-    <div class="section-icon ic-con"><i class="fa-solid fa-building"></i></div>
-    <div class="section-title">Áreas de Lazer e Condomínio</div>
-    <span class="section-num">7</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body" id="cond-body">
-    <!-- Gerado via JS -->
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 8 — SERVIÇO DE PRAIA
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-praia">
-  <div class="section-header" onclick="toggleSection('sec-praia')">
-    <div class="section-icon ic-pri"><i class="fa-solid fa-umbrella-beach"></i></div>
-    <div class="section-title">Serviço de Praia</div>
-    <span class="section-num">8</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <div class="table-wrap">
-      <table class="inv-table" id="praia-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Qtd Encontrada</th>
-            <th>Estado</th>
-            <th>Observação</th>
-          </tr>
-        </thead>
-        <tbody id="praia-body">
-          <!-- Gerado via JS -->
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 9 — DECORAÇÃO
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-deco">
-  <div class="section-header" onclick="toggleSection('sec-deco')">
-    <div class="section-icon ic-dec"><i class="fa-solid fa-couch"></i></div>
-    <div class="section-title">Decoração e Conservação</div>
-    <span class="section-num">9</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body" id="deco-body">
-    <!-- Gerado via JS -->
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 10 — PENDÊNCIAS
-══════════════════════════════════════════ -->
-<div class="section-card" id="sec-pend">
-  <div class="section-header" onclick="toggleSection('sec-pend')">
-    <div class="section-icon ic-pen"><i class="fa-solid fa-triangle-exclamation"></i></div>
-    <div class="section-title">Pendências Identificadas</div>
-    <span class="section-num">10</span>
-    <i class="fa-solid fa-chevron-down section-chevron"></i>
-  </div>
-  <div class="section-body">
-    <div id="pendencias-list"></div>
-    <button class="btn btn-outline btn-sm" onclick="addPendencia()" style="margin-top:12px">
-      <i class="fa-solid fa-plus"></i> Adicionar pendência
-    </button>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════
-     SEÇÃO 11 — CONCLUSÃO
+     CONCLUSÃO
 ══════════════════════════════════════════ -->
 <div class="section-card" id="sec-conclusao">
   <div class="section-header" onclick="toggleSection('sec-conclusao')">
     <div class="section-icon ic-fin"><i class="fa-solid fa-circle-check"></i></div>
-    <div class="section-title">Conclusão e Assinatura</div>
-    <span class="section-num">11</span>
+    <div class="section-title">Conclusão</div>
     <i class="fa-solid fa-chevron-down section-chevron"></i>
   </div>
   <div class="section-body">
     <div class="form-row">
-      <label>Imóvel apto para ativação? *</label>
+      <label>Imóvel apto para operação? *</label>
       <div class="pill-group" style="margin-top:6px">
         <label class="pill-label pill-ok">
           <input type="radio" name="apto" value="sim" required>
@@ -1227,37 +916,15 @@ select.urg-select {
           <input type="radio" name="apto" value="nao">
           <i class="fa-solid fa-circle-xmark"></i> Não
         </label>
-        <label class="pill-label pill-warn">
-          <input type="radio" name="apto" value="parcialmente">
-          <i class="fa-solid fa-circle-half-stroke"></i> Parcialmente
-        </label>
       </div>
     </div>
-
-    <div class="form-row">
+    <div class="form-row" style="margin-top:16px">
       <label>Observações finais</label>
-      <textarea id="field-obs-finais" placeholder="Registre observações gerais sobre a vistoria..." style="min-height:120px"></textarea>
+      <textarea id="field-obs-finais" placeholder="Observações gerais sobre a vistoria..." style="min-height:100px"></textarea>
     </div>
-
-    <div class="form-row">
-      <label>Assinatura Digital</label>
-      <canvas id="sig-canvas"></canvas>
-      <div style="margin-top:8px">
-        <button class="btn btn-outline btn-sm" onclick="clearSignature()">
-          <i class="fa-solid fa-rotate-left"></i> Limpar assinatura
-        </button>
-      </div>
-    </div>
-
-    <div class="form-grid">
-      <div class="form-row">
-        <label>Nome completo *</label>
-        <input type="text" id="field-nome-conclusao" placeholder="Nome do vistoriador">
-      </div>
-      <div class="form-row">
-        <label>Data</label>
-        <input type="date" id="field-data-conclusao" readonly>
-      </div>
+    <div class="form-row" style="margin-top:16px">
+      <label>Nome do Vistoriador *</label>
+      <input type="text" id="field-nome-conclusao" placeholder="Nome completo">
     </div>
   </div>
 </div>
@@ -1303,6 +970,7 @@ select.urg-select {
 // MOCK DATA
 // ═══════════════════════════════════════════════════════
 const MOCK_IMOVEL = {
+  salas: 1, cozinha: true, lavanderia: false, areaExterna: false,
   id: 'wc-00667',
   nome: 'WC-00667 — Apto Riviera Mar',
   endereco: 'Rua das Pitangueiras, 320, Apto 84 — Riviera de São Lourenço, Bertioga-SP',
@@ -1419,13 +1087,139 @@ const WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';
 const WC_TOKEN = 'wecare_sync_7k2p9m';
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// STATE
 // ═══════════════════════════════════════════════════════
 let currentImovel = MOCK_IMOVEL;
-let sigCanvas, sigCtx, sigDrawing = false, sigHasData = false;
-let extraRowCount = 0;
-let pendenciaCount = 0;
+// videoFiles[idx] = File[] (armazenado em memória, não no localStorage)
+const videoFiles = {};
 
+// ═══════════════════════════════════════════════════════
+// CÔMODOS
+// ═══════════════════════════════════════════════════════
+function getComodos(im) {
+  const list = [];
+  const nq = parseInt(im.quartos) || 0;
+  for (let i = 1; i <= nq; i++) list.push(nq > 1 ? 'Quarto ' + i : 'Quarto');
+  const ns = parseInt(im.salas != null ? im.salas : 1) || 0;
+  for (let i = 1; i <= ns; i++) list.push(ns > 1 ? 'Sala ' + i : 'Sala');
+  if (im.cozinha !== false) list.push('Cozinha');
+  if (im.lavanderia) list.push('Lavanderia');
+  if (im.areaExterna) list.push('Área Externa');
+  return list;
+}
+
+const COMODO_ICONS = {
+  'Quarto': 'fa-bed', 'Sala': 'fa-couch', 'Cozinha': 'fa-utensils',
+  'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
+};
+
+function getComodoIcon(nome) {
+  for (const k of Object.keys(COMODO_ICONS)) {
+    if (nome.startsWith(k)) return COMODO_ICONS[k];
+  }
+  return 'fa-door-open';
+}
+
+function buildComodos() {
+  const comodos = getComodos(currentImovel);
+  const container = document.getElementById('comodos-container');
+  const navContainer = document.getElementById('nav-comodos');
+  let sectionsHtml = '';
+  let navHtml = '';
+
+  comodos.forEach((nome, idx) => {
+    const icon = getComodoIcon(nome);
+    sectionsHtml += `
+    <div class="section-card" id="sec-comodo-${idx}">
+      <div class="section-header" onclick="toggleSection('sec-comodo-${idx}')">
+        <div class="section-icon ic-dec"><i class="fa-solid ${icon}"></i></div>
+        <div class="section-title">${nome}</div>
+        <i class="fa-solid fa-chevron-down section-chevron"></i>
+      </div>
+      <div class="section-body">
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+            <i class="fa-solid fa-video" style="margin-right:5px"></i>Vídeos do cômodo (máx. 3)
+          </div>
+          <div id="videos-grid-${idx}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <label id="add-video-btn-${idx}" style="width:72px;height:72px;border:2px dashed var(--gray-300);border-radius:var(--radius-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:var(--gray-400);gap:4px;background:var(--gray-100)">
+              <i class="fa-solid fa-video" style="font-size:18px"></i>Adicionar
+              <input type="file" accept="video/*,image/*" style="display:none" onchange="addVideo(${idx}, event)">
+            </label>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Irregularidades encontradas</label>
+          <textarea id="irreg-${idx}" rows="3" placeholder="Descreva problemas, danos ou itens com defeito neste cômodo..." oninput="updateProgress()" style="resize:vertical"></textarea>
+        </div>
+      </div>
+    </div>`;
+
+    navHtml += `
+    <a class="nav-item" href="#sec-comodo-${idx}" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid ${icon}"></i></span>
+      ${nome}
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>`;
+  });
+
+  container.innerHTML = sectionsHtml;
+  navContainer.innerHTML = navHtml;
+}
+
+function addVideo(idx, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!videoFiles[idx]) videoFiles[idx] = [];
+  if (videoFiles[idx].length >= 3) {
+    showToast('Máximo de 3 vídeos por cômodo.');
+    event.target.value = '';
+    return;
+  }
+  videoFiles[idx].push(file);
+  renderVideoGrid(idx);
+  event.target.value = '';
+  updateProgress();
+}
+
+function removeVideo(idx, vidIdx) {
+  if (videoFiles[idx]) videoFiles[idx].splice(vidIdx, 1);
+  renderVideoGrid(idx);
+  updateProgress();
+}
+
+function renderVideoGrid(idx) {
+  const grid = document.getElementById('videos-grid-' + idx);
+  const addBtn = document.getElementById('add-video-btn-' + idx);
+  if (!grid) return;
+
+  // Remove existing thumbnails
+  grid.querySelectorAll('.video-thumb').forEach(el => el.remove());
+
+  const files = videoFiles[idx] || [];
+  files.forEach((file, vi) => {
+    const isVideo = file.type.startsWith('video/');
+    const url = URL.createObjectURL(file);
+    const div = document.createElement('div');
+    div.className = 'video-thumb';
+    div.style.cssText = 'position:relative;width:72px;height:72px;border-radius:var(--radius-sm);overflow:hidden;background:#000;border:1px solid var(--gray-200);flex-shrink:0';
+    div.innerHTML = isVideo
+      ? `<video src="${url}" style="width:100%;height:100%;object-fit:cover" muted playsinline></video>`
+      : `<img src="${url}" style="width:100%;height:100%;object-fit:cover">`;
+    const btn = document.createElement('button');
+    btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    btn.style.cssText = 'position:absolute;top:3px;right:3px;background:rgba(0,0,0,.65);border:none;border-radius:50%;width:20px;height:20px;color:#fff;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
+    btn.onclick = () => removeVideo(idx, vi);
+    div.appendChild(btn);
+    grid.insertBefore(div, addBtn);
+  });
+
+  if (addBtn) addBtn.style.display = files.length >= 3 ? 'none' : 'flex';
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
 function _carregarImovelReal() {
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
@@ -1434,421 +1228,35 @@ function _carregarImovelReal() {
     const lista = JSON.parse(localStorage.getItem('wc_imoveis') || '[]');
     const im = lista.find(i => String(i.id) === String(id));
     if (!im) return;
-    // Monta estrutura compatível com vistoria usando dados reais
     currentImovel = {
       id: im.id,
       nome: im.nome || im.id,
       endereco: im.endereco || '',
       quartos: im.quartos || 0,
       banheiros: im.banheiros || 0,
+      salas: im.salas != null ? im.salas : 1,
+      cozinha: im.cozinha !== false,
+      lavanderia: !!im.lavanderia,
+      areaExterna: !!im.areaExterna,
       camas: im.camas || [],
-      wifi: im.wifi || { rede: '', senha: '' },
-      acesso: im.acesso || '',
-      senhaPorta: im.senhaPorta || '',
-      vaga: im.vaga || '',
-      zelador: im.zelador || '',
-      equipamentos: im.equipamentos || MOCK_IMOVEL.equipamentos,
-      inventarioPadrao: im.inventarioPadrao || MOCK_IMOVEL.inventarioPadrao,
-      enxoval: im.enxoval || MOCK_IMOVEL.enxoval
     };
   } catch(e) { console.warn('Erro ao carregar imóvel real', e); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   _carregarImovelReal();
-  initDates();
-  prefillAcesso();
-  buildEquipamentos();
-  buildInventario('inv-padrao-body', currentImovel.inventarioPadrao);
-  buildInventario('inv-enxoval-body', currentImovel.enxoval);
-  buildLimpeza();
-  buildCondominio();
-  buildPraia();
-  buildDecoracao();
-  initSignature();
-  loadDraft();
+  document.getElementById('field-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('header-imovel-name').textContent = currentImovel.nome;
+  buildComodos();
   startAutosave();
   updateProgress();
-  updateHeaderImovel();
 });
-
-function initDates() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('field-data').value = today;
-  document.getElementById('field-data-conclusao').value = today;
-}
-
-function updateHeaderImovel() {
-  document.getElementById('header-imovel-name').textContent = currentImovel.nome;
-}
-
-function prefillAcesso() {
-  document.getElementById('field-wifi-rede').value = currentImovel.wifi.rede;
-  document.getElementById('field-wifi-senha').value = currentImovel.wifi.senha;
-  document.getElementById('field-acesso').value = currentImovel.acesso;
-  document.getElementById('field-senha-porta').value = currentImovel.senhaPorta;
-  document.getElementById('field-vaga').value = currentImovel.vaga;
-  const parts = currentImovel.zelador.split(' — ');
-  document.getElementById('field-zelador-nome').value = parts[0] || currentImovel.zelador;
-  document.getElementById('field-zelador-tel').value = parts[1] || '';
-}
-
-// ═══════════════════════════════════════════════════════
-// EQUIPAMENTOS
-// ═══════════════════════════════════════════════════════
-function buildEquipamentos() {
-  const body = document.getElementById('equip-body');
-  const grupos = {};
-  currentImovel.equipamentos.forEach((e, i) => {
-    if (!grupos[e.comodo]) grupos[e.comodo] = [];
-    grupos[e.comodo].push({ ...e, idx: i });
-  });
-
-  let html = '';
-  for (const [comodo, items] of Object.entries(grupos)) {
-    html += `<div class="comodo-title"><i class="fa-solid fa-door-open" style="font-size:11px"></i> ${comodo}</div>`;
-    items.forEach(e => {
-      const id = `equip-${e.idx}`;
-      html += `
-      <div class="equip-item" id="${id}-wrap">
-        <div class="equip-header">
-          <div class="equip-name">${e.item}</div>
-          <div class="equip-controls">
-            <div class="pill-group">
-              <label class="pill-label pill-ok">
-                <input type="radio" name="${id}-status" value="ok" onchange="updateProgress()">
-                <i class="fa-solid fa-check"></i> OK
-              </label>
-              <label class="pill-label pill-warn">
-                <input type="radio" name="${id}-status" value="atencao" onchange="updateProgress()">
-                <i class="fa-solid fa-triangle-exclamation"></i> Atenção
-              </label>
-              <label class="pill-label pill-bad">
-                <input type="radio" name="${id}-status" value="defeito" onchange="updateProgress()">
-                <i class="fa-solid fa-xmark"></i> Com defeito
-              </label>
-            </div>
-            <label class="btn-camera" title="Adicionar foto">
-              <i class="fa-solid fa-camera"></i>
-              <input type="file" accept="image/*" capture="environment" style="display:none" onchange="onPhotoAdded(this,'${id}')">
-            </label>
-          </div>
-        </div>
-        <div class="equip-obs">
-          <input type="text" id="${id}-obs" placeholder="Observação (opcional)">
-        </div>
-        <div id="${id}-photos" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
-      </div>`;
-    });
-  }
-  body.innerHTML = html;
-}
-
-function onPhotoAdded(input, id) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const container = document.getElementById(id + '-photos');
-    const img = document.createElement('img');
-    img.src = e.target.result;
-    img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200)';
-    container.appendChild(img);
-  };
-  reader.readAsDataURL(file);
-}
-
-// ═══════════════════════════════════════════════════════
-// INVENTÁRIO
-// ═══════════════════════════════════════════════════════
-function buildInventario(tbodyId, items) {
-  const tbody = document.getElementById(tbodyId);
-  let html = '';
-  items.forEach((item, i) => {
-    const id = `${tbodyId}-${i}`;
-    html += `
-    <tr id="${id}-row">
-      <td>${item.item}</td>
-      <td style="text-align:center;font-weight:600">${item.qtdEsperada}</td>
-      <td style="text-align:center">
-        <input type="number" min="0" id="${id}-qtd" value="${item.qtdEsperada}"
-          onchange="calcDiff('${id}',${item.qtdEsperada})" oninput="calcDiff('${id}',${item.qtdEsperada})">
-      </td>
-      <td style="text-align:center">
-        <span class="qty-diff zero" id="${id}-diff">0</span>
-      </td>
-      <td>
-        <input type="text" id="${id}-obs" placeholder="—">
-      </td>
-    </tr>`;
-  });
-  tbody.innerHTML = html;
-}
-
-function calcDiff(id, esperado) {
-  const qtdEl = document.getElementById(id + '-qtd');
-  const diffEl = document.getElementById(id + '-diff');
-  const rowEl = document.getElementById(id + '-row');
-  const encontrado = parseInt(qtdEl.value) || 0;
-  const diff = encontrado - esperado;
-  diffEl.textContent = diff === 0 ? '0' : (diff > 0 ? '+' + diff : diff);
-  diffEl.className = 'qty-diff ' + (diff < 0 ? 'neg' : diff > 0 ? 'pos' : 'zero');
-  if (diff < 0) {
-    rowEl.classList.add('row-alert');
-  } else {
-    rowEl.classList.remove('row-alert');
-  }
-  updateProgress();
-}
-
-// ═══════════════════════════════════════════════════════
-// INVENTÁRIO EXTRA
-// ═══════════════════════════════════════════════════════
-function addExtraRow() {
-  const tbody = document.getElementById('inv-extra-body');
-  const i = extraRowCount++;
-  const tr = document.createElement('tr');
-  tr.id = `extra-${i}`;
-  tr.innerHTML = `
-    <td><input type="text" placeholder="Nome do item"></td>
-    <td><input type="text" placeholder="Local"></td>
-    <td><input type="number" min="0" value="1" style="width:60px;text-align:center;border:1.5px solid var(--gray-200);border-radius:6px;padding:6px 8px;font-family:var(--font);font-size:13px;outline:none"></td>
-    <td><input type="text" placeholder="—"></td>
-    <td>
-      <button class="btn btn-danger btn-sm" onclick="removeRow('extra-${i}')">
-        <i class="fa-solid fa-trash"></i>
-      </button>
-    </td>`;
-  tbody.appendChild(tr);
-  updateProgress();
-}
-
-function removeRow(id) {
-  const el = document.getElementById(id);
-  if (el) el.remove();
-}
-
-// ═══════════════════════════════════════════════════════
-// LIMPEZA
-// ═══════════════════════════════════════════════════════
-function buildLimpeza() {
-  const body = document.getElementById('limpeza-body');
-  let html = '';
-  LIMPEZA_ITEMS.forEach((item, i) => {
-    html += `
-    <div class="check-item">
-      <label for="limp-${i}">
-        <input type="checkbox" id="limp-${i}" onchange="updateProgress()">
-        ${item}
-      </label>
-      <input type="text" class="check-obs" placeholder="Observação" id="limp-${i}-obs">
-    </div>`;
-  });
-  body.innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════
-// CONDOMÍNIO
-// ═══════════════════════════════════════════════════════
-function buildCondominio() {
-  const body = document.getElementById('cond-body');
-  let html = '';
-  COND_ITEMS.forEach(item => {
-    if (item.isText) {
-      html += `
-      <div class="cond-item">
-        <div class="cond-label">${item.label}</div>
-        <input type="text" class="cond-obs" placeholder="Informar..." id="cond-${item.key}-txt">
-      </div>`;
-    } else {
-      const onchange = item.key === 'praia' ? `onPraiaChange()` : `updateProgress()`;
-      html += `
-      <div class="cond-item">
-        <label class="cond-label" for="cond-${item.key}">
-          <input type="checkbox" id="cond-${item.key}" onchange="${onchange}">
-          ${item.label}
-        </label>
-        <input type="text" class="cond-obs" placeholder="Observação" id="cond-${item.key}-obs">
-      </div>`;
-    }
-  });
-  body.innerHTML = html;
-}
-
-function onPraiaChange() {
-  const checked = document.getElementById('cond-praia') && document.getElementById('cond-praia').checked;
-  const sec = document.getElementById('sec-praia');
-  sec.style.display = checked ? 'block' : 'none';
-  updateProgress();
-}
-
-// ═══════════════════════════════════════════════════════
-// PRAIA
-// ═══════════════════════════════════════════════════════
-function buildPraia() {
-  const tbody = document.getElementById('praia-body');
-  let html = '';
-  PRAIA_ITEMS.forEach((item, i) => {
-    html += `
-    <tr>
-      <td>${item}</td>
-      <td><input type="number" min="0" value="0" style="width:70px;text-align:center;border:1.5px solid var(--gray-200);border-radius:6px;padding:6px 8px;font-family:var(--font);font-size:13px;outline:none"></td>
-      <td>
-        <select style="border:1.5px solid var(--gray-200);border-radius:6px;padding:7px 8px;font-family:var(--font);font-size:13px;outline:none">
-          <option value="">—</option>
-          <option value="otimo">Ótimo</option>
-          <option value="bom">Bom</option>
-          <option value="ruim">Ruim</option>
-        </select>
-      </td>
-      <td><input type="text" style="width:100%;border:1.5px solid var(--gray-200);border-radius:6px;padding:6px 8px;font-family:var(--font);font-size:13px;outline:none" placeholder="—"></td>
-    </tr>`;
-  });
-  tbody.innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════
-// DECORAÇÃO
-// ═══════════════════════════════════════════════════════
-function buildDecoracao() {
-  const body = document.getElementById('deco-body');
-  let html = '';
-  DECO_ROOMS.forEach((room, i) => {
-    html += `
-    <div class="deco-item">
-      <div class="deco-room">${room}</div>
-      <div class="deco-controls">
-        <div class="pill-group">
-          <label class="pill-label pill-ok">
-            <input type="radio" name="deco-${i}" value="ok" onchange="updateProgress()">
-            <i class="fa-solid fa-check"></i> OK
-          </label>
-          <label class="pill-label pill-warn">
-            <input type="radio" name="deco-${i}" value="atencao" onchange="updateProgress()">
-            <i class="fa-solid fa-triangle-exclamation"></i> Atenção
-          </label>
-          <label class="pill-label pill-bad">
-            <input type="radio" name="deco-${i}" value="reparo" onchange="updateProgress()">
-            <i class="fa-solid fa-screwdriver-wrench"></i> Reparo
-          </label>
-        </div>
-        <input type="text" placeholder="Observação livre"
-          style="border:1.5px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-family:var(--font);font-size:13px;outline:none;width:100%"
-          id="deco-${i}-obs">
-      </div>
-    </div>`;
-  });
-  body.innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════
-// PENDÊNCIAS
-// ═══════════════════════════════════════════════════════
-function addPendencia() {
-  const container = document.getElementById('pendencias-list');
-  const i = pendenciaCount++;
-  const div = document.createElement('div');
-  div.id = `pend-${i}`;
-  div.className = 'pendencia-row';
-  div.innerHTML = `
-    <input type="text" placeholder="Descrição da pendência" style="border:1.5px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-family:var(--font);font-size:13px;outline:none;width:100%">
-    <select class="urg-select" id="pend-${i}-urg" onchange="updateUrgClass(this)">
-      <option value="">Urgência</option>
-      <option value="alta">Alta</option>
-      <option value="media">Média</option>
-      <option value="baixa">Baixa</option>
-    </select>
-    <input type="text" placeholder="Responsável" style="border:1.5px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-family:var(--font);font-size:13px;outline:none;min-width:100px">
-    <input type="date" style="border:1.5px solid var(--gray-200);border-radius:6px;padding:8px 10px;font-family:var(--font);font-size:13px;outline:none">
-    <button class="btn btn-danger btn-sm" onclick="removeRow('pend-${i}')">
-      <i class="fa-solid fa-trash"></i>
-    </button>`;
-  container.appendChild(div);
-  updateProgress();
-}
-
-function updateUrgClass(sel) {
-  sel.className = 'urg-select';
-  if (sel.value === 'alta') sel.classList.add('urg-alta');
-  else if (sel.value === 'media') sel.classList.add('urg-media');
-  else if (sel.value === 'baixa') sel.classList.add('urg-baixa');
-}
-
-// ═══════════════════════════════════════════════════════
-// ASSINATURA
-// ═══════════════════════════════════════════════════════
-function initSignature() {
-  sigCanvas = document.getElementById('sig-canvas');
-  sigCtx = sigCanvas.getContext('2d');
-
-  function resize() {
-    const rect = sigCanvas.getBoundingClientRect();
-    sigCanvas.width = rect.width * window.devicePixelRatio;
-    sigCanvas.height = rect.height * window.devicePixelRatio;
-    sigCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    sigCtx.strokeStyle = '#0d1b2e';
-    sigCtx.lineWidth = 2;
-    sigCtx.lineCap = 'round';
-    sigCtx.lineJoin = 'round';
-  }
-  resize();
-  window.addEventListener('resize', resize);
-
-  function getPos(e) {
-    const rect = sigCanvas.getBoundingClientRect();
-    const src = e.touches ? e.touches[0] : e;
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
-  }
-
-  sigCanvas.addEventListener('mousedown', e => {
-    sigDrawing = true;
-    const p = getPos(e);
-    sigCtx.beginPath();
-    sigCtx.moveTo(p.x, p.y);
-  });
-  sigCanvas.addEventListener('mousemove', e => {
-    if (!sigDrawing) return;
-    const p = getPos(e);
-    sigCtx.lineTo(p.x, p.y);
-    sigCtx.stroke();
-    sigHasData = true;
-    sigCanvas.classList.add('has-sig');
-  });
-  sigCanvas.addEventListener('mouseup', () => sigDrawing = false);
-  sigCanvas.addEventListener('mouseleave', () => sigDrawing = false);
-
-  sigCanvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    sigDrawing = true;
-    const p = getPos(e);
-    sigCtx.beginPath();
-    sigCtx.moveTo(p.x, p.y);
-  }, { passive: false });
-  sigCanvas.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if (!sigDrawing) return;
-    const p = getPos(e);
-    sigCtx.lineTo(p.x, p.y);
-    sigCtx.stroke();
-    sigHasData = true;
-    sigCanvas.classList.add('has-sig');
-  }, { passive: false });
-  sigCanvas.addEventListener('touchend', () => sigDrawing = false);
-}
-
-function clearSignature() {
-  const rect = sigCanvas.getBoundingClientRect();
-  sigCtx.clearRect(0, 0, rect.width, rect.height);
-  sigHasData = false;
-  sigCanvas.classList.remove('has-sig');
-}
 
 // ═══════════════════════════════════════════════════════
 // NAVEGAÇÃO / UI
 // ═══════════════════════════════════════════════════════
 function toggleSection(id) {
-  const el = document.getElementById(id);
-  el.classList.toggle('collapsed');
+  document.getElementById(id).classList.toggle('collapsed');
 }
 
 function navClick(el) {
@@ -1861,7 +1269,6 @@ document.getElementById('hamburger-btn').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('sidebar-overlay').classList.toggle('open');
 });
-
 document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
 
 function closeSidebar() {
@@ -1869,89 +1276,43 @@ function closeSidebar() {
   document.getElementById('sidebar-overlay').classList.remove('open');
 }
 
-function onImovelChange() {
-  updateHeaderImovel();
-}
-
 // ═══════════════════════════════════════════════════════
 // PROGRESSO
 // ═══════════════════════════════════════════════════════
-const SECTIONS = [
-  { id: 'sec-cab', check: checkCab },
-  { id: 'sec-acesso', check: checkAcesso },
-  { id: 'sec-equip', check: checkEquip },
-  { id: 'sec-inv', check: checkInv },
-  { id: 'sec-externo', check: () => true },
-  { id: 'sec-enxoval', check: checkEnxoval },
-  { id: 'sec-limpeza', check: checkLimpeza },
-  { id: 'sec-cond', check: () => true },
-  { id: 'sec-praia', check: () => true },
-  { id: 'sec-deco', check: checkDeco },
-  { id: 'sec-pend', check: () => true },
-  { id: 'sec-conclusao', check: checkConclusao }
-];
-
-function checkCab() {
-  return !!(document.getElementById('field-data').value &&
-    document.getElementById('field-vistoriador').value.trim());
-}
-function checkAcesso() {
-  return !!(document.getElementById('field-wifi-rede').value.trim());
-}
-function checkEquip() {
-  const radios = document.querySelectorAll('[id^="equip-"][id$="-status"]');
-  if (!radios.length) return false;
-  const names = new Set([...radios].map(r => r.name));
-  for (const name of names) {
-    if (!document.querySelector(`input[name="${name}"]:checked`)) return false;
-  }
-  return true;
-}
-function checkInv() {
-  const inputs = document.querySelectorAll('#inv-padrao-body input[type=number]');
-  for (const inp of inputs) {
-    if (inp.value === '' || inp.value === null) return false;
-  }
-  return inputs.length > 0;
-}
-function checkEnxoval() {
-  const inputs = document.querySelectorAll('#inv-enxoval-body input[type=number]');
-  for (const inp of inputs) {
-    if (inp.value === '' || inp.value === null) return false;
-  }
-  return inputs.length > 0;
-}
-function checkLimpeza() {
-  const checks = document.querySelectorAll('#limpeza-body input[type=checkbox]');
-  return [...checks].some(c => c.checked);
-}
-function checkDeco() {
-  for (let i = 0; i < DECO_ROOMS.length; i++) {
-    if (!document.querySelector(`input[name="deco-${i}"]:checked`)) return false;
-  }
-  return true;
-}
-function checkConclusao() {
-  return !!(document.querySelector('input[name="apto"]:checked') &&
-    document.getElementById('field-nome-conclusao').value.trim());
-}
-
 function updateProgress() {
+  const comodos = getComodos(currentImovel);
+  const total = 1 + comodos.length + 1; // cabeçalho + cômodos + conclusão
   let done = 0;
-  SECTIONS.forEach((sec, idx) => {
-    const navItems = document.querySelectorAll('.nav-item');
-    const isDone = sec.check();
+
+  // Cabeçalho
+  const cabOk = !!(document.getElementById('field-data').value &&
+    document.getElementById('field-vistoriador').value.trim());
+  if (cabOk) done++;
+  const cabNav = document.querySelector('.nav-item[href="#sec-cab"]');
+  if (cabNav) cabNav.classList.toggle('done', cabOk);
+
+  // Cômodos — marcado como done se tiver pelo menos 1 vídeo OU irregularidade preenchida
+  comodos.forEach((nome, idx) => {
+    const hasVideo = (videoFiles[idx] || []).length > 0;
+    const irreg = (document.getElementById('irreg-' + idx) || {}).value || '';
+    const isDone = hasVideo || irreg.trim().length > 0;
     if (isDone) done++;
-    if (navItems[idx]) {
-      navItems[idx].classList.toggle('done', isDone);
-    }
+    const navItems = document.querySelectorAll('#nav-comodos .nav-item');
+    if (navItems[idx]) navItems[idx].classList.toggle('done', isDone);
   });
-  const pct = Math.round((done / SECTIONS.length) * 100);
+
+  // Conclusão
+  const concOk = !!(document.querySelector('input[name="apto"]:checked') &&
+    document.getElementById('field-nome-conclusao').value.trim());
+  if (concOk) done++;
+  const concNav = document.querySelector('.nav-item[href="#sec-conclusao"]');
+  if (concNav) concNav.classList.toggle('done', concOk);
+
+  const pct = Math.round((done / total) * 100);
   document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-label').textContent = `${done} / ${SECTIONS.length} seções`;
+  document.getElementById('progress-label').textContent = `${done} / ${total} seções`;
 }
 
-// Bind all inputs for progress updates
 document.addEventListener('input', updateProgress);
 document.addEventListener('change', updateProgress);
 
@@ -1960,82 +1321,37 @@ document.addEventListener('change', updateProgress);
 // ═══════════════════════════════════════════════════════
 function saveDraft() {
   const data = collectFormData();
-  const key = `vistoria_draft_${currentImovel.id}`;
-  localStorage.setItem(key, JSON.stringify({ ...data, savedAt: new Date().toISOString() }));
+  localStorage.setItem(`vistoria_draft_${currentImovel.id}`, JSON.stringify({ ...data, savedAt: new Date().toISOString() }));
   const ind = document.getElementById('autosave-indicator');
   const now = new Date();
   ind.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
 }
 
-function loadDraft() {
-  const key = `vistoria_draft_${currentImovel.id}`;
-  const raw = localStorage.getItem(key);
-  if (!raw) return;
-  // Draft exists — could restore fields here in a future version
-  // For now just show notification
-  showToast('Rascunho anterior encontrado e carregado.');
-}
-
-function startAutosave() {
-  setInterval(saveDraft, 30000);
-}
+function startAutosave() { setInterval(saveDraft, 30000); }
 
 // ═══════════════════════════════════════════════════════
 // COLETA DE DADOS
 // ═══════════════════════════════════════════════════════
 function collectFormData() {
-  // Equipamentos
-  const equipResult = currentImovel.equipamentos.map((e, i) => {
-    const checked = document.querySelector(`input[name="equip-${i}-status"]:checked`);
-    return {
-      comodo: e.comodo,
-      item: e.item,
-      status: checked ? checked.value : null,
-      obs: (document.getElementById(`equip-${i}-obs`) || {}).value || ''
-    };
-  });
+  const comodos = getComodos(currentImovel);
+  const comodosData = comodos.map((nome, idx) => ({
+    nome,
+    qtdVideos: (videoFiles[idx] || []).length,
+    irregularidade: (document.getElementById('irreg-' + idx) || {}).value || ''
+  }));
 
-  // Inventário padrão
-  const invPadrao = currentImovel.inventarioPadrao.map((item, i) => {
-    const id = `inv-padrao-body-${i}`;
-    return {
-      item: item.item,
-      esperado: item.qtdEsperada,
-      encontrado: parseInt((document.getElementById(id + '-qtd') || {}).value) || 0,
-      obs: (document.getElementById(id + '-obs') || {}).value || ''
-    };
-  });
-
-  // Enxoval
-  const invEnxoval = currentImovel.enxoval.map((item, i) => {
-    const id = `inv-enxoval-body-${i}`;
-    return {
-      item: item.item,
-      esperado: item.qtdEsperada,
-      encontrado: parseInt((document.getElementById(id + '-qtd') || {}).value) || 0,
-      obs: (document.getElementById(id + '-obs') || {}).value || ''
-    };
-  });
+  const irregularidades = comodosData.filter(c => c.irregularidade.trim());
 
   return {
     imovelId: currentImovel.id,
     imovelNome: currentImovel.nome,
     data: document.getElementById('field-data').value,
     vistoriador: document.getElementById('field-vistoriador').value,
-    acesso: {
-      wifiRede: document.getElementById('field-wifi-rede').value,
-      wifiSenha: document.getElementById('field-wifi-senha').value,
-      wifiOk: document.getElementById('field-wifi-ok').checked,
-      instrucoes: document.getElementById('field-acesso').value,
-      senhaPorta: document.getElementById('field-senha-porta').value,
-      vaga: document.getElementById('field-vaga').value,
-    },
-    equipamentos: equipResult,
-    inventarioPadrao: invPadrao,
-    enxoval: invEnxoval,
+    comodos: comodosData,
     aptoPara: (document.querySelector('input[name="apto"]:checked') || {}).value || null,
     obsFinais: document.getElementById('field-obs-finais').value,
     nomeConc: document.getElementById('field-nome-conclusao').value,
+    pendencias: irregularidades.map(c => ({ comodo: c.nome, descricao: c.irregularidade }))
   };
 }
 
@@ -2043,11 +1359,9 @@ function collectFormData() {
 // ENVIO
 // ═══════════════════════════════════════════════════════
 function submitVistoria() {
-  // Validação
   if (!document.getElementById('field-data').value) {
     showToast('Preencha a data da vistoria.');
     document.getElementById('sec-cab').classList.remove('collapsed');
-    document.getElementById('field-data').focus();
     return;
   }
   if (!document.getElementById('field-vistoriador').value.trim()) {
@@ -2057,7 +1371,7 @@ function submitVistoria() {
     return;
   }
   if (!document.querySelector('input[name="apto"]:checked')) {
-    showToast('Indique se o imóvel está apto para ativação.');
+    showToast('Indique se o imóvel está apto para operação.');
     document.getElementById('sec-conclusao').classList.remove('collapsed');
     return;
   }
@@ -2068,72 +1382,29 @@ function submitVistoria() {
     return;
   }
 
-  // Monta alertas
   const data = collectFormData();
-  const alertas = buildAlertas(data);
-  showModal(alertas, data);
+  showModal(data);
 }
 
-function buildAlertas(data) {
-  const alertas = { defeitos: [], invBaixo: [], enxBaixo: [] };
-
-  data.equipamentos.forEach(e => {
-    if (e.status === 'defeito') alertas.defeitos.push(`${e.comodo} — ${e.item}`);
-  });
-  data.inventarioPadrao.forEach(e => {
-    if (e.encontrado < e.esperado) {
-      alertas.invBaixo.push(`${e.item}: encontrado ${e.encontrado} (esperado ${e.esperado})`);
-    }
-  });
-  data.enxoval.forEach(e => {
-    if (e.encontrado < e.esperado) {
-      alertas.enxBaixo.push(`${e.item}: encontrado ${e.encontrado} (esperado ${e.esperado})`);
-    }
-  });
-
-  return alertas;
-}
-
-function showModal(alertas, data) {
-  let html = '';
+function showModal(data) {
   const aptoPara = data.aptoPara;
-  const aptoLabel = { sim: '✓ Sim', nao: '✗ Não', parcialmente: '⚡ Parcialmente' }[aptoPara] || '—';
-  const aptoColor = { sim: 'var(--green)', nao: 'var(--red)', parcialmente: 'var(--amber)' }[aptoPara] || 'var(--gray-500)';
+  const aptoLabel = { sim: '✓ Sim — Apto para operação', nao: '✗ Não — Pendências identificadas' }[aptoPara] || aptoPara;
+  const aptoColor = { sim: 'var(--green)', nao: 'var(--red)' }[aptoPara] || 'var(--gray-500)';
 
-  html += `<div class="modal-section">
-    <div class="modal-section-title">Resultado geral</div>
-    <div style="font-size:18px;font-weight:700;color:${aptoColor}">${aptoLabel} — Apto para ativação</div>
+  let html = `<div class="modal-section">
+    <div class="modal-section-title">Resultado</div>
+    <div style="font-size:17px;font-weight:700;color:${aptoColor}">${aptoLabel}</div>
     <div style="font-size:12px;color:var(--gray-400);margin-top:4px">${data.imovelNome} · ${data.data} · ${data.vistoriador}</div>
   </div>`;
 
-  if (alertas.defeitos.length) {
+  if (data.pendencias.length) {
     html += `<div class="modal-section">
-      <div class="modal-section-title" style="color:var(--red)"><i class="fa-solid fa-xmark"></i> Equipamentos com defeito (${alertas.defeitos.length})</div>`;
-    alertas.defeitos.forEach(d => {
-      html += `<div class="modal-alert-item"><i class="fa-solid fa-circle-xmark" style="color:var(--red);flex-shrink:0"></i> ${d}</div>`;
+      <div class="modal-section-title" style="color:var(--amber)"><i class="fa-solid fa-triangle-exclamation"></i> Irregularidades (${data.pendencias.length})</div>`;
+    data.pendencias.forEach(p => {
+      html += `<div class="modal-alert-item"><i class="fa-solid fa-circle-exclamation" style="color:var(--amber);flex-shrink:0"></i> <strong>${p.comodo}:</strong> ${p.descricao}</div>`;
     });
     html += '</div>';
-  }
-
-  if (alertas.invBaixo.length) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title" style="color:var(--amber)"><i class="fa-solid fa-triangle-exclamation"></i> Inventário abaixo do esperado (${alertas.invBaixo.length})</div>`;
-    alertas.invBaixo.forEach(d => {
-      html += `<div class="modal-alert-item"><i class="fa-solid fa-triangle-exclamation" style="color:var(--amber);flex-shrink:0"></i> ${d}</div>`;
-    });
-    html += '</div>';
-  }
-
-  if (alertas.enxBaixo.length) {
-    html += `<div class="modal-section">
-      <div class="modal-section-title" style="color:var(--amber)"><i class="fa-solid fa-bed"></i> Enxoval abaixo do esperado (${alertas.enxBaixo.length})</div>`;
-    alertas.enxBaixo.forEach(d => {
-      html += `<div class="modal-alert-item"><i class="fa-solid fa-triangle-exclamation" style="color:var(--amber);flex-shrink:0"></i> ${d}</div>`;
-    });
-    html += '</div>';
-  }
-
-  if (!alertas.defeitos.length && !alertas.invBaixo.length && !alertas.enxBaixo.length) {
+  } else {
     html += `<div style="text-align:center;padding:20px 0;color:var(--green);font-weight:600">
       <i class="fa-solid fa-circle-check" style="font-size:32px;display:block;margin-bottom:8px"></i>
       Nenhuma irregularidade identificada!
@@ -2154,10 +1425,8 @@ function confirmarEnvio() {
   const id = `vistoria_${currentImovel.id}_${data.data}_${Date.now()}`;
   const registro = { ...data, id, status: 'enviado', sentAt };
 
-  // Salva registro completo
   localStorage.setItem(`vistoria_final_${id}`, JSON.stringify(registro));
 
-  // Adiciona ao array wc_vistorias (lido pelo módulo no kanban)
   try {
     const lista = JSON.parse(localStorage.getItem('wc_vistorias') || '[]');
     lista.push({
@@ -2167,54 +1436,18 @@ function confirmarEnvio() {
       data: data.data,
       vistoriador: data.vistoriador,
       apto: data.aptoPara,
-      pendencias: data.pendencias || [],
+      pendencias: data.pendencias,
       sentAt
     });
     localStorage.setItem('wc_vistorias', JSON.stringify(lista));
   } catch(e) { console.warn('Erro ao salvar em wc_vistorias', e); }
 
-  // Atualiza badge
   document.getElementById('status-badge').className = 'status-badge status-sent';
   document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-circle-check"></i> Enviado';
-
-  // Pré-preenche formRascunho do imóvel com dados da vistoria
-  _pushFormRascunho(data).catch(e => console.warn('Erro ao enviar rascunho', e));
 
   closeModal();
   showToast('Vistoria salva! Preparando PDF...');
   setTimeout(() => window.print(), 800);
-}
-
-// ═══════════════════════════════════════════════════════
-// PUSH RASCUNHO PARA O WORKER
-// ═══════════════════════════════════════════════════════
-async function _pushFormRascunho(data) {
-  if (!currentImovel.id || currentImovel.id === MOCK_IMOVEL.id) return;
-  const zeladorNome = document.getElementById('field-zelador-nome').value.trim();
-  const zeladorTel  = document.getElementById('field-zelador-tel').value.trim();
-  const wifiRede    = document.getElementById('field-wifi-rede').value.trim();
-  const wifiSenha   = document.getElementById('field-wifi-senha').value.trim();
-  const acesso      = document.getElementById('field-acesso').value.trim();
-  const senhaPorta  = document.getElementById('field-senha-porta').value.trim();
-
-  const rascunho = {};
-  if (acesso || senhaPorta) {
-    rascunho['q81'] = [acesso, senhaPorta ? `Senha da porta: ${senhaPorta}` : ''].filter(Boolean).join('\n');
-  }
-  if (zeladorNome || zeladorTel) {
-    rascunho['q83'] = [zeladorNome, zeladorTel].filter(Boolean).join(' — ');
-  }
-  if (wifiRede || wifiSenha) {
-    rascunho['q86'] = `Rede: ${wifiRede}\nSenha: ${wifiSenha}`;
-  }
-
-  if (!Object.keys(rascunho).length) return;
-
-  await fetch(`${WC_WORKER_URL}/jarvis-notify?token=${WC_TOKEN}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: currentImovel.id, dados: { formRascunho: rascunho } })
-  });
 }
 
 // ═══════════════════════════════════════════════════════
