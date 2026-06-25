@@ -900,12 +900,20 @@ function renderAbaContrato(im){
 
   <div class="form-group"><label>Margem WeCare (%)</label>${numInput({id:'ct-margem',value:margem,min:0,max:100,oninput:'_atualizarSubtotalSetup()'})}</div>
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
-    <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px;color:var(--text-muted);">
-      <span>Subtotal Setup (sem compras)</span>
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);">
+      <span>Subtotal (sem compras)</span>
       <span id="ct-subtotal-val">${fmtMoeda(totalSetupBase)}</span>
     </div>
     <div id="ct-subtotal-detail" style="font-size:11px;color:var(--text-muted);margin-top:4px;">
       Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-top:6px;">
+      <span id="ct-setup-margem-label">Margem WeCare (${margem}%)</span>
+      <span id="ct-setup-margem-val">${fmtMoeda(totalSetupBase*(margem/100))}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:var(--rose);border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
+      <span>Total Setup</span>
+      <span id="ct-setup-total">${fmtMoeda(totalSetupBase*(1+margem/100))}</span>
     </div>
   </div>
 
@@ -987,8 +995,15 @@ function _atualizarSubtotalSetup(){
   const detEl=document.getElementById('ct-subtotal-detail');
   if(valEl)valEl.textContent=fmtMoeda(total);
   if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
-  // atualiza resumo do orçamento
+  // atualiza box margem/total setup
   const mg=+document.getElementById('ct-margem')?.value||(im?.margemWecare||15);
+  const mgSetupEl=document.getElementById('ct-setup-margem-label');
+  const mgSetupValEl=document.getElementById('ct-setup-margem-val');
+  const totalSetupEl=document.getElementById('ct-setup-total');
+  if(mgSetupEl)mgSetupEl.textContent=`Margem WeCare (${mg}%)`;
+  if(mgSetupValEl)mgSetupValEl.textContent=fmtMoeda(total*(mg/100));
+  if(totalSetupEl)totalSetupEl.textContent=fmtMoeda(total*(1+mg/100));
+  // atualiza resumo do orçamento
   let totalCompras=0;
   if(im){
     (ITENS_COMPRAS||[]).forEach((item,idx)=>{
