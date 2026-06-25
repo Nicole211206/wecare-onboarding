@@ -1299,7 +1299,7 @@ function salvarRascunhoForm(){
 }
 function importarRespostasParaRascunho(){
   const im=getImovel(_imovelAtivoId);if(!im||!im.formRespostas)return;
-  im.formRascunho={...(im.formRascunho||{}),...im.formRespostas};
+  im.formRascunho={...(im.formRespostas||{}),...(im.formRascunho||{})};
   saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
 }
 
@@ -1884,7 +1884,7 @@ async function criarTarefaClaire(){
   _coletarDadosAba('final',im);
   const resp=im.responsavelCriacao||'';
   if(!resp){showToast('Informe o responsável primeiro.','peach');return;}
-  const respostas={...(im.formRascunho||{}),...(im.formRespostas||{})};
+  const respostas={...(im.formRespostas||{}),...(im.formRascunho||{})};
   const perguntas=(window.FORM_PERGUNTAS_FLAT||[]);
   const respostasTxt=perguntas.filter(p=>respostas[p.id]).map(p=>`• ${p.label}: ${respostas[p.id]}`).join('\n');
   const camas=(im.camas||[]).map(c=>`${c.qtd}x ${c.tipo}`).join(', ');
@@ -1917,22 +1917,63 @@ ${respostasTxt||'(sem respostas ainda)'}`;
 }
 function gerarPDFFormulario(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const respostas={...(im.formRascunho||{}),...(im.formRespostas||{})};
+  const respostas={...(im.formRespostas||{}),...(im.formRascunho||{})};
   const secoes=window.FORM_SECOES||[];
-  let html=`<html><head><title>Formulário — ${esc(im.nome)}</title>
-  <style>body{font-family:Arial;padding:24px;color:#333;}h1{color:#c7587a;font-size:20px;}h2{color:#a57ab5;font-size:14px;margin-top:20px;border-bottom:1px solid #ddd;padding-bottom:4px;}.q{margin:10px 0;}.ql{font-weight:600;font-size:12px;color:#555;}.qa{font-size:13px;padding:4px 0;}.empty{color:#bbb;font-style:italic;}</style></head><body>
-  <h1>Formulário — ${esc(im.nome)}</h1>
-  <p style="font-size:12px;color:#888;">Proprietário: ${esc(im.proprietarioNome||'—')} | Endereço: ${esc(im.endereco||'—')} | Gerado: ${fmtDate(hoje())}</p>`;
-  secoes.forEach(sec=>{
-    html+=`<h2>${esc(sec.secao)}</h2>`;
-    (sec.perguntas||[]).forEach(p=>{
+  const totalPergs=(secoes||[]).reduce((s,sec)=>s+(sec.perguntas||[]).length,0);
+  const respondidos=Object.keys(respostas).filter(k=>respostas[k]&&String(respostas[k]).trim()).length;
+  const pct=totalPergs?Math.round(respondidos/totalPergs*100):0;
+  const secoesHtml=secoes.map(sec=>{
+    const pergsHtml=(sec.perguntas||[]).map(p=>{
       const r=respostas[p.id];
-      html+=`<div class="q"><div class="ql">${esc(p.label)}</div><div class="qa">${r?esc(r):'<span class="empty">Não respondido</span>'}</div></div>`;
-    });
-  });
-  html+='</body></html>';
+      const vazio=!r||!String(r).trim();
+      return`<div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid #f0e8f4;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">${esc(p.label)}</div>
+          <div style="font-size:13px;color:${vazio?'#bbb':'#333'};${vazio?'font-style:italic;':''}">${vazio?'Não respondido':esc(String(r))}</div>
+        </div>
+      </div>`;
+    }).join('');
+    const total=(sec.perguntas||[]).length;
+    const conf=(sec.perguntas||[]).filter(p=>respostas[p.id]&&String(respostas[p.id]).trim()).length;
+    return`<div style="margin-bottom:20px;break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-bottom:0;">
+        <span style="font-size:13px;font-weight:700;">${esc(sec.secao)}</span>
+        <span style="font-size:11px;opacity:.75;">${conf}/${total}</span>
+      </div>
+      <div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:4px 14px 4px;">${pergsHtml}</div>
+    </div>`;
+  }).join('');
   const win=window.open('','_blank');
-  win.document.write(html);win.document.close();win.print();
+  win.document.write(`<html><head><meta charset="utf-8"><title>Formulário — ${esc(im.nome)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:820px;margin:0 auto;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
+    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
+    .brand span{color:#a57ab5;}
+    .meta{font-size:12px;color:#888;text-align:right;line-height:1.7;}
+    .progress-bar{height:8px;background:#f0e0e8;border-radius:4px;margin:12px 0 4px;}
+    .progress-fill{height:8px;background:linear-gradient(90deg,#c7587a,#a57ab5);border-radius:4px;}
+    .progress-label{font-size:11px;color:#9b8fa8;margin-bottom:20px;}
+    @media print{body{padding:16px;}@page{margin:1cm;}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="brand">We<span>Care</span> Hosting</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">Formulário de Onboarding</div>
+    </div>
+    <div class="meta">
+      <div style="font-weight:700;color:#333;">${esc(im.nome)}</div>
+      <div><strong>Proprietário:</strong> ${esc(im.proprietarioNome||'—')}</div>
+      <div>${esc(im.endereco||'')}</div>
+      <div>Gerado em ${fmtDate(hoje())}</div>
+    </div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+  <div class="progress-label">${respondidos} de ${totalPergs} campos preenchidos (${pct}%)</div>
+  ${secoesHtml}
+  </body></html>`);
+  win.document.close();win.print();
 }
 function pedirCotacaoJarvis(modo){
   const im=getImovel(_imovelAtivoId);if(!im)return;
