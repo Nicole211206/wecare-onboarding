@@ -1096,21 +1096,28 @@ const videoFiles = {};
 // ═══════════════════════════════════════════════════════
 // CÔMODOS
 // ═══════════════════════════════════════════════════════
+function _qtdComodo(v){if(v===true)return 1;if(!v)return 0;const n=parseInt(v);return isNaN(n)?0:n;}
+
 function getComodos(im) {
   const list = [];
   const nq = parseInt(im.quartos) || 0;
   for (let i = 1; i <= nq; i++) list.push(nq > 1 ? 'Quarto ' + i : 'Quarto');
   const ns = parseInt(im.salas != null ? im.salas : 1) || 0;
   for (let i = 1; i <= ns; i++) list.push(ns > 1 ? 'Sala ' + i : 'Sala');
-  if (im.cozinha !== false) list.push('Cozinha');
-  if (im.lavanderia) list.push('Lavanderia');
-  if (im.areaExterna) list.push('Área Externa');
+  const nc = _qtdComodo(im.cozinha !== undefined ? im.cozinha : 1);
+  for (let i = 1; i <= nc; i++) list.push(nc > 1 ? 'Cozinha ' + i : 'Cozinha');
+  const nb = (parseInt(im.banheirosCompletos) || 0) + (parseInt(im.banheirosLavabo) || 0) || parseInt(im.banheiros) || 0;
+  for (let i = 1; i <= nb; i++) list.push(nb > 1 ? 'Banheiro ' + i : 'Banheiro');
+  const nl = _qtdComodo(im.lavanderia);
+  for (let i = 1; i <= nl; i++) list.push(nl > 1 ? 'Lavanderia ' + i : 'Lavanderia');
+  const na = _qtdComodo(im.areaExterna);
+  for (let i = 1; i <= na; i++) list.push(na > 1 ? 'Área Externa ' + i : 'Área Externa');
   return list;
 }
 
 const COMODO_ICONS = {
   'Quarto': 'fa-bed', 'Sala': 'fa-couch', 'Cozinha': 'fa-utensils',
-  'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
+  'Banheiro': 'fa-bath', 'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
 };
 
 function getComodoIcon(nome) {
@@ -1234,10 +1241,12 @@ function _carregarImovelReal() {
       endereco: im.endereco || '',
       quartos: im.quartos || 0,
       banheiros: im.banheiros || 0,
+      banheirosCompletos: im.banheirosCompletos || 0,
+      banheirosLavabo: im.banheirosLavabo || 0,
       salas: im.salas != null ? im.salas : 1,
-      cozinha: im.cozinha !== false,
-      lavanderia: !!im.lavanderia,
-      areaExterna: !!im.areaExterna,
+      cozinha: im.cozinha !== undefined ? im.cozinha : 1,
+      lavanderia: im.lavanderia || 0,
+      areaExterna: im.areaExterna || 0,
       camas: im.camas || [],
     };
   } catch(e) { console.warn('Erro ao carregar imóvel real', e); }

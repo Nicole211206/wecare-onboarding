@@ -154,6 +154,9 @@ function numInput({id,value=0,min=0,max='',step=1,style='',oninput='',onchange='
   </div>`;
 }
 
+// Converte campo cozinha/lavanderia/areaExterna que pode ser boolean (legado) ou number
+function _qtdComodo(v){if(v===true)return 1;if(!v)return 0;const n=parseInt(v);return isNaN(n)?0:n;}
+
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
@@ -408,9 +411,9 @@ function salvarNovoImovel(){
     comissaoBase:document.getElementById('ni-comissao-base').value,
     quartos:+document.getElementById('ni-quartos').value||1,
     salas:+document.getElementById('ni-salas').value||1,
-    cozinha:document.getElementById('ni-cozinha').checked,
-    lavanderia:document.getElementById('ni-lavanderia').checked,
-    areaExterna:document.getElementById('ni-area-externa').checked,
+    cozinha:+document.getElementById('ni-cozinha').value||0,
+    lavanderia:+document.getElementById('ni-lavanderia').value||0,
+    areaExterna:+document.getElementById('ni-area-externa').value||0,
     banheirosCompletos:+document.getElementById('ni-banheiros-completos').value||1,
     banheirosLavabo:+document.getElementById('ni-banheiros-lavabo').value||0,
     dataCriacao:document.getElementById('ni-data-criacao').value||hoje(),
@@ -533,7 +536,7 @@ function _coletarDadosAba(aba,im){
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
-    im.cozinha=!!(document.getElementById('d-cozinha')?.checked); im.lavanderia=!!(document.getElementById('d-lavanderia')?.checked); im.areaExterna=!!(document.getElementById('d-area-externa')?.checked);
+    im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
     im.observacoes=g('d-obs');
@@ -636,9 +639,9 @@ function renderAbaDados(im){
     <div class="form-group"><label>Lavabos</label>${numInput({id:'d-banheiros-lavabo',value:im.banheirosLavabo||0,min:0})}</div>
   </div>
   <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
-    <label class="checkbox-label"><input type="checkbox" id="d-cozinha"${im.cozinha!==false?' checked':''}> Cozinha</label>
-    <label class="checkbox-label"><input type="checkbox" id="d-lavanderia"${im.lavanderia?' checked':''}> Lavanderia</label>
-    <label class="checkbox-label"><input type="checkbox" id="d-area-externa"${im.areaExterna?' checked':''}> Área Externa</label>
+    <div class="form-group"><label>Cozinhas</label>${numInput({id:'d-cozinha',value:_qtdComodo(im.cozinha),min:0})}</div>
+    <div class="form-group"><label>Lavanderias</label>${numInput({id:'d-lavanderia',value:_qtdComodo(im.lavanderia),min:0})}</div>
+    <div class="form-group"><label>Áreas Externas</label>${numInput({id:'d-area-externa',value:_qtdComodo(im.areaExterna),min:0})}</div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
