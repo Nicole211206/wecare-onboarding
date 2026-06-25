@@ -532,7 +532,8 @@ function _coletarDadosAba(aba,im){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
-    im.quartos=gn('d-quartos')||1; im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
+    im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
+    im.cozinha=!!(document.getElementById('d-cozinha')?.checked); im.lavanderia=!!(document.getElementById('d-lavanderia')?.checked); im.areaExterna=!!(document.getElementById('d-area-externa')?.checked);
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
     im.observacoes=g('d-obs');
@@ -630,8 +631,14 @@ function renderAbaDados(im){
   <div class="form-group"><label>Endereço</label><input id="d-endereco" class="input" value="${esc(im.endereco||'')}"></div>
   <div class="form-row">
     <div class="form-group"><label>Quartos</label>${numInput({id:'d-quartos',value:im.quartos||1,min:1})}</div>
+    <div class="form-group"><label>Salas</label>${numInput({id:'d-salas',value:im.salas!=null?im.salas:1,min:0})}</div>
     <div class="form-group"><label>Banheiros completos</label>${numInput({id:'d-banheiros-completos',value:im.banheirosCompletos!=null?im.banheirosCompletos:(im.banheiros||1),min:0})}</div>
     <div class="form-group"><label>Lavabos</label>${numInput({id:'d-banheiros-lavabo',value:im.banheirosLavabo||0,min:0})}</div>
+  </div>
+  <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
+    <label class="checkbox-label"><input type="checkbox" id="d-cozinha"${im.cozinha!==false?' checked':''}> Cozinha</label>
+    <label class="checkbox-label"><input type="checkbox" id="d-lavanderia"${im.lavanderia?' checked':''}> Lavanderia</label>
+    <label class="checkbox-label"><input type="checkbox" id="d-area-externa"${im.areaExterna?' checked':''}> Área Externa</label>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
@@ -2332,8 +2339,11 @@ function removerVistoria(id){
   try{
     const lista=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
     localStorage.setItem('wc_vistorias',JSON.stringify(lista.filter(v=>v.id!==id)));
-    localStorage.removeItem('vistoria_final_'+id);
-    localStorage.removeItem('vistoria_draft_'+id);
+    // id já é a chave completa (ex: vistoria_final_...)
+    localStorage.removeItem(id);
+    // tentar remover draft associado ao imóvel
+    const drafts=Object.keys(localStorage).filter(k=>k.startsWith('vistoria_draft_'));
+    drafts.forEach(k=>{try{const d=JSON.parse(localStorage.getItem(k)||'{}');if(d.vistoriaId===id||k===id)localStorage.removeItem(k);}catch(e){}});
   }catch(e){console.warn('Erro ao remover vistoria',e);}
   renderVistoria();
 }
