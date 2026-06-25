@@ -110,29 +110,38 @@ function extractFolderId(driveUrl) {
 }
 
 async function listDriveFolder(folderId, accessToken) {
-  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100&orderBy=modifiedTime%20desc`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  const data = await res.json();
-  const files = Array.isArray(data.files) ? data.files : [];
+  async function listLevel(id) {
+    const q = encodeURIComponent(`'${id}' in parents and trashed=false`);
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await res.json();
+    return Array.isArray(data.files) ? data.files : [];
+  }
 
-  // Recursão um nível: entra em sub-pastas
-  const subfolders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
-  const subFiles = [];
-  for (const sf of subfolders.slice(0, 10)) {
+  const level1 = await listLevel(folderId);
+  const allFiles = [...level1];
+
+  // Nível 2
+  const folders1 = level1.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  for (const f1 of folders1.slice(0, 10)) {
     try {
-      const q2 = encodeURIComponent(`'${sf.id}' in parents and trashed=false`);
-      const r2 = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,size)&pageSize=50`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const d2 = await r2.json();
-      if (Array.isArray(d2.files)) subFiles.push(...d2.files);
+      const level2 = await listLevel(f1.id);
+      allFiles.push(...level2);
+
+      // Nível 3
+      const folders2 = level2.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+      for (const f2 of folders2.slice(0, 10)) {
+        try {
+          const level3 = await listLevel(f2.id);
+          allFiles.push(...level3);
+        } catch {}
+      }
     } catch {}
   }
-  return [...files, ...subFiles];
+
+  return allFiles;
 }
 
 async function exportGoogleDoc(fileId, accessToken) {
