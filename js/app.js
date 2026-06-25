@@ -530,7 +530,11 @@ function _coletarDadosAba(aba,im){
   const gc=id=>{const el=document.getElementById(id);return el?el.checked:false};
   const gn=id=>+g(id)||0;
   if(aba==='captacao'){
+    const linkAnterior=im.captacaoLink||'';
     im.captacaoLink=g('cap-link');
+    if(im.captacaoLink&&im.captacaoLink!==linkAnterior){
+      triggerDriveAnalysis(im);
+    }
   }
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
@@ -726,6 +730,12 @@ function renderAbaCaptacao(im){
     </div>
   </div>
   ${im.jarvisPreenchidoEm?`<div class="alert-success" style="margin-top:4px;"><i class="fa-solid fa-robot"></i> Jarvis preencheu dados automaticamente em <strong>${fmtDate(im.jarvisPreenchidoEm)}</strong>.</div>`:''}
+  ${im.claudeAnalisando
+    ?`<div class="alert-info" style="margin-top:8px;"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>🤖 Analisando...</div>`
+    :im.claudeAnalisadoEm
+      ?`<div class="alert-success" style="margin-top:8px;display:flex;align-items:center;gap:8px;"><span><i class="fa-solid fa-check-circle"></i> ✅ Analisado em <strong>${fmtDate(im.claudeAnalisadoEm)}</strong> · ${im.arquivosAnalisados||0} arquivo(s)</span><button class="btn btn-sm btn-outline" style="margin-left:auto;" onclick="triggerDriveAnalysis(getImovel('${im.id}'))">🔄 Reanalisar</button></div>`
+      :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
+  }
 
   <details style="margin-top:16px;">
     <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);user-select:none;padding:8px 0;">
@@ -767,6 +777,43 @@ function renderAbaCaptacao(im){
     ${temLink?`<a href="${esc(im.captacaoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-google-drive"></i> Abrir pasta no Drive</a>`:''}
   </div>
   </div>`;
+}
+
+// ═══════════════════ ANÁLISE DRIVE + CLAUDE ═══════════════════
+async function triggerDriveAnalysis(im){
+  const s=window.WC_SYNC||{};
+  if(!s.url){showToast('Worker não configurado.','peach');return;}
+  showToast('🤖 Analisando pasta Drive...','');
+  im.claudeAnalisando=true;saveAll();
+
+  // Buscar vistoria recente do localStorage
+  let vistoriaRecente=null;
+  try{
+    const vistorias=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
+    const deste=vistorias.filter(v=>v.imovelId===im.id||v.imovelId===String(im.id));
+    if(deste.length){
+      deste.sort((a,b)=>new Date(b.data||b.criadoEm||0)-new Date(a.data||a.criadoEm||0));
+      const v=deste[0];
+      vistoriaRecente={pendencias:v.pendencias,comodos:v.comodos,aptoPara:v.aptoPara};
+    }
+  }catch{}
+
+  try{
+    const r=await fetch(s.url.replace(/\/$/,'')+'/analisar-drive?token='+encodeURIComponent(s.token||''),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:im.id,vistoriaRecente})
+    });
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'Falha na análise');
+    await kvPull(false);
+    renderAba(_abaAtiva);
+    showToast('✅ Preenchimento concluído! '+j.arquivos+' arquivo(s) analisado(s)','sage');
+  }catch(e){
+    showToast('Erro na análise Drive: '+(e.message||'desconhecido'),'peach');
+  }finally{
+    const imAtual=getImovel(im.id);
+    if(imAtual){imAtual.claudeAnalisando=false;saveAll();}
+  }
 }
 
 // ═══════════════════ ABA FOTOS ═══════════════════

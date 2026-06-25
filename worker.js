@@ -50,6 +50,96 @@ async function putState(env, state) {
   await env.ONBOARDING_KV.put(KV_KEY, JSON.stringify(state));
 }
 
+// ── Google Drive + Claude Haiku helpers ──────────────────────────────────────
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function getGoogleAccessToken(saJson) {
+  const sa = typeof saJson === 'string' ? JSON.parse(saJson) : saJson;
+  const now = Math.floor(Date.now() / 1000);
+  const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const payload = btoa(JSON.stringify({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const signingInput = `${header}.${payload}`;
+  // Import the private key
+  const pemContents = sa.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  const keyData = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', keyData.buffer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5', cryptoKey,
+    new TextEncoder().encode(signingInput)
+  );
+  const sig = arrayBufferToBase64(sigBuf)
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const jwt = `${signingInput}.${sig}`;
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+  const tokenJson = await tokenRes.json();
+  if (!tokenJson.access_token) throw new Error('Google token error: ' + JSON.stringify(tokenJson));
+  return tokenJson.access_token;
+}
+
+function extractFolderId(driveUrl) {
+  const m = String(driveUrl || '').match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+async function listDriveFolder(folderId, accessToken) {
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=50&orderBy=modifiedTime%20desc`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const data = await res.json();
+  return Array.isArray(data.files) ? data.files : [];
+}
+
+async function exportGoogleDoc(fileId, accessToken) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) return '';
+  return await res.text();
+}
+
+async function downloadFileBase64(fileId, mimeType, accessToken) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  return { base64: arrayBufferToBase64(buf), mimeType };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default {
   async fetch(request, env) {
     const url   = new URL(request.url);
@@ -483,6 +573,174 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       }
 
       return json({ ok: true, dados });
+    }
+
+    // ── POST /analisar-drive — Google Drive + Claude Haiku ───────────────────
+    if (request.method === 'POST' && path === '/analisar-drive') {
+      if (!checkAuth(token, env)) return unauthorized();
+      if (!env.ANTHROPIC_KEY)        return json({ ok: false, error: 'ANTHROPIC_KEY não configurada' }, 500);
+      if (!env.GOOGLE_SERVICE_ACCOUNT) return json({ ok: false, error: 'GOOGLE_SERVICE_ACCOUNT não configurada' }, 500);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+      const imovelId = body.id || '';
+      if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
+
+      const state   = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im      = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+
+      const folderId = extractFolderId(im.captacaoLink || '');
+      if (!folderId) return json({ ok: false, error: 'Link da pasta Drive inválido ou não configurado' }, 400);
+
+      // Obter token Google
+      const accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT);
+
+      // Listar arquivos da pasta
+      const files = await listDriveFolder(folderId, accessToken);
+
+      // Baixar conteúdo relevante
+      const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
+      const textParts  = [];
+      const imageParts = [];
+      const videoNotes = [];
+      let imagesCount  = 0;
+
+      for (const file of files) {
+        if (file.mimeType && file.mimeType.startsWith('video/')) {
+          videoNotes.push(`[Vídeo ignorado (muito grande para análise): ${file.name}]`);
+          continue;
+        }
+        if (file.mimeType === 'application/vnd.google-apps.document') {
+          try {
+            const text = await exportGoogleDoc(file.id, accessToken);
+            if (text) textParts.push(`=== Documento: ${file.name} ===\n${text.slice(0, 8000)}`);
+          } catch {}
+          continue;
+        }
+        if (file.mimeType === 'text/plain') {
+          try {
+            const res2 = await fetch(
+              `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (res2.ok) {
+              const txt = await res2.text();
+              textParts.push(`=== Arquivo texto: ${file.name} ===\n${txt.slice(0, 4000)}`);
+            }
+          } catch {}
+          continue;
+        }
+        if (IMAGE_TYPES.includes(file.mimeType) && imagesCount < 10) {
+          try {
+            const img = await downloadFileBase64(file.id, file.mimeType, accessToken);
+            if (img) {
+              imageParts.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64 } });
+              imagesCount++;
+            }
+          } catch {}
+        }
+      }
+
+      // Contexto de vistoria
+      const vistoria = body.vistoriaRecente;
+      let vistoriaCtx = '';
+      if (vistoria) {
+        vistoriaCtx = '\n\n=== DADOS DA VISTORIA RECENTE ===\n';
+        if (vistoria.pendencias)  vistoriaCtx += `Pendências: ${vistoria.pendencias}\n`;
+        if (vistoria.comodos)     vistoriaCtx += `Cômodos: ${JSON.stringify(vistoria.comodos)}\n`;
+        if (vistoria.aptoPara)    vistoriaCtx += `Apto para: ${vistoria.aptoPara}\n`;
+      }
+
+      const textoContexto = textParts.join('\n\n') + (videoNotes.length ? '\n\n' + videoNotes.join('\n') : '') + vistoriaCtx;
+
+      // Montar mensagem para Claude
+      const systemPrompt = `Você é um assistente especializado em imóveis para aluguel por temporada da WeCare Hosting.
+Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
+Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
+Estrutura esperada:
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+Regras:
+- Use 0 ou "" para campos não encontrados. NÃO invente informações.
+- Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
+- q9: endereço completo do imóvel
+- q81: como hóspedes acessam (portaria, fechadura, etc.) + senha da porta + vaga
+- q83: nome e telefone do zelador/portaria
+- q86: rede e senha do Wi-Fi`;
+
+      const userContent = [];
+      if (textoContexto.trim()) {
+        userContent.push({ type: 'text', text: 'Contexto extraído dos documentos:\n' + textoContexto.slice(0, 20000) });
+      }
+      for (const img of imageParts) {
+        userContent.push(img);
+      }
+      if (!userContent.length) {
+        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta' }, 400);
+      }
+      userContent.push({ type: 'text', text: 'Extraia os dados do imóvel e retorne o JSON.' });
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': env.ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const err = await claudeRes.text();
+        return json({ ok: false, error: 'Erro Claude: ' + err }, 502);
+      }
+
+      const claudeJson = await claudeRes.json();
+      const rawText = claudeJson?.content?.[0]?.text || '';
+      let resultado = {};
+      const ini = rawText.indexOf('{');
+      const fim = rawText.lastIndexOf('}');
+      if (ini >= 0 && fim > ini) {
+        try { resultado = JSON.parse(rawText.slice(ini, fim + 1)); } catch { resultado = {}; }
+      }
+
+      // Aplicar resultado ao imóvel (só preenche campos vazios)
+      const campos = ['proprietarioNome','proprietarioTel','endereco','observacoes','acesso','senhaPorta','vaga','zeladorNome','zeladorTel'];
+      const mapaDir = { proprietarioNome:'proprietarioNome', proprietarioTel:'proprietarioTel', endereco:'endereco', observacoes:'observacoes', acesso:'acesso', senha_porta:'senhaPorta', vaga:'vaga', zelador_nome:'zeladorNome', zelador_tel:'zeladorTel' };
+      for (const [rk, ik] of Object.entries(mapaDir)) {
+        if (resultado[rk] && !im[ik]) im[ik] = resultado[rk];
+      }
+      const numCampos = ['quartos','salas','banheirosCompletos','banheirosLavabo','cozinha','lavanderia','areaExterna','varanda'];
+      for (const k of numCampos) {
+        if (resultado[k] && !im[k]) im[k] = +resultado[k];
+      }
+      if (Array.isArray(resultado.camas) && resultado.camas.length && (!Array.isArray(im.camas) || !im.camas.length)) {
+        im.camas = resultado.camas;
+      }
+      if (resultado.wifi_rede || resultado.wifi_senha) {
+        if (!im.wifi) im.wifi = {};
+        if (resultado.wifi_rede  && !im.wifi.rede)  im.wifi.rede  = resultado.wifi_rede;
+        if (resultado.wifi_senha && !im.wifi.senha) im.wifi.senha = resultado.wifi_senha;
+      }
+      // formRascunho
+      if (!im.formRascunho) im.formRascunho = {};
+      const conf = im.formConfirmados || {};
+      const fr = resultado.formRascunho || {};
+      for (const [qid, val] of Object.entries(fr)) {
+        if (!conf[qid] && val) im.formRascunho[qid] = String(val);
+      }
+
+      im.claudeAnalisadoEm  = new Date().toISOString();
+      im.arquivosAnalisados = files.length;
+
+      await putState(env, state);
+      return json({ ok: true, arquivos: files.length, resultado });
     }
 
     // ── 404 ───────────────────────────────────────────────────────────────────
