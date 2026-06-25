@@ -112,11 +112,27 @@ function extractFolderId(driveUrl) {
 async function listDriveFolder(folderId, accessToken) {
   const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=50&orderBy=modifiedTime%20desc`,
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100&orderBy=modifiedTime%20desc`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const data = await res.json();
-  return Array.isArray(data.files) ? data.files : [];
+  const files = Array.isArray(data.files) ? data.files : [];
+
+  // Recursão um nível: entra em sub-pastas
+  const subfolders = files.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+  const subFiles = [];
+  for (const sf of subfolders.slice(0, 10)) {
+    try {
+      const q2 = encodeURIComponent(`'${sf.id}' in parents and trashed=false`);
+      const r2 = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q2}&fields=files(id,name,mimeType,size)&pageSize=50`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const d2 = await r2.json();
+      if (Array.isArray(d2.files)) subFiles.push(...d2.files);
+    } catch {}
+  }
+  return [...files, ...subFiles];
 }
 
 async function exportGoogleDoc(fileId, accessToken) {
@@ -586,12 +602,22 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       const imovelId = body.id || '';
       if (!imovelId) return json({ ok: false, error: 'id obrigatório' }, 400);
 
+      // Carregar estado do KV (sempre necessário para salvar de volta)
       const state   = await getState(env);
       const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
-      const im      = imoveis.find(i => String(i.id) === imovelId);
-      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+      let im        = imoveis.find(i => String(i.id) === imovelId);
+      if (!im) {
+        // imóvel não está no KV ainda — cria um stub para ser populado
+        im = { id: imovelId };
+        imoveis.push(im);
+        state.wc_imoveis = imoveis;
+      }
 
-      const folderId = extractFolderId(im.captacaoLink || '');
+      // captacaoLink pode vir direto no body (frontend envia) ou do KV
+      const captacaoLink = body.captacaoLink || im.captacaoLink || '';
+      if (captacaoLink) im.captacaoLink = captacaoLink; // persiste se veio no body
+
+      const folderId = extractFolderId(captacaoLink);
       if (!folderId) return json({ ok: false, error: 'Link da pasta Drive inválido ou não configurado' }, 400);
 
       // Obter token Google
@@ -604,34 +630,51 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
       const textParts  = [];
       const imageParts = [];
-      const videoNotes = [];
+      const filesSeen  = files.map(f => `${f.name} (${f.mimeType})`);
       let imagesCount  = 0;
 
       for (const file of files) {
-        if (file.mimeType && file.mimeType.startsWith('video/')) {
-          videoNotes.push(`[Vídeo ignorado (muito grande para análise): ${file.name}]`);
+        if (!file.mimeType) continue;
+        // Vídeos — apenas nota
+        if (file.mimeType.startsWith('video/')) {
+          textParts.push(`[Vídeo disponível: ${file.name}]`);
           continue;
         }
+        // Google Docs → exporta como texto
         if (file.mimeType === 'application/vnd.google-apps.document') {
           try {
             const text = await exportGoogleDoc(file.id, accessToken);
-            if (text) textParts.push(`=== Documento: ${file.name} ===\n${text.slice(0, 8000)}`);
+            if (text) textParts.push(`=== ${file.name} ===\n${text.slice(0, 8000)}`);
           } catch {}
           continue;
         }
-        if (file.mimeType === 'text/plain') {
+        // Google Sheets → exporta como CSV
+        if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
           try {
-            const res2 = await fetch(
-              `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            if (res2.ok) {
-              const txt = await res2.text();
-              textParts.push(`=== Arquivo texto: ${file.name} ===\n${txt.slice(0, 4000)}`);
+            const r2 = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}/export?mimeType=text/csv`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            if (r2.ok) { const txt = await r2.text(); textParts.push(`=== ${file.name} ===\n${txt.slice(0,3000)}`); }
+          } catch {}
+          continue;
+        }
+        // PDFs → envia como documento base64 para Claude
+        if (file.mimeType === 'application/pdf') {
+          try {
+            const img = await downloadFileBase64(file.id, 'application/pdf', accessToken);
+            if (img) {
+              imageParts.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: img.base64 } });
             }
           } catch {}
           continue;
         }
+        // Texto puro / DOCX → tenta baixar como texto
+        if (file.mimeType === 'text/plain') {
+          try {
+            const r2 = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            if (r2.ok) { const txt = await r2.text(); textParts.push(`=== ${file.name} ===\n${txt.slice(0,4000)}`); }
+          } catch {}
+          continue;
+        }
+        // Imagens
         if (IMAGE_TYPES.includes(file.mimeType) && imagesCount < 10) {
           try {
             const img = await downloadFileBase64(file.id, file.mimeType, accessToken);
@@ -653,7 +696,7 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
         if (vistoria.aptoPara)    vistoriaCtx += `Apto para: ${vistoria.aptoPara}\n`;
       }
 
-      const textoContexto = textParts.join('\n\n') + (videoNotes.length ? '\n\n' + videoNotes.join('\n') : '') + vistoriaCtx;
+      const textoContexto = textParts.join('\n\n') + vistoriaCtx;
 
       // Montar mensagem para Claude
       const systemPrompt = `Você é um assistente especializado em imóveis para aluguel por temporada da WeCare Hosting.
@@ -677,7 +720,7 @@ Regras:
         userContent.push(img);
       }
       if (!userContent.length) {
-        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta' }, 400);
+        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta', filesFound: filesSeen }, 400);
       }
       userContent.push({ type: 'text', text: 'Extraia os dados do imóvel e retorne o JSON.' });
 
