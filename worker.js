@@ -61,47 +61,20 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function getGoogleAccessToken(saJson) {
-  const sa = typeof saJson === 'string' ? JSON.parse(saJson) : saJson;
-  const now = Math.floor(Date.now() / 1000);
-  const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const payload = btoa(JSON.stringify({
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/drive.readonly',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-  const signingInput = `${header}.${payload}`;
-  // Import the private key
-  const pemContents = sa.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s+/g, '');
-  const keyData = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8', keyData.buffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false, ['sign']
-  );
-  const sigBuf = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5', cryptoKey,
-    new TextEncoder().encode(signingInput)
-  );
-  const sig = arrayBufferToBase64(sigBuf)
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-  const jwt = `${signingInput}.${sig}`;
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+async function getGoogleAccessToken(env) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+    body: new URLSearchParams({
+      client_id:     env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      refresh_token: env.GOOGLE_REFRESH_TOKEN,
+      grant_type:    'refresh_token',
+    }),
   });
-  const tokenJson = await tokenRes.json();
-  if (!tokenJson.access_token) throw new Error('Google token error: ' + JSON.stringify(tokenJson));
-  return tokenJson.access_token;
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Google OAuth error: ' + JSON.stringify(data));
+  return data.access_token;
 }
 
 function extractFolderId(driveUrl) {
@@ -110,33 +83,52 @@ function extractFolderId(driveUrl) {
 }
 
 async function listDriveFolder(folderId, accessToken) {
+  // Detecta em qual Shared Drive a pasta está (necessário para listar corretamente)
+  async function findSharedDriveId() {
+    const drivesRes = await fetch(
+      'https://www.googleapis.com/drive/v3/drives?pageSize=20',
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const drivesData = await drivesRes.json();
+    for (const drive of (drivesData.drives || [])) {
+      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+      const r = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${drive.id}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const d = await r.json();
+      if (!d.error) return drive.id;
+    }
+    return null; // My Drive
+  }
+
+  const sharedDriveId = await findSharedDriveId();
+  const extraParams = sharedDriveId
+    ? `&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${sharedDriveId}`
+    : '';
+
   async function listLevel(id) {
     const q = encodeURIComponent(`'${id}' in parents and trashed=false`);
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100`,
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size)&pageSize=100${extraParams}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const data = await res.json();
+    if (data.error) throw new Error('Drive API: ' + JSON.stringify(data.error));
     return Array.isArray(data.files) ? data.files : [];
   }
 
   const level1 = await listLevel(folderId);
   const allFiles = [...level1];
 
-  // Nível 2
   const folders1 = level1.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
   for (const f1 of folders1.slice(0, 10)) {
     try {
       const level2 = await listLevel(f1.id);
       allFiles.push(...level2);
-
-      // Nível 3
       const folders2 = level2.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
       for (const f2 of folders2.slice(0, 10)) {
-        try {
-          const level3 = await listLevel(f2.id);
-          allFiles.push(...level3);
-        } catch {}
+        try { allFiles.push(...await listLevel(f2.id)); } catch {}
       }
     } catch {}
   }
@@ -600,11 +592,33 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       return json({ ok: true, dados });
     }
 
+    // ── GET /drive-debug — diagnóstico temporário ────────────────────────────
+    if (request.method === 'GET' && path === '/drive-debug') {
+      if (!checkAuth(token, env)) return unauthorized();
+      try {
+        const at = await getGoogleAccessToken(env);
+        const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', { headers: { Authorization: `Bearer ${at}` } });
+        const aboutData = await about.json();
+        // Listar Shared Drives
+        // Testar listar WC-00667 com driveId do Shared Drive
+        const sharedDriveId = '0ALYveJNZWSbmUk9PVA';
+        const folderId = url.searchParams.get('folderId') || '1Z5Vh_u3ssklp1Aq3KX9bVuMag7G08EVz';
+        const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+        const listRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${sharedDriveId}`,
+          { headers: { Authorization: `Bearer ${at}` } }
+        );
+        const listData = await listRes.json();
+        return json({ ok: true, user: aboutData.user, listData });
+      } catch(e) { return json({ ok: false, error: e.message }); }
+    }
+
     // ── POST /analisar-drive — Google Drive + Claude Haiku ───────────────────
     if (request.method === 'POST' && path === '/analisar-drive') {
       if (!checkAuth(token, env)) return unauthorized();
-      if (!env.ANTHROPIC_KEY)        return json({ ok: false, error: 'ANTHROPIC_KEY não configurada' }, 500);
-      if (!env.GOOGLE_SERVICE_ACCOUNT) return json({ ok: false, error: 'GOOGLE_SERVICE_ACCOUNT não configurada' }, 500);
+      if (!env.ANTHROPIC_KEY)       return json({ ok: false, error: 'ANTHROPIC_KEY não configurada' }, 500);
+      if (!env.GOOGLE_CLIENT_ID)    return json({ ok: false, error: 'GOOGLE_CLIENT_ID não configurada' }, 500);
+      if (!env.GOOGLE_REFRESH_TOKEN) return json({ ok: false, error: 'GOOGLE_REFRESH_TOKEN não configurada' }, 500);
 
       let body;
       try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
@@ -630,10 +644,14 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       if (!folderId) return json({ ok: false, error: 'Link da pasta Drive inválido ou não configurado' }, 400);
 
       // Obter token Google
-      const accessToken = await getGoogleAccessToken(env.GOOGLE_SERVICE_ACCOUNT);
+      let accessToken;
+      try { accessToken = await getGoogleAccessToken(env); }
+      catch(e) { return json({ ok: false, error: 'Erro Google Auth: ' + e.message }, 500); }
 
       // Listar arquivos da pasta
-      const files = await listDriveFolder(folderId, accessToken);
+      let files;
+      try { files = await listDriveFolder(folderId, accessToken); }
+      catch(e) { return json({ ok: false, error: 'Erro Drive API: ' + e.message, folderId }, 500); }
 
       // Baixar conteúdo relevante
       const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
