@@ -1422,10 +1422,11 @@ function closeModal() {
 function confirmarEnvio() {
   const data = collectFormData();
   const sentAt = new Date().toISOString();
-  const id = `vistoria_${currentImovel.id}_${data.data}_${Date.now()}`;
+  const baseId = `vistoria_${currentImovel.id}_${data.data}_${Date.now()}`;
+  const id = `vistoria_final_${baseId}`;
   const registro = { ...data, id, status: 'enviado', sentAt };
 
-  localStorage.setItem(`vistoria_final_${id}`, JSON.stringify(registro));
+  localStorage.setItem(id, JSON.stringify(registro));
 
   try {
     const lista = JSON.parse(localStorage.getItem('wc_vistorias') || '[]');
