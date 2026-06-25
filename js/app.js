@@ -414,6 +414,7 @@ function salvarNovoImovel(){
     cozinha:+document.getElementById('ni-cozinha').value||0,
     lavanderia:+document.getElementById('ni-lavanderia').value||0,
     areaExterna:+document.getElementById('ni-area-externa').value||0,
+    varanda:+document.getElementById('ni-varanda').value||0,
     banheirosCompletos:+document.getElementById('ni-banheiros-completos').value||1,
     banheirosLavabo:+document.getElementById('ni-banheiros-lavabo').value||0,
     dataCriacao:document.getElementById('ni-data-criacao').value||hoje(),
@@ -536,7 +537,7 @@ function _coletarDadosAba(aba,im){
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
-    im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0;
+    im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
     im.observacoes=g('d-obs');
@@ -642,6 +643,7 @@ function renderAbaDados(im){
     <div class="form-group"><label>Cozinhas</label>${numInput({id:'d-cozinha',value:_qtdComodo(im.cozinha),min:0})}</div>
     <div class="form-group"><label>Lavanderias</label>${numInput({id:'d-lavanderia',value:_qtdComodo(im.lavanderia),min:0})}</div>
     <div class="form-group"><label>Áreas Externas</label>${numInput({id:'d-area-externa',value:_qtdComodo(im.areaExterna),min:0})}</div>
+    <div class="form-group"><label>Varandas/Pátios</label>${numInput({id:'d-varanda',value:_qtdComodo(im.varanda),min:0})}</div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>

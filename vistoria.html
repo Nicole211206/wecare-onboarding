@@ -1114,12 +1114,14 @@ function getComodos(im) {
   for (let i = 1; i <= nl; i++) list.push(nl > 1 ? 'Lavanderia ' + i : 'Lavanderia');
   const na = _qtdComodo(im.areaExterna);
   for (let i = 1; i <= na; i++) list.push(na > 1 ? 'Área Externa ' + i : 'Área Externa');
+  const nv = _qtdComodo(im.varanda);
+  for (let i = 1; i <= nv; i++) list.push(nv > 1 ? 'Varanda/Pátio ' + i : 'Varanda/Pátio');
   return list;
 }
 
 const COMODO_ICONS = {
   'Quarto': 'fa-bed', 'Sala': 'fa-couch', 'Cozinha': 'fa-utensils',
-  'Banheiro': 'fa-bath', 'Lavabo': 'fa-sink', 'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
+  'Banheiro': 'fa-bath', 'Lavabo': 'fa-sink', 'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun', 'Varanda': 'fa-umbrella-beach'
 };
 
 function getComodoIcon(nome) {
@@ -1249,6 +1251,7 @@ function _carregarImovelReal() {
       cozinha: im.cozinha !== undefined ? im.cozinha : 1,
       lavanderia: im.lavanderia || 0,
       areaExterna: im.areaExterna || 0,
+      varanda: im.varanda || 0,
       camas: im.camas || [],
     };
   } catch(e) { console.warn('Erro ao carregar imóvel real', e); }
