@@ -375,6 +375,7 @@ function renderCard(im){
       ${im.status==='ativo'?`<span class="tag tag-sage">Ativo</span>`:`<span class="tag tag-${cor}">${FASE_LABEL[im.status]||im.status}</span>`}
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formPreenchidoEm?'<span class="tag tag-lav" title="Formulário preenchido"><i class="fa-solid fa-clipboard-check"></i></span>':''}
+      ${((im.manutencoes||[]).filter(m=>m.status!=='resolvido').length)?`<span class="tag tag-amber" title="Manutenções pendentes"><i class="fa-solid fa-wrench"></i> ${(im.manutencoes||[]).filter(m=>m.status!=='resolvido').length}</span>`:''}
     </div>
   </div>`;
 }
@@ -1356,6 +1357,8 @@ function renderAbaCompras(im){
   const compras=im.compras||{};
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
+  const manutencoes=im.manutencoes||[];
+  let totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.custo||0),0);
 
   // Gerar linhas — itens de enxoval expandidos por tamanho de cama
   const rows=[];
@@ -1424,25 +1427,59 @@ function renderAbaCompras(im){
   const msgWA=_gerarMsgWhatsAppEnxoval(im,rows);
 
   const frete=im.freteTotal||0;
+  const totalGeral=totalEstimado+frete+totalManutencao;
+
+  const manutHtml=`<div style="margin-top:28px;">
+    <div class="form-section-title"><i class="fa-solid fa-wrench"></i> Manutenções / Reparos</div>
+    ${!manutencoes.length?`<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Nenhuma manutenção registrada. As irregularidades da vistoria aparecem aqui.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)">
+        <th style="padding:6px 8px;width:32px;">✓</th>
+        <th style="padding:6px 8px;">Cômodo</th>
+        <th style="padding:6px 8px;">Problema</th>
+        <th style="text-align:right;padding:6px 8px;">Custo (R$)</th>
+      </tr></thead>
+      <tbody>
+      ${manutencoes.map(m=>`<tr style="${m.status==='resolvido'?'opacity:.45;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;"><input type="checkbox" class="manut-check" ${m.status==='resolvido'?'checked':''} onchange="_onManutCheck(this,'${esc(m.id)}')"></td>
+        <td style="padding:4px 8px;"><span class="tag tag-neutral" style="font-size:11px;">${esc(m.comodo)}</span></td>
+        <td style="padding:4px 8px;">${esc(m.descricao)}</td>
+        <td style="padding:4px 8px;text-align:right;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${m.custo||0}" onchange="_onManutCusto(this,'${esc(m.id)}')"></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
   return`<div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-    <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-cart-shopping"></i> Lista de Compras</div>
+    <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-cart-shopping"></i> Compras &amp; Manutenção</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total c/ frete: <strong>${fmtMoeda(totalEstimado+frete)}</strong></span>
+      <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total geral: <strong>${fmtMoeda(totalGeral)}</strong></span>
       <button class="btn btn-outline btn-sm" onclick="gerarPDFCompras()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
     </div>
   </div>
   ${tabelasCat}
+  ${manutHtml}
   <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
     <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
     ${numInput({id:'compras-frete',value:frete,min:0,step:10,onchange:'_onFreteChange(this)'})}
-    <span class="text-muted" style="font-size:12px;">Itens: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} = <strong>${fmtMoeda(totalEstimado+frete)}</strong></span>
+    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
   </div>
 
   <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval Buddemeyer</div>
   <textarea id="wamsg-enxoval" class="input" rows="9" style="font-size:11.5px;font-family:monospace;" readonly onclick="this.select()">${esc(msgWA)}</textarea>
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
   </div>`;
+}
+function _onManutCheck(cb,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.status=cb.checked?'resolvido':'pendente';saveAll();renderKanban();}
+}
+function _onManutCusto(inp,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.custo=+inp.value||0;saveAll();}
 }
 function _onFreteChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;

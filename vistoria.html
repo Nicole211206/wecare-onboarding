@@ -1443,6 +1443,30 @@ function confirmarEnvio() {
     localStorage.setItem('wc_vistorias', JSON.stringify(lista));
   } catch(e) { console.warn('Erro ao salvar em wc_vistorias', e); }
 
+  // Criar manutenções no imóvel para cada pendência
+  if (data.pendencias.length) {
+    try {
+      const listaIm = JSON.parse(localStorage.getItem('wc_imoveis') || '[]');
+      const imIdx = listaIm.findIndex(i => String(i.id) === String(currentImovel.id));
+      if (imIdx >= 0) {
+        if (!listaIm[imIdx].manutencoes) listaIm[imIdx].manutencoes = [];
+        data.pendencias.forEach(p => {
+          listaIm[imIdx].manutencoes.push({
+            id: 'man_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            comodo: p.comodo,
+            descricao: p.descricao,
+            status: 'pendente',
+            custo: 0,
+            criadoEm: sentAt,
+            origem: 'vistoria',
+            vistoriaId: id
+          });
+        });
+        localStorage.setItem('wc_imoveis', JSON.stringify(listaIm));
+      }
+    } catch(e) { console.warn('Erro ao criar manutenções', e); }
+  }
+
   document.getElementById('status-badge').className = 'status-badge status-sent';
   document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-circle-check"></i> Enviado';
 
