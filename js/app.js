@@ -898,7 +898,7 @@ function renderAbaContrato(im){
     <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
   </div>
 
-  <div class="form-group"><label>Margem WeCare (%)</label>${numInput({id:'ct-margem',value:margem,min:0,max:100})}</div>
+  <div class="form-group"><label>Margem WeCare (%)</label>${numInput({id:'ct-margem',value:margem,min:0,max:100,oninput:'_atualizarSubtotalSetup()'})}</div>
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px;color:var(--text-muted);">
       <span>Subtotal Setup (sem compras)</span>
@@ -950,22 +950,22 @@ function renderAbaContrato(im){
       ${custoLimpeza2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Limpeza</td><td style="text-align:right;">${fmtMoeda(custoLimpeza2)}</td></tr>`:''}
       ${custoVistoria2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Vistoria</td><td style="text-align:right;">${fmtMoeda(custoVistoria2)}</td></tr>`:''}
       ${gastosSetup.map(g=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">${esc(g.nome)}</td><td style="text-align:right;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('')}
-      <tr style="border-top:2px solid var(--border)"><td style="padding:7px 4px;font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${fmtMoeda(subtotalOrc)}</td></tr>
-      <tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Margem WeCare (${margemOrc}%)</td><td style="text-align:right;">${fmtMoeda(margemValorOrc)}</td></tr>
+      <tr style="border-top:2px solid var(--border)"><td style="padding:7px 4px;font-weight:600;">Subtotal</td><td id="ct-resumo-subtotal" style="text-align:right;font-weight:600;">${fmtMoeda(subtotalOrc)}</td></tr>
+      <tr style="border-bottom:1px solid var(--border)"><td id="ct-resumo-margem-label" style="padding:7px 4px;">Margem WeCare (${margemOrc}%)</td><td id="ct-resumo-margem-val" style="text-align:right;">${fmtMoeda(margemValorOrc)}</td></tr>
     </table>
     <div class="form-section-title"><i class="fa-solid fa-tag"></i> Desconto</div>
     <div class="form-row">
       <div class="form-group"><label>Tipo</label>
-        <select id="ct-desc-tipo" class="input">
+        <select id="ct-desc-tipo" class="input" onchange="_atualizarSubtotalSetup()">
           <option value="reais"${descTipo==='reais'?' selected':''}>R$ (reais)</option>
           <option value="percent"${descTipo==='percent'?' selected':''}>% (porcentagem)</option>
         </select>
       </div>
-      <div class="form-group"><label>Valor</label><input id="ct-desc-val" type="number" class="input" value="${descVal}" min="0"></div>
+      <div class="form-group"><label>Valor</label><input id="ct-desc-val" type="number" class="input" value="${descVal}" min="0" oninput="_atualizarSubtotalSetup()"></div>
     </div>
     <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;">
-        <span>Total ao Proprietário</span><span style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
+        <span>Total ao Proprietário</span><span id="ct-resumo-total" style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
       </div>
     </div>
     <div class="form-section-title"><i class="fa-solid fa-credit-card"></i> Formas de Pagamento</div>
@@ -987,6 +987,34 @@ function _atualizarSubtotalSetup(){
   const detEl=document.getElementById('ct-subtotal-detail');
   if(valEl)valEl.textContent=fmtMoeda(total);
   if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
+  // atualiza resumo do orçamento
+  const mg=+document.getElementById('ct-margem')?.value||(im?.margemWecare||15);
+  let totalCompras=0;
+  if(im){
+    (ITENS_COMPRAS||[]).forEach((item,idx)=>{
+      const camas=im.camas||[];
+      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
+      const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
+      const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
+      totalCompras+=precoUn*qtdReal;
+    });
+  }
+  const frete=im?.freteTotal||0;
+  const subtotalOrc=totalCompras+frete+f+l+v+extras;
+  const margemValor=subtotalOrc*(mg/100);
+  const subtotalComMargem=subtotalOrc+margemValor;
+  const descTipo=(document.getElementById('ct-desc-tipo')?.value)||(im?.descontoTipo||'reais');
+  const descVal=+document.getElementById('ct-desc-val')?.value||(im?.descontoValor||0);
+  const descValor=descTipo==='reais'?descVal:subtotalComMargem*(descVal/100);
+  const totalProp=subtotalComMargem-descValor;
+  const rSubEl=document.getElementById('ct-resumo-subtotal');
+  const rMgLEl=document.getElementById('ct-resumo-margem-label');
+  const rMgVEl=document.getElementById('ct-resumo-margem-val');
+  const rTotEl=document.getElementById('ct-resumo-total');
+  if(rSubEl)rSubEl.textContent=fmtMoeda(subtotalOrc);
+  if(rMgLEl)rMgLEl.textContent=`Margem WeCare (${mg}%)`;
+  if(rMgVEl)rMgVEl.textContent=fmtMoeda(margemValor);
+  if(rTotEl)rTotEl.textContent=fmtMoeda(totalProp);
 }
 function addGastoSetup(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
