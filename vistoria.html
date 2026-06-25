@@ -1106,8 +1106,10 @@ function getComodos(im) {
   for (let i = 1; i <= ns; i++) list.push(ns > 1 ? 'Sala ' + i : 'Sala');
   const nc = _qtdComodo(im.cozinha !== undefined ? im.cozinha : 1);
   for (let i = 1; i <= nc; i++) list.push(nc > 1 ? 'Cozinha ' + i : 'Cozinha');
-  const nb = (parseInt(im.banheirosCompletos) || 0) + (parseInt(im.banheirosLavabo) || 0) || parseInt(im.banheiros) || 0;
-  for (let i = 1; i <= nb; i++) list.push(nb > 1 ? 'Banheiro ' + i : 'Banheiro');
+  const nbc = parseInt(im.banheirosCompletos) || parseInt(im.banheiros) || 0;
+  for (let i = 1; i <= nbc; i++) list.push(nbc > 1 ? 'Banheiro Completo ' + i : 'Banheiro Completo');
+  const nbv = parseInt(im.banheirosLavabo) || 0;
+  for (let i = 1; i <= nbv; i++) list.push(nbv > 1 ? 'Lavabo ' + i : 'Lavabo');
   const nl = _qtdComodo(im.lavanderia);
   for (let i = 1; i <= nl; i++) list.push(nl > 1 ? 'Lavanderia ' + i : 'Lavanderia');
   const na = _qtdComodo(im.areaExterna);
@@ -1117,7 +1119,7 @@ function getComodos(im) {
 
 const COMODO_ICONS = {
   'Quarto': 'fa-bed', 'Sala': 'fa-couch', 'Cozinha': 'fa-utensils',
-  'Banheiro': 'fa-bath', 'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
+  'Banheiro': 'fa-bath', 'Lavabo': 'fa-sink', 'Lavanderia': 'fa-shirt', 'Área Externa': 'fa-sun'
 };
 
 function getComodoIcon(nome) {
