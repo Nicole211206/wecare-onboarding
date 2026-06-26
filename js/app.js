@@ -1704,21 +1704,33 @@ function gerarPDFCompras(){
   const rows=_rowsComprasFalta(im);
   const frete=im.freteTotal||0;
   const totalItens=rows.reduce((s,r)=>s+r.total,0);
+  const manutencoes=(im.manutencoes||[]).filter(m=>m.status!=='resolvido');
+  const totalManut=manutencoes.reduce((s,m)=>s+(m.valor??m.custo??0),0);
   const cats=[...new Set(rows.map(r=>r.cat))];
   const tabelas=cats.map(cat=>{
     const itens=rows.filter(r=>r.cat===cat);
-    return`<tr style="background:#fdf0f4"><td colspan="5" style="padding:8px 10px;font-weight:700;font-size:12px;color:#9b4c6e;letter-spacing:.5px;">${cat.toUpperCase()}</td></tr>
-    ${itens.map(r=>`<tr>
+    return`<tr style="background:#fdf0f4"><td colspan="4" style="padding:8px 10px;font-weight:700;font-size:12px;color:#9b4c6e;letter-spacing:.5px;">${cat.toUpperCase()}</td></tr>`+
+    itens.map(r=>`<tr>
       <td style="padding:7px 10px;">${esc(r.label)}</td>
-      <td style="text-align:center;color:#888;">${r.qtdNec}</td>
-      <td style="text-align:center;color:#888;">${r.qtdTem}</td>
-      <td style="text-align:center;font-weight:600;color:#c7587a;">${r.falta}</td>
+      <td style="text-align:center;">${r.falta}</td>
+      <td style="text-align:right;color:#888;">${fmtMoeda(r.pUn)}</td>
       <td style="text-align:right;font-weight:600;">${fmtMoeda(r.total)}</td>
-    </tr>`).join('')}`;
+    </tr>`).join('');
   }).join('');
+  const manutHtml=manutencoes.length?`
+  <div style="margin-top:28px;">
+    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Manutenções / Reparos</div>
+    <table>
+      <thead><tr><th>Descrição</th><th style="text-align:right;">Valor estimado</th></tr></thead>
+      <tbody>`+
+      manutencoes.map(m=>`<tr><td style="padding:7px 10px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(m.valor??m.custo??0)}</td></tr>`).join('')+
+      `<tr class="total-row"><td style="padding:10px;text-align:right;">Subtotal manutenções</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalManut)}</td></tr>
+      </tbody>
+    </table>
+  </div>`:'';
   const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const win=window.open('','_blank');
-  win.document.write(`<html><head><meta charset="utf-8"><title>Lista de Compras — ${esc(im.nome)}</title>
+  win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
@@ -1726,12 +1738,9 @@ function gerarPDFCompras(){
     .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
     .brand span{color:#a57ab5;}
     .meta{font-size:12px;color:#888;text-align:right;line-height:1.6;}
-    .imovel-nome{font-size:18px;font-weight:700;color:#333;margin-bottom:4px;}
-    .tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;}
-    .tag{background:#fdf0f4;color:#9b4c6e;border:1px solid #f0d0de;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600;}
     table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12.5px;}
     th{background:#2d1f2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
-    tr:nth-child(even):not(.cat-header){background:#fafafa;}
+    tr:nth-child(even){background:#fafafa;}
     td{padding:6px 10px;border-bottom:1px solid #f0e0e8;vertical-align:middle;}
     .total-row{background:#fdf0f4!important;font-weight:700;}
     .summary{background:#2d1f2e;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;}
@@ -1743,7 +1752,7 @@ function gerarPDFCompras(){
   <div class="header">
     <div>
       <div class="brand">We<span>Care</span> Hosting</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">Lista de Compras — Onboarding</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">Orçamento de Setup — Onboarding</div>
     </div>
     <div class="meta">
       <div><strong>${esc(im.nome)}</strong></div>
@@ -1752,17 +1761,19 @@ function gerarPDFCompras(){
       <div>${fmtDate(hoje())}</div>
     </div>
   </div>
-  ${rows.length===0?'<p style="color:#888;text-align:center;padding:40px;">Nenhum item para comprar — tudo já disponível!</p>':`
-  <table>
-    <thead><tr><th>Item</th><th style="text-align:center;">Nec.</th><th style="text-align:center;">Já tem</th><th style="text-align:center;">Falta</th><th style="text-align:right;">Total</th></tr></thead>
+  ${rows.length===0&&!manutencoes.length?'<p style="color:#888;text-align:center;padding:40px;">Nenhum item para comprar e nenhuma manutenção pendente.</p>':`
+  ${rows.length?`<table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qtd</th><th style="text-align:right;">Preço unit.</th><th style="text-align:right;">Total</th></tr></thead>
     <tbody>${tabelas}
-    <tr class="total-row"><td colspan="4" style="padding:10px;text-align:right;">Subtotal itens</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalItens)}</td></tr>
+    <tr class="total-row"><td colspan="3" style="padding:10px;text-align:right;">Subtotal compras</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalItens)}</td></tr>
     </tbody>
-  </table>
+  </table>`:''}
+  ${manutHtml}
   <div class="summary">
-    <div class="summary-line"><span>Itens</span><span>${fmtMoeda(totalItens)}</span></div>
+    ${rows.length?`<div class="summary-line"><span>Compras</span><span>${fmtMoeda(totalItens)}</span></div>`:''}
     ${frete?`<div class="summary-line"><span>Frete estimado</span><span>${fmtMoeda(frete)}</span></div>`:''}
-    <div class="summary-total"><span>Total a comprar</span><span>${fmtMoeda(totalItens+frete)}</span></div>
+    ${manutencoes.length?`<div class="summary-line"><span>Manutenções</span><span>${fmtMoeda(totalManut)}</span></div>`:''}
+    <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+frete+totalManut)}</span></div>
   </div>`}
   </body></html>`);
   win.document.close();win.print();
