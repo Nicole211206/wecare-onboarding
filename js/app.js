@@ -160,7 +160,7 @@ function _qtdComodo(v){if(v===true)return 1;if(!v)return 0;const n=parseInt(v);r
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
-function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos){
+function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos){
   const rule=item.qtdRule||'1-unidade';const dashIdx=rule.indexOf('-');const n=rule.slice(0,dashIdx);const base=rule.slice(dashIdx+1);
   const q=parseInt(n)||1;
   if(base==='colchao')return q*totalColchoes(camas);
@@ -168,6 +168,9 @@ function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos){
   if(base==='banheiro-completo')return q*(+banheirosCompletos||1);
   if(base==='banheiro')return q*(+banheiros||1);
   if(base==='quarto')return q*(+quartos||1);
+  if(base==='hospede')return q*(+hospedes||1);
+  if(base==='lavabo')return q*(+lavabos||0);
+  if(base==='cada2hospede')return q*Math.ceil((+hospedes||1)/2);
   return q;
 }
 function getPrecoEnxovalUn(nomeItem,camas){
@@ -541,7 +544,7 @@ function _coletarDadosAba(aba,im){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
-    im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0;
+    im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
@@ -664,6 +667,10 @@ function renderAbaDados(im){
       <option value="liquida"${im.comissaoBase==='liquida'?' selected':''}>Líquida (após plataforma)</option>
       <option value="bruta"${im.comissaoBase==='bruta'?' selected':''}>Bruta</option>
     </select></div>
+  </div>
+
+  <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
+    <div class="form-group"><label>Máx. hóspedes</label>${numInput({id:'d-max-hospedes',value:im.maxHospedes||0,min:0})}</div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-bed"></i> Camas</div>
@@ -1014,7 +1021,7 @@ function renderAbaContrato(im){
     let totalCompras=0;
     ITENS_COMPRAS.forEach((item,idx)=>{
       const camas=im.camas||[];
-      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
+      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
       const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
       const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
       totalCompras+=precoUn*qtdReal;
@@ -1089,7 +1096,7 @@ function _atualizarSubtotalSetup(){
   if(im){
     (ITENS_COMPRAS||[]).forEach((item,idx)=>{
       const camas=im.camas||[];
-      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
+      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
       const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
       const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
       totalCompras+=precoUn*qtdReal;
@@ -1429,7 +1436,7 @@ function importarRespostasParaRascunho(){
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
 function renderAbaCompras(im){
-  const camas=im.camas||[];const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);const quartos=im.quartos||1;
+  const camas=im.camas||[];const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);const quartos=im.quartos||1;const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;
   const compras=im.compras||{};
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
@@ -1465,7 +1472,7 @@ function renderAbaCompras(im){
         rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdTem,falta,precoUn,total,comprado});
       });
     } else {
-      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos);
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
       const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
       const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
@@ -1629,7 +1636,7 @@ function _rowsComprasFalta(im){
         if(falta>0){const pUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
       });
     } else {
-      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos);
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
       const pUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
       const qtdTem=im.compras?.[subKey]?.qtdTem??0;
@@ -1720,7 +1727,7 @@ function renderAbaEnxoval(im){
   const linhasBud=Object.entries(PRECOS_ENXOVAL).map(([nome,tabela])=>{
     const itemDef=ITENS_COMPRAS.find(i=>i.nome===nome);
     const qtdRule=itemDef?.qtdRule||'1-colchao';
-    const qtd=calcNecessario({qtdRule},camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
+    const qtd=calcNecessario({qtdRule},camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
     const pUn=tabela[tipo]||Object.values(tabela)[0]||0;
     const total=pUn*qtd;totalBud+=total;
     return{nome,tipo,qtd,pUn,total};
@@ -1852,7 +1859,7 @@ function renderAbaCustos(im){
   let totalCompras=0;
   ITENS_COMPRAS.forEach((item,idx)=>{
     const camas=im.camas||[];
-    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1));
+    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
     const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
     const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
     totalCompras+=precoUn*qtdReal;
@@ -2570,11 +2577,13 @@ function renderConfig(){
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
-  const baseOpts=['colchao','leito','banheiro-completo','banheiro','quarto','unidade'];
+  const baseOpts=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','hospede','cada2hospede','unidade'];
   const baseLabels={
     'colchao':'por colchão','leito':'por leito (cama/beliche)',
     'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
-    'quarto':'por quarto','unidade':'unidade fixa (1 por apê)'
+    'lavabo':'por lavabo','quarto':'por quarto',
+    'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
+    'unidade':'unidade fixa (1 por apê)'
   };
   ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
     <thead><tr style="border-bottom:2px solid var(--border);">
@@ -2595,8 +2604,9 @@ function renderConfig(){
             ${baseOpts.map(b=>`<option value="${b}"${b===base?' selected':''}>${baseLabels[b]||b}</option>`).join('')}
           </select>
         </td>
-        <td style="padding:5px 4px;">
+        <td style="padding:5px 4px;white-space:nowrap;">
           <button class="btn btn-xs btn-sage" onclick="salvarRegra(${i})" title="Salvar esta linha"><i class="fa-solid fa-check"></i></button>
+          <button class="btn btn-xs btn-danger" onclick="apagarItemConfig(${i})" title="Apagar item" style="margin-left:4px;"><i class="fa-solid fa-trash"></i></button>
         </td>
       </tr>`;
     }).join('')}</tbody>
@@ -2619,6 +2629,12 @@ function salvarTodasRegras(){
     ITENS_COMPRAS[i].qtdRule=`${n}-${base}`;
   });
   saveAll();showToast('Todas as regras salvas!','sage');
+}
+function apagarItemConfig(i){
+  const item=ITENS_COMPRAS[i];if(!item)return;
+  if(!confirm(`Apagar "${item.nome}"?`))return;
+  ITENS_COMPRAS.splice(i,1);
+  saveAll();renderConfig();showToast('Item removido.','peach');
 }
 function _limparDados(){
   if(!confirm('ATENÇÃO: Apagar todos os dados locais? Esta ação não pode ser desfeita.'))return;
