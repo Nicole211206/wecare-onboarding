@@ -2631,7 +2631,7 @@ function renderConfig(){
     const lista=membros||[];
     mb.innerHTML=(lista.length?`<table style="width:100%;font-size:12.5px;border-collapse:collapse;">`+
       lista.map((m,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:6px 4px;">${esc(m.nome)}</td>
+        <td style="padding:6px 4px;">${esc(m.nome)}<br><span style="font-size:11px;color:var(--text-muted);">${esc(m.email||'')}</span></td>
         <td style="padding:6px 4px;color:var(--text-muted);">${esc(m.funcao||'')}</td>
         <td style="padding:4px;text-align:right;"><button class="btn btn-xs btn-danger" onclick="apagarMembro(${i})"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')+`</table>`
@@ -2883,15 +2883,21 @@ function renderPrestadores(){renderIntel();}
 function abrirModalMembro(){
   document.getElementById('mb-nome').value='';
   document.getElementById('mb-funcao').value='';
+  document.getElementById('mb-email').value='';
+  document.getElementById('mb-senha').value='';
   document.getElementById('modal-membro').classList.add('open');
   setTimeout(()=>document.getElementById('mb-nome').focus(),100);
 }
 function salvarMembro(){
   const nome=document.getElementById('mb-nome').value.trim();
   if(!nome){showToast('Informe o nome.','peach');return;}
+  const email=document.getElementById('mb-email').value.trim();
+  if(!email){showToast('Informe o e-mail.','peach');return;}
+  const senha=document.getElementById('mb-senha').value.trim();
+  if(!senha){showToast('Informe a senha.','peach');return;}
   const funcao=document.getElementById('mb-funcao').value.trim();
   if(!membros)membros=[];
-  membros.push({id:uid(),nome,funcao});
+  membros.push({id:uid(),nome,funcao,email,senha});
   saveAll();closeModal('modal-membro');renderConfig();showToast('Membro adicionado!','sage');
 }
 function apagarMembro(i){
