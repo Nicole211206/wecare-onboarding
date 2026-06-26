@@ -2082,55 +2082,137 @@ function gerarPDFFormulario(){
   const totalPergs=(secoes||[]).reduce((s,sec)=>s+(sec.perguntas||[]).length,0);
   const respondidos=Object.keys(respostas).filter(k=>respostas[k]&&String(respostas[k]).trim()).length;
   const pct=totalPergs?Math.round(respondidos/totalPergs*100):0;
+
+  // ── Helpers ──
+  const campo=(label,val,destaque=false)=>{
+    const vazio=!val||!String(val).trim();
+    return`<div style="padding:7px 0;border-bottom:1px solid #f0e8f4;">
+      <div style="font-size:10px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${label}</div>
+      <div style="font-size:13px;color:${vazio?'#bbb':(destaque?'#c7587a':'#333')};${vazio?'font-style:italic;':''}">${vazio?'—':esc(String(val))}</div>
+    </div>`;
+  };
+  const secTitulo=(icone,titulo)=>`<div style="display:flex;align-items:center;gap:8px;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
+    <span>${icone}</span><span style="font-size:13px;font-weight:700;">${titulo}</span>
+  </div><div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">`;
+  const secFim=`</div>`;
+
+  // ── Camas ──
+  const camasStr=(im.camas||[]).map(c=>`${c.qtd||1}x ${c.tipo}`).join(' · ')||'—';
+
+  // ── Definições operacionais ──
+  const defs=[];
+  if(im.seguroEasyCover) defs.push('Seguro EasyCover');
+  if(im.kitAmenities)    defs.push('Kit Amenities WeCare');
+  if(im.internetClaro)   defs.push('Internet Claro');
+  if(im.ecohost)         defs.push('Sistema EcoHost');
+  if(im.fechaduraEletronica) defs.push('Fechadura Eletrônica');
+
+  // ── Short stay ──
+  const shortStayLabel={'sim':'✅ Sim','nao':'❌ Não','':'Não informado'}[im.shortStayPermitido||''];
+
+  // ── Ficha do imóvel (bloco antes do formulário) ──
+  const fichaHtml=`
+  ${secTitulo('🏠','Dados do Imóvel')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+      ${campo('Endereço',im.endereco)}
+      ${campo('Quartos',im.quartos)}
+      ${campo('Banheiros completos',im.banheirosCompletos)}
+      ${campo('Lavabos',im.banheirosLavabo||0)}
+      ${campo('Salas',im.salas)}
+      ${campo('Cozinhas',im.cozinha||0)}
+    </div>
+    ${campo('Camas',camasStr)}
+  ${secFim}
+
+  ${secTitulo('💰','Preços')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+      ${campo('Diária mínima',im.valorMinNoite?fmtMoeda(im.valorMinNoite):'',true)}
+      ${campo('Diária base',im.valorBaseNoite?fmtMoeda(im.valorBaseNoite):'',true)}
+      ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
+      ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
+      ${campo('Comissão WeCare',im.comissaoWecare?(im.comissaoWecare+'% '+(im.comissaoBase==='bruta'?'(bruta)':'(líquida)')):'',true)}
+    </div>
+  ${secFim}
+
+  ${secTitulo('📢','Plataformas de Divulgação')}
+    ${campo('Plataformas',(im.plataformas||[]).join(' · '))}
+  ${secFim}
+
+  ${secTitulo('⚙️','Definições Operacionais')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+      ${campo('Serviços contratados',defs.length?defs.join(', '):'Nenhum')}
+      ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?'Aluguel mensal (Flashee)':'Comprado (Buddemeyer)')}
+      ${campo('Equipe de limpeza',im.defLimpeza?.responsavel)}
+    </div>
+  ${secFim}
+
+  ${secTitulo('🏛️','Condomínio')}
+    ${campo('Convenção aceita short stay',shortStayLabel)}
+    ${campo('Restrições',im.restricoes)}
+  ${secFim}
+
+  ${secTitulo('🔑','Acesso & Operação')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+      ${campo('Wi-Fi — rede',(im.wifi||{}).rede)}
+      ${campo('Wi-Fi — senha',(im.wifi||{}).senha)}
+      ${campo('Senha da porta / fechadura',im.senhaPorta)}
+      ${campo('Vaga de garagem',im.vaga)}
+      ${campo('Zelador / Portaria — nome',im.zeladorNome)}
+      ${campo('Zelador / Portaria — telefone',im.zeladorTel)}
+    </div>
+    ${campo('Como hóspedes acessam',im.acesso)}
+  ${secFim}
+
+  ${im.observacoes?secTitulo('📝','Observações')+campo('',im.observacoes)+secFim:''}
+  `;
+
+  // ── Seções do formulário ──
   const secoesHtml=secoes.map(sec=>{
     const pergsHtml=(sec.perguntas||[]).map(p=>{
       const r=respostas[p.id];
       const vazio=!r||!String(r).trim();
-      return`<div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid #f0e8f4;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:11px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;">${esc(p.label)}</div>
-          <div style="font-size:13px;color:${vazio?'#bbb':'#333'};${vazio?'font-style:italic;':''}">${vazio?'Não respondido':esc(String(r))}</div>
-        </div>
+      return`<div style="padding:7px 0;border-bottom:1px solid #f0e8f4;">
+        <div style="font-size:10px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${esc(p.label)}</div>
+        <div style="font-size:13px;color:${vazio?'#bbb':'#333'};${vazio?'font-style:italic;':''}">${vazio?'Não respondido':esc(String(r))}</div>
       </div>`;
     }).join('');
     const total=(sec.perguntas||[]).length;
     const conf=(sec.perguntas||[]).filter(p=>respostas[p.id]&&String(respostas[p.id]).trim()).length;
-    return`<div style="margin-bottom:20px;break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-bottom:0;">
+    return`<div style="margin-bottom:0;break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
         <span style="font-size:13px;font-weight:700;">${esc(sec.secao)}</span>
         <span style="font-size:11px;opacity:.75;">${conf}/${total}</span>
       </div>
-      <div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:4px 14px 4px;">${pergsHtml}</div>
+      <div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">${pergsHtml}</div>
     </div>`;
   }).join('');
+
   const win=window.open('','_blank');
-  win.document.write(`<html><head><meta charset="utf-8"><title>Formulário — ${esc(im.nome)}</title>
+  win.document.write(`<html><head><meta charset="utf-8"><title>Ficha — ${esc(im.nome)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:820px;margin:0 auto;}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
-    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
-    .brand span{color:#a57ab5;}
-    .meta{font-size:12px;color:#888;text-align:right;line-height:1.7;}
-    .progress-bar{height:8px;background:#f0e0e8;border-radius:4px;margin:12px 0 4px;}
-    .progress-fill{height:8px;background:linear-gradient(90deg,#c7587a,#a57ab5);border-radius:4px;}
-    .progress-label{font-size:11px;color:#9b8fa8;margin-bottom:20px;}
-    @media print{body{padding:16px;}@page{margin:1cm;}}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
+    @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
   </style></head><body>
-  <div class="header">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #c7587a;">
     <div>
-      <div class="brand">We<span>Care</span> Hosting</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">Formulário de Onboarding</div>
+      <div style="font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;">We<span style="color:#a57ab5;">Care</span> Hosting</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">Ficha de Onboarding</div>
     </div>
-    <div class="meta">
-      <div style="font-weight:700;color:#333;">${esc(im.nome)}</div>
+    <div style="font-size:12px;color:#888;text-align:right;line-height:1.8;">
+      <div style="font-weight:700;font-size:14px;color:#333;">${esc(im.nome)}</div>
       <div><strong>Proprietário:</strong> ${esc(im.proprietarioNome||'—')}</div>
       <div>${esc(im.endereco||'')}</div>
       <div>Gerado em ${fmtDate(hoje())}</div>
     </div>
   </div>
-  <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-  <div class="progress-label">${respondidos} de ${totalPergs} campos preenchidos (${pct}%)</div>
+  <div style="height:8px;background:#f0e0e8;border-radius:4px;margin-bottom:4px;"><div style="height:8px;background:linear-gradient(90deg,#c7587a,#a57ab5);border-radius:4px;width:${pct}%"></div></div>
+  <div style="font-size:11px;color:#9b8fa8;margin-bottom:16px;">${respondidos} de ${totalPergs} campos do formulário preenchidos (${pct}%)</div>
+  ${fichaHtml}
+  <div style="margin-top:32px;padding-top:20px;border-top:2px solid #e8ddf0;">
+    <div style="font-size:14px;font-weight:800;color:#2d1f2e;margin-bottom:4px;">Formulário do Proprietário</div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px;">Respostas confirmadas ou pré-preenchidas pela equipe WeCare</div>
+  </div>
   ${secoesHtml}
   </body></html>`);
   win.document.close();win.print();
