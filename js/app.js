@@ -1515,7 +1515,17 @@ function renderAbaCompras(im){
   const manutHtml=`<div style="margin-top:28px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
       <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-wrench"></i> Manutenções / Reparos</div>
-      <button class="btn btn-sm btn-outline" onclick="adicionarManutencao()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormManut()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    <div id="form-add-manut" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;display:none;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Nome da manutenção</label><input id="manut-nome-input" class="input" placeholder="Ex: Trocar torneira" style="width:100%;"></div>
+        <div style="width:100px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor (R$)</label><input id="manut-valor-input" class="input" type="number" min="0" step="10" value="0" style="width:100%;"></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-sage" onclick="confirmarManutencao()"><i class="fa-solid fa-check"></i> Salvar</button>
+          <button class="btn btn-sm btn-outline" onclick="toggleFormManut()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
     </div>
     ${!manutencoes.length?`<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Nenhuma manutenção registrada. As irregularidades da vistoria aparecem aqui.</div>`:`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
@@ -1567,14 +1577,25 @@ function _onManutCusto(inp,manId){
   const m=im.manutencoes.find(x=>x.id===manId);
   if(m){m.valor=+inp.value||0;saveAll();}
 }
-function adicionarManutencao(){
-  const nome=prompt('Nome da manutenção (ex: Trocar torneira, Pintura quarto):');
-  if(!nome)return;
-  const valorStr=prompt('Valor estimado (R$):','0');
-  if(valorStr===null)return;
+function toggleFormManut(){
+  const el=document.getElementById('form-add-manut');
+  if(!el)return;
+  const visible=el.style.display!=='none';
+  el.style.display=visible?'none':'block';
+  if(!visible){
+    const ni=document.getElementById('manut-nome-input');
+    const vi=document.getElementById('manut-valor-input');
+    if(ni){ni.value='';ni.focus();}
+    if(vi)vi.value='0';
+  }
+}
+function confirmarManutencao(){
+  const nome=(document.getElementById('manut-nome-input')||{}).value||'';
+  const valor=+(document.getElementById('manut-valor-input')||{}).value||0;
+  if(!nome.trim()){showToast('Informe o nome da manutenção.','peach');return;}
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.manutencoes)im.manutencoes=[];
-  const novaManut={id:uid(),nome:nome.trim(),valor:+valorStr||0,status:'pendente'};
+  const novaManut={id:uid(),nome:nome.trim(),valor,status:'pendente'};
   im.manutencoes.push(novaManut);
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
   // Cria card no módulo de manutenção da Claire
@@ -1584,6 +1605,7 @@ function adicionarManutencao(){
     body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
   }).catch(()=>{});
 }
+function adicionarManutencao(){toggleFormManut();}
 function _apagarManutencao(manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
   if(!confirm('Apagar esta manutenção?'))return;

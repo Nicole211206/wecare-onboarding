@@ -293,9 +293,10 @@ Regras:
       // Lê imóveis diretamente do estado para KPI de onboarding na Claire
       const stateRaw = await env.ONBOARDING_KV.get(KV_KEY);
       const state2 = stateRaw ? JSON.parse(stateRaw) : {};
-      const imoveis = (Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : []).map(im => ({
-        nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao
-      }));
+      // Só inclui imóveis com contrato assinado (contratoAssinado=true ou passaram da fase 'contrato')
+      const imoveis = (Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : [])
+        .filter(im => im.status !== 'perdido' && (im.contratoAssinado === true || im.status !== 'contrato'))
+        .map(im => ({ nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao }));
       // KPIs calculados
       const ativos    = stats.filter(s => s.status === 'ativo' && s.diasOnboarding != null);
       const mediaOnboarding = ativos.length
