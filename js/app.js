@@ -219,7 +219,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_prestadores','wc_users'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -227,6 +227,8 @@ function saveAll(){
   localStorage.setItem('wc_membros',JSON.stringify(membros));
   localStorage.setItem('wc_itens',JSON.stringify(ITENS_COMPRAS));
   localStorage.setItem('wc_enxoval',JSON.stringify(PRECOS_ENXOVAL));
+  localStorage.setItem('wc_limpeza',JSON.stringify(PRECOS_PRIMEIRA_LIMPEZA));
+  localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
   _kvPushDebounced();
   _publicarStats();
@@ -238,6 +240,8 @@ function loadAll(){
   v=g('wc_membros');   if(Array.isArray(v))membros=v;
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
+  v=g('wc_limpeza');   if(v&&typeof v==='object')PRECOS_PRIMEIRA_LIMPEZA=Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
+  v=g('wc_fotos');     if(v&&typeof v==='object')PRECOS_FOTOS=Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
 }
 
@@ -2621,8 +2625,18 @@ function renderFornecedores(){
 
 // ═══════════════════ CONFIG ═══════════════════
 function renderConfig(){
+  // ── Membros da equipe ──
   const mb=document.getElementById('config-membros');
-  if(mb)mb.innerHTML=`<div class="text-muted" style="font-size:12px;">Membros gerenciados no painel <strong>Usuários</strong>.</div>`;
+  if(mb){
+    const lista=membros||[];
+    mb.innerHTML=(lista.length?`<table style="width:100%;font-size:12.5px;border-collapse:collapse;">`+
+      lista.map((m,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px 4px;">${esc(m.nome)}</td>
+        <td style="padding:6px 4px;color:var(--text-muted);">${esc(m.funcao||'')}</td>
+        <td style="padding:4px;text-align:right;"><button class="btn btn-xs btn-danger" onclick="apagarMembro(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')+`</table>`
+      :`<div class="text-muted" style="font-size:12px;padding:4px 0;">Nenhum membro cadastrado ainda.</div>`);
+  }
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
@@ -2663,6 +2677,89 @@ function renderConfig(){
   <div style="margin-top:12px;text-align:right;">
     <button class="btn btn-sm btn-sage" onclick="salvarTodasRegras()"><i class="fa-solid fa-floppy-disk"></i> Salvar todas as regras</button>
   </div>`;
+
+  // ── Preços Fixos (preço unitário de cada item fixo) ──
+  const cp=document.getElementById('config-precos');
+  if(cp){
+    const fixos=ITENS_COMPRAS.filter(it=>it.tipoPreco==='fixo');
+    cp.innerHTML=`<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Preço unitário de cada item de compras (itens com preço fixo, não enxoval). Clique em ✓ para salvar.</div>`+
+      `<table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:5px 4px;">Item</th>
+        <th style="text-align:right;padding:5px 4px;width:90px;">Preço (R$)</th>
+        <th style="padding:5px 4px;width:32px;"></th>
+      </tr></thead><tbody>`+
+      fixos.map((item)=>{
+        const idx=ITENS_COMPRAS.indexOf(item);
+        return`<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br>${esc(item.nome)}</td>
+          <td style="padding:4px;"><input id="cp-preco-${idx}" type="number" min="0" step="0.01" class="input" value="${item.preco||0}" style="width:80px;text-align:right;padding:3px 5px;font-size:12px;"></td>
+          <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="salvarPrecoFixo(${idx})"><i class="fa-solid fa-check"></i></button></td>
+        </tr>`;
+      }).join('')+`</tbody></table>`;
+  }
+
+  // ── Preços Enxoval por Tamanho ──
+  const pe=document.getElementById('config-precos-enxoval');
+  if(pe){
+    const sizes=['Solteiro','Casal','Queen','King'];
+    pe.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:5px 4px;">Item</th>`+
+        sizes.map(s=>`<th style="text-align:right;padding:5px 4px;width:68px;">${s}</th>`).join('')+
+        `<th style="padding:5px 4px;width:48px;"></th>
+      </tr></thead><tbody>`+
+      Object.entries(PRECOS_ENXOVAL).map(([nome,tabela])=>
+        `<tr style="border-bottom:1px solid var(--border);" id="enx-row-${CSS.escape(nome)}">
+          <td style="padding:4px;">${esc(nome)}</td>`+
+          sizes.map(s=>`<td style="padding:4px;"><input id="enx-${CSS.escape(nome)}-${s}" type="number" min="0" step="1" class="input" value="${tabela[s]||0}" style="width:60px;text-align:right;padding:3px 4px;font-size:12px;"></td>`).join('')+
+          `<td style="padding:4px;white-space:nowrap;">
+            <button class="btn btn-xs btn-sage" onclick="salvarPrecoEnxoval('${esc(nome)}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
+            <button class="btn btn-xs btn-danger" onclick="apagarPrecoEnxoval('${esc(nome)}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+          </td>
+        </tr>`
+      ).join('')+
+      `</tbody></table>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="enx-novo-nome" class="input" placeholder="Nome do item enxoval" style="flex:1;min-width:160px;font-size:12px;">
+        <button class="btn btn-sm btn-sage" onclick="adicionarPrecoEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      </div>`;
+  }
+
+  // ── Tabela de Limpeza e Fotos ──
+  const po=document.getElementById('config-precos-ops');
+  if(po){
+    const limpRows=Object.entries(PRECOS_PRIMEIRA_LIMPEZA).map(([q,servs])=>
+      Object.entries(servs).map(([srv,v])=>
+        `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px;">${q} quarto(s)</td>
+          <td style="padding:4px;">${esc(srv)}</td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${srv}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${srv}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="salvarPrecoLimpeza(${q},'${srv}')"><i class="fa-solid fa-check"></i></button></td>
+        </tr>`).join('')).join('');
+    const fotoRows=Object.entries(PRECOS_FOTOS).map(([q,v])=>
+      `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px;">${q} quarto(s)</td>
+        <td style="padding:4px;">${esc(v.resp||'')}</td>
+        <td style="padding:4px;text-align:right;"><input id="foto-${q}-min" type="number" min="0" class="input" value="${v.min}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;text-align:right;"><input id="foto-${q}-max" type="number" min="0" class="input" value="${v.max}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="salvarPrecoFoto(${q})"><i class="fa-solid fa-check"></i></button></td>
+      </tr>`).join('');
+    po.innerHTML=`
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Primeira Limpeza</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Empresa</th>
+          <th style="text-align:right;padding:5px 4px;">Custo</th><th style="text-align:right;padding:5px 4px;">Cobrado</th><th></th>
+        </tr></thead><tbody>${limpRows}</tbody></table>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Fotos Profissionais</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Responsável</th>
+          <th style="text-align:right;padding:5px 4px;">Mín</th><th style="text-align:right;padding:5px 4px;">Máx</th><th></th>
+        </tr></thead><tbody>${fotoRows}</tbody></table>`;
+  }
 }
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
@@ -2782,11 +2879,103 @@ function buscarNoMaps(){
 }
 function abrirMaps(query){_buscarEmbeddedMapa(query);}
 function renderPrestadores(){renderIntel();}
-function abrirModalMembro(){} // membros não usados nesta versão
-function salvarMembro(){}
-function abrirModalItem(){} // itens editados inline na aba Compras
-function salvarItem(){}
-function renderItTipoPreco(){}
+// ── Membros ──
+function abrirModalMembro(){
+  document.getElementById('mb-nome').value='';
+  document.getElementById('mb-funcao').value='';
+  document.getElementById('modal-membro').classList.add('open');
+  setTimeout(()=>document.getElementById('mb-nome').focus(),100);
+}
+function salvarMembro(){
+  const nome=document.getElementById('mb-nome').value.trim();
+  if(!nome){showToast('Informe o nome.','peach');return;}
+  const funcao=document.getElementById('mb-funcao').value.trim();
+  if(!membros)membros=[];
+  membros.push({id:uid(),nome,funcao});
+  saveAll();closeModal('modal-membro');renderConfig();showToast('Membro adicionado!','sage');
+}
+function apagarMembro(i){
+  if(!confirm(`Remover "${membros[i]?.nome}"?`))return;
+  membros.splice(i,1);saveAll();renderConfig();showToast('Removido.','peach');
+}
+
+// ── Item de Compras ──
+function abrirModalItem(){
+  document.getElementById('modal-item-title').textContent='Novo Item';
+  document.getElementById('it-cat').value='Cama';
+  document.getElementById('it-nome').value='';
+  document.getElementById('it-qtd-rule').value='1-unidade';
+  document.getElementById('it-tipo-preco').value='fixo';
+  document.getElementById('it-preco').value='';
+  document.getElementById('it-link').value='';
+  document.getElementById('it-enxoval-dep').value='';
+  renderItTipoPreco();
+  document.getElementById('modal-item').classList.add('open');
+  setTimeout(()=>document.getElementById('it-nome').focus(),100);
+}
+function renderItTipoPreco(){
+  const tipo=document.getElementById('it-tipo-preco')?.value;
+  const wrap=document.getElementById('it-preco-wrap');
+  if(wrap)wrap.style.display=tipo==='enxoval'?'none':'';
+}
+function salvarItem(){
+  const nome=document.getElementById('it-nome').value.trim();
+  if(!nome){showToast('Informe o nome do item.','peach');return;}
+  const cat=document.getElementById('it-cat').value;
+  const qtdRule=document.getElementById('it-qtd-rule').value||'1-unidade';
+  const tipoPreco=document.getElementById('it-tipo-preco').value;
+  const preco=+document.getElementById('it-preco').value||0;
+  const link=document.getElementById('it-link').value.trim();
+  const enxovalDep=document.getElementById('it-enxoval-dep').value==='sim';
+  ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link});
+  saveAll();closeModal('modal-item');renderConfig();showToast(`"${nome}" adicionado!`,'sage');
+}
+
+// ── Preços Fixos ──
+function salvarPrecoFixo(idx){
+  const v=+document.getElementById(`cp-preco-${idx}`)?.value||0;
+  ITENS_COMPRAS[idx].preco=v;
+  saveAll();showToast('Preço salvo!','sage');
+}
+
+// ── Preços Enxoval ──
+function salvarPrecoEnxoval(nome){
+  const sizes=['Solteiro','Casal','Queen','King'];
+  if(!PRECOS_ENXOVAL[nome])PRECOS_ENXOVAL[nome]={};
+  sizes.forEach(s=>{
+    const el=document.getElementById(`enx-${CSS.escape(nome)}-${s}`);
+    if(el)PRECOS_ENXOVAL[nome][s]=+el.value||0;
+  });
+  saveAll();showToast(`"${nome}" salvo!`,'sage');
+}
+function apagarPrecoEnxoval(nome){
+  if(!confirm(`Apagar "${nome}" dos preços de enxoval?`))return;
+  delete PRECOS_ENXOVAL[nome];
+  saveAll();renderConfig();showToast('Removido.','peach');
+}
+function adicionarPrecoEnxoval(){
+  const nome=document.getElementById('enx-novo-nome')?.value.trim();
+  if(!nome){showToast('Informe o nome do item.','peach');return;}
+  if(PRECOS_ENXOVAL[nome]){showToast('Item já existe.','peach');return;}
+  PRECOS_ENXOVAL[nome]={Solteiro:0,Casal:0,Queen:0,King:0};
+  saveAll();renderConfig();showToast(`"${nome}" adicionado!`,'sage');
+}
+
+// ── Limpeza e Fotos ──
+function salvarPrecoLimpeza(q,srv){
+  const c=+document.getElementById(`limp-${q}-${srv}-c`)?.value||0;
+  const r=+document.getElementById(`limp-${q}-${srv}-r`)?.value||0;
+  if(!PRECOS_PRIMEIRA_LIMPEZA[q])PRECOS_PRIMEIRA_LIMPEZA[q]={};
+  PRECOS_PRIMEIRA_LIMPEZA[q][srv]={custo:c,cobrado:r};
+  saveAll();showToast('Salvo!','sage');
+}
+function salvarPrecoFoto(q){
+  const min=+document.getElementById(`foto-${q}-min`)?.value||0;
+  const max=+document.getElementById(`foto-${q}-max`)?.value||0;
+  if(!PRECOS_FOTOS[q])PRECOS_FOTOS[q]={};
+  PRECOS_FOTOS[q].min=min;PRECOS_FOTOS[q].max=max;
+  saveAll();showToast('Salvo!','sage');
+}
 function aplicarPresetPerfil(){}
 
 // ═══════════════════ INIT ═══════════════════
