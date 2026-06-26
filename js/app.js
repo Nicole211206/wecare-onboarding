@@ -1513,7 +1513,10 @@ function renderAbaCompras(im){
   const totalGeral=totalEstimado+frete+totalManutencao;
 
   const manutHtml=`<div style="margin-top:28px;">
-    <div class="form-section-title"><i class="fa-solid fa-wrench"></i> Manutenções / Reparos</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-wrench"></i> Manutenções / Reparos</div>
+      <button class="btn btn-sm btn-outline" onclick="adicionarManutencao()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
     ${!manutencoes.length?`<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Nenhuma manutenção registrada. As irregularidades da vistoria aparecem aqui.</div>`:`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
       <thead><tr style="background:var(--surface-2)">
@@ -1521,6 +1524,7 @@ function renderAbaCompras(im){
         <th style="padding:6px 8px;">Cômodo</th>
         <th style="padding:6px 8px;">Problema</th>
         <th style="text-align:right;padding:6px 8px;">Custo (R$)</th>
+        <th style="padding:6px 4px;width:32px;"></th>
       </tr></thead>
       <tbody>
       ${manutencoes.map(m=>`<tr style="${m.status==='resolvido'?'opacity:.45;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
@@ -1528,6 +1532,7 @@ function renderAbaCompras(im){
         <td style="padding:4px 8px;"><span class="tag tag-neutral" style="font-size:11px;">${esc(m.comodo)}</span></td>
         <td style="padding:4px 8px;">${esc(m.descricao)}</td>
         <td style="padding:4px 8px;text-align:right;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${m.custo||0}" onchange="_onManutCusto(this,'${esc(m.id)}')"></td>
+        <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarManutencao('${esc(m.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
     </table>`}
@@ -1563,6 +1568,22 @@ function _onManutCusto(inp,manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
   const m=im.manutencoes.find(x=>x.id===manId);
   if(m){m.custo=+inp.value||0;saveAll();}
+}
+function adicionarManutencao(){
+  const comodo=prompt('Cômodo (ex: Cozinha, Quarto 1, Banheiro...):');
+  if(!comodo)return;
+  const descricao=prompt('Problema / descrição:');
+  if(!descricao)return;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.manutencoes)im.manutencoes=[];
+  im.manutencoes.push({id:uid(),comodo:comodo.trim(),descricao:descricao.trim(),status:'pendente',custo:0});
+  saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
+}
+function _apagarManutencao(manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  if(!confirm('Apagar esta manutenção?'))return;
+  im.manutencoes=im.manutencoes.filter(m=>m.id!==manId);
+  saveAll();renderAba('compras');renderKanban();showToast('Removida.','peach');
 }
 function _onFreteChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;
