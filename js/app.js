@@ -1464,7 +1464,7 @@ function renderAbaCompras(im){
         else qtdNec=q;
         const precoUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         const subKey=`${idx}_${tipoEnx}`;
-        const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
+        const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
         const total=precoUn*falta;
         totalEstimado+=total;
@@ -1632,7 +1632,7 @@ function _rowsComprasFalta(im){
         else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
-        const qtdTem=im.compras?.[subKey]?.qtdTem??0;
+        const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
         if(falta>0){const pUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
       });
@@ -1640,7 +1640,7 @@ function _rowsComprasFalta(im){
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
       const pUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
-      const qtdTem=im.compras?.[subKey]?.qtdTem??0;
+      const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
       if(falta>0)rows.push({label:item.nome,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});
     }
