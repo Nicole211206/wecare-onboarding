@@ -730,14 +730,16 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
 Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
 Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
 Estrutura esperada:
-{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
 Regras:
 - Use 0 ou "" para campos não encontrados. NÃO invente informações.
 - Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
 - q9: endereço completo do imóvel
 - q81: como hóspedes acessam (portaria, fechadura, etc.) + senha da porta + vaga
 - q83: nome e telefone do zelador/portaria
-- q86: rede e senha do Wi-Fi`;
+- q86: rede e senha do Wi-Fi
+- short_stay_permitido: "sim" se a convenção do condomínio permite aluguel por temporada/short stay, "nao" se proibido, "" se não mencionado
+- restricoes: qualquer restrição relevante encontrada (proibição de animais, festas, cláusulas especiais, adendos ao contrato, etc.)`;
 
       const userContent = [];
       if (textoContexto.trim()) {
@@ -798,6 +800,8 @@ Regras:
         if (resultado.wifi_rede  && !im.wifi.rede)  im.wifi.rede  = resultado.wifi_rede;
         if (resultado.wifi_senha && !im.wifi.senha) im.wifi.senha = resultado.wifi_senha;
       }
+      if (resultado.short_stay_permitido && !im.shortStayPermitido) im.shortStayPermitido = resultado.short_stay_permitido;
+      if (resultado.restricoes && !im.restricoes) im.restricoes = resultado.restricoes;
       // formRascunho
       if (!im.formRascunho) im.formRascunho = {};
       const conf = im.formConfirmados || {};

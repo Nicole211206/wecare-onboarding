@@ -379,6 +379,7 @@ function renderCard(im){
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formPreenchidoEm?'<span class="tag tag-lav" title="Formulário preenchido"><i class="fa-solid fa-clipboard-check"></i></span>':''}
       ${((im.manutencoes||[]).filter(m=>m.status!=='resolvido').length)?`<span class="tag tag-amber" title="Manutenções pendentes"><i class="fa-solid fa-wrench"></i> ${(im.manutencoes||[]).filter(m=>m.status!=='resolvido').length}</span>`:''}
+      ${im.restricoes?`<span class="tag tag-peach" title="${esc(im.restricoes)}"><i class="fa-solid fa-triangle-exclamation"></i> Restrições</span>`:''}
     </div>
   </div>`;
 }
@@ -550,6 +551,8 @@ function _coletarDadosAba(aba,im){
     im.wifi={rede:g('d-wifi-rede'),senha:g('d-wifi-senha')};
     im.acesso=g('d-acesso'); im.senhaPorta=g('d-senha-porta'); im.vaga=g('d-vaga');
     im.zeladorNome=g('d-zelador-nome'); im.zeladorTel=g('d-zelador-tel');
+    im.shortStayPermitido=g('d-short-stay');
+    im.restricoes=g('d-restricoes');
     // Auto-preenche formRascunho com os dados de acesso
     _autoRascunhoFromDados(im);
     document.getElementById('detalhe-titulo').textContent=im.nome;
@@ -686,6 +689,20 @@ function renderAbaDados(im){
     <div class="form-group"><label>Zelador / Portaria — Nome</label><input id="d-zelador-nome" class="input" value="${esc(im.zeladorNome||'')}"></div>
     <div class="form-group"><label>Zelador / Portaria — Telefone</label><input id="d-zelador-tel" class="input" value="${esc(im.zeladorTel||'')}"></div>
   </div>
+
+  <div class="form-section-title"><i class="fa-solid fa-building-columns"></i> Condomínio</div>
+  <div class="form-row" style="align-items:flex-end;gap:16px;">
+    <div class="form-group"><label>Convenção aceita short stay</label>
+      <select id="d-short-stay" class="input">
+        <option value="">Não informado</option>
+        <option value="sim"${im.shortStayPermitido==='sim'?' selected':''}>Sim</option>
+        <option value="nao"${im.shortStayPermitido==='nao'?' selected':''}>Não</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-section-title"><i class="fa-solid fa-triangle-exclamation"></i> Restrições</div>
+  <div class="form-group"><textarea id="d-restricoes" class="input" rows="3" placeholder="Ex: proibido animais; sem festas; máximo 4 hóspedes; cláusula de adendo...">${esc(im.restricoes||'')}</textarea></div>
 
   <div class="form-section-title"><i class="fa-solid fa-comment-dots"></i> Observações</div>
   <div class="form-group"><textarea id="d-obs" class="input" rows="3">${esc(im.observacoes||'')}</textarea></div>
@@ -2466,9 +2483,60 @@ function renderFornecedores(){
 
 // ═══════════════════ CONFIG ═══════════════════
 function renderConfig(){
-  // Renderiza a lista de membros (compatibilidade)
   const mb=document.getElementById('config-membros');
   if(mb)mb.innerHTML=`<div class="text-muted" style="font-size:12px;">Membros gerenciados no painel <strong>Usuários</strong>.</div>`;
+
+  const ci=document.getElementById('config-itens');
+  if(!ci)return;
+  const baseOpts=['colchao','leito','banheiro-completo','banheiro','quarto','unidade'];
+  const baseLabels={
+    'colchao':'por colchão','leito':'por leito (cama/beliche)',
+    'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
+    'quarto':'por quarto','unidade':'unidade fixa (1 por apê)'
+  };
+  ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <thead><tr style="border-bottom:2px solid var(--border);">
+      <th style="text-align:left;padding:6px 4px;">Item</th>
+      <th style="text-align:center;padding:6px 4px;width:64px;">Qtd</th>
+      <th style="text-align:left;padding:6px 4px;">Base de cálculo</th>
+      <th style="padding:6px 4px;width:36px;"></th>
+    </tr></thead>
+    <tbody>${ITENS_COMPRAS.map((item,i)=>{
+      const dash=item.qtdRule.indexOf('-');
+      const n=item.qtdRule.slice(0,dash);
+      const base=item.qtdRule.slice(dash+1);
+      return`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br>${esc(item.nome)}</td>
+        <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
+        <td style="padding:5px 4px;">
+          <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
+            ${baseOpts.map(b=>`<option value="${b}"${b===base?' selected':''}>${baseLabels[b]||b}</option>`).join('')}
+          </select>
+        </td>
+        <td style="padding:5px 4px;">
+          <button class="btn btn-xs btn-sage" onclick="salvarRegra(${i})" title="Salvar esta linha"><i class="fa-solid fa-check"></i></button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>
+  <div style="margin-top:12px;text-align:right;">
+    <button class="btn btn-sm btn-sage" onclick="salvarTodasRegras()"><i class="fa-solid fa-floppy-disk"></i> Salvar todas as regras</button>
+  </div>`;
+}
+function salvarRegra(i){
+  const item=ITENS_COMPRAS[i];if(!item)return;
+  const n=document.getElementById(`ci-n-${i}`)?.value||'1';
+  const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
+  item.qtdRule=`${n}-${base}`;
+  saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
+}
+function salvarTodasRegras(){
+  ITENS_COMPRAS.forEach((_,i)=>{
+    const n=document.getElementById(`ci-n-${i}`)?.value||'1';
+    const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
+    ITENS_COMPRAS[i].qtdRule=`${n}-${base}`;
+  });
+  saveAll();showToast('Todas as regras salvas!','sage');
 }
 function _limparDados(){
   if(!confirm('ATENÇÃO: Apagar todos os dados locais? Esta ação não pode ser desfeita.'))return;
