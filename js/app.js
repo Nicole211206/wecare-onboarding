@@ -1441,7 +1441,7 @@ function renderAbaCompras(im){
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
   const manutencoes=im.manutencoes||[];
-  let totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.custo||0),0);
+  let totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
 
   // Gerar linhas — itens de enxoval expandidos por tamanho de cama
   const rows=[];
@@ -1521,17 +1521,15 @@ function renderAbaCompras(im){
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
       <thead><tr style="background:var(--surface-2)">
         <th style="padding:6px 8px;width:32px;">✓</th>
-        <th style="padding:6px 8px;">Cômodo</th>
-        <th style="padding:6px 8px;">Problema</th>
-        <th style="text-align:right;padding:6px 8px;">Custo (R$)</th>
+        <th style="padding:6px 8px;">Descrição</th>
+        <th style="text-align:right;padding:6px 8px;">Valor (R$)</th>
         <th style="padding:6px 4px;width:32px;"></th>
       </tr></thead>
       <tbody>
       ${manutencoes.map(m=>`<tr style="${m.status==='resolvido'?'opacity:.45;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;"><input type="checkbox" class="manut-check" ${m.status==='resolvido'?'checked':''} onchange="_onManutCheck(this,'${esc(m.id)}')"></td>
-        <td style="padding:4px 8px;"><span class="tag tag-neutral" style="font-size:11px;">${esc(m.comodo)}</span></td>
-        <td style="padding:4px 8px;">${esc(m.descricao)}</td>
-        <td style="padding:4px 8px;text-align:right;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${m.custo||0}" onchange="_onManutCusto(this,'${esc(m.id)}')"></td>
+        <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
+        <td style="padding:4px 8px;text-align:right;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${m.valor??m.custo??0}" onchange="_onManutCusto(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarManutencao('${esc(m.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
@@ -1567,17 +1565,24 @@ function _onManutCheck(cb,manId){
 function _onManutCusto(inp,manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
   const m=im.manutencoes.find(x=>x.id===manId);
-  if(m){m.custo=+inp.value||0;saveAll();}
+  if(m){m.valor=+inp.value||0;saveAll();}
 }
 function adicionarManutencao(){
-  const comodo=prompt('Cômodo (ex: Cozinha, Quarto 1, Banheiro...):');
-  if(!comodo)return;
-  const descricao=prompt('Problema / descrição:');
-  if(!descricao)return;
+  const nome=prompt('Nome da manutenção (ex: Trocar torneira, Pintura quarto):');
+  if(!nome)return;
+  const valorStr=prompt('Valor estimado (R$):','0');
+  if(valorStr===null)return;
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.manutencoes)im.manutencoes=[];
-  im.manutencoes.push({id:uid(),comodo:comodo.trim(),descricao:descricao.trim(),status:'pendente',custo:0});
+  const novaManut={id:uid(),nome:nome.trim(),valor:+valorStr||0,status:'pendente'};
+  im.manutencoes.push(novaManut);
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
+  // Cria card no módulo de manutenção da Claire
+  fetch('https://claire-dados.nicole-0e7.workers.dev/api/manutencoes?token=wecare-claire-2026-k7x9q2',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
+  }).catch(()=>{});
 }
 function _apagarManutencao(manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;

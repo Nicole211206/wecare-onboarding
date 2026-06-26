@@ -290,13 +290,19 @@ Regras:
       const stats      = Array.isArray(data) ? data : (data.stats ?? []);
       const prestadores = Array.isArray(data) ? [] : (data.prestadores ?? []);
       const atualizadoEm = data.atualizadoEm ?? null;
+      // Lê imóveis diretamente do estado para KPI de onboarding na Claire
+      const stateRaw = await env.ONBOARDING_KV.get(KV_KEY);
+      const state2 = stateRaw ? JSON.parse(stateRaw) : {};
+      const imoveis = (Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : []).map(im => ({
+        nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao
+      }));
       // KPIs calculados
       const ativos    = stats.filter(s => s.status === 'ativo' && s.diasOnboarding != null);
       const mediaOnboarding = ativos.length
         ? Math.round(ativos.reduce((s,x) => s + x.diasOnboarding, 0) / ativos.length)
         : null;
       const emOnboarding = stats.filter(s => s.status && s.status !== 'ativo' && s.status !== 'perdido').length;
-      return json({ ok: true, stats, prestadores, kpi: { mediaOnboardingDias: mediaOnboarding, totalAtivos: ativos.length, emOnboarding }, atualizadoEm });
+      return json({ ok: true, stats, imoveis, prestadores, kpi: { mediaOnboardingDias: mediaOnboarding, totalAtivos: ativos.length, emOnboarding }, atualizadoEm });
     }
 
     // ── GET /form-load?id=IMOVEL_ID&t=FORM_TOKEN ─────────────────────────────
