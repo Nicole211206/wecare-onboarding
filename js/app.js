@@ -1619,6 +1619,7 @@ function _rowsComprasFalta(im){
   const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);
   const quartos=im.quartos||1;
+  const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;
   const rows=[];
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(item.tipoPreco==='enxoval'&&camas.length){
