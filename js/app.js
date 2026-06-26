@@ -1020,60 +1020,11 @@ function renderAbaContrato(im){
   </div>
   <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10})}</div>
 
-  <div class="form-section-title" style="margin-top:24px;"><i class="fa-solid fa-calculator"></i> Resumo do Orçamento</div>
-  ${(()=>{
-    let totalCompras=0;
-    ITENS_COMPRAS.forEach((item,idx)=>{
-      const camas=im.camas||[];
-      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
-      const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
-      const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
-      totalCompras+=precoUn*qtdReal;
-    });
-    const frete=im.freteTotal||0;
-    const custoFotos2=+ops.fotos?.custo||0;
-    const custoLimpeza2=+ops.limpeza?.custo||0;
-    const custoVistoria2=+ops.vistoria?.custo||0;
-    const custosExtras2=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
-    const subtotalOrc=totalCompras+frete+custoFotos2+custoLimpeza2+custoVistoria2+custosExtras2;
-    const margemOrc=im.margemWecare||15;
-    const margemValorOrc=subtotalOrc*(margemOrc/100);
-    const subtotalComMargem=subtotalOrc+margemValorOrc;
-    const descTipo=im.descontoTipo||'reais';
-    const descVal=im.descontoValor||0;
-    const descValor=descTipo==='reais'?descVal:subtotalComMargem*(descVal/100);
-    const totalProp=subtotalComMargem-descValor;
-    return`<table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
-      <tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Total de Compras</td><td style="text-align:right;">${fmtMoeda(totalCompras)}</td></tr>
-      ${frete?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Frete</td><td style="text-align:right;">${fmtMoeda(frete)}</td></tr>`:''}
-      ${custoFotos2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Fotos</td><td style="text-align:right;">${fmtMoeda(custoFotos2)}</td></tr>`:''}
-      ${custoLimpeza2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Limpeza</td><td style="text-align:right;">${fmtMoeda(custoLimpeza2)}</td></tr>`:''}
-      ${custoVistoria2?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">Vistoria</td><td style="text-align:right;">${fmtMoeda(custoVistoria2)}</td></tr>`:''}
-      ${gastosSetup.map(g=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 4px;">${esc(g.nome)}</td><td style="text-align:right;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('')}
-      <tr style="border-top:2px solid var(--border)"><td style="padding:7px 4px;font-weight:600;">Subtotal</td><td id="ct-resumo-subtotal" style="text-align:right;font-weight:600;">${fmtMoeda(subtotalOrc)}</td></tr>
-      <tr style="border-bottom:1px solid var(--border)"><td id="ct-resumo-margem-label" style="padding:7px 4px;">Margem WeCare (${margemOrc}%)</td><td id="ct-resumo-margem-val" style="text-align:right;">${fmtMoeda(margemValorOrc)}</td></tr>
-    </table>
-    <div class="form-section-title"><i class="fa-solid fa-tag"></i> Desconto</div>
-    <div class="form-row">
-      <div class="form-group"><label>Tipo</label>
-        <select id="ct-desc-tipo" class="input" onchange="_atualizarSubtotalSetup()">
-          <option value="reais"${descTipo==='reais'?' selected':''}>R$ (reais)</option>
-          <option value="percent"${descTipo==='percent'?' selected':''}>% (porcentagem)</option>
-        </select>
-      </div>
-      <div class="form-group"><label>Valor</label><input id="ct-desc-val" type="number" class="input" value="${descVal}" min="0" oninput="_atualizarSubtotalSetup()"></div>
-    </div>
-    <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;">
-        <span>Total ao Proprietário</span><span id="ct-resumo-total" style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
-      </div>
-    </div>
-    <div class="form-section-title"><i class="fa-solid fa-credit-card"></i> Formas de Pagamento</div>
-    <div class="form-group">
-      <textarea id="ct-pagamento" class="input" rows="3" placeholder="Ex: 50% na assinatura + 50% na entrega das chaves">${esc(im.formasPagamento||'')}</textarea>
-    </div>
-    <button class="btn btn-sm" style="margin-top:8px;" onclick="gerarPDFOrcamento()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do Orçamento</button>`;
-  })()}
+  <div class="form-section-title"><i class="fa-solid fa-credit-card"></i> Formas de Pagamento</div>
+  <div class="form-group">
+    <textarea id="ct-pagamento" class="input" rows="3" placeholder="Ex: 50% na assinatura + 50% na entrega das chaves">${esc(im.formasPagamento||'')}</textarea>
+  </div>
+  <button class="btn btn-sm" style="margin-top:8px;" onclick="gerarPDFOrcamento()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do Orçamento</button>
   </div>`;
 }
 function _atualizarSubtotalSetup(){
@@ -1095,33 +1046,6 @@ function _atualizarSubtotalSetup(){
   if(mgSetupEl)mgSetupEl.textContent=`Margem WeCare (${mg}%)`;
   if(mgSetupValEl)mgSetupValEl.textContent=fmtMoeda(total*(mg/100));
   if(totalSetupEl)totalSetupEl.textContent=fmtMoeda(total*(1+mg/100));
-  // atualiza resumo do orçamento
-  let totalCompras=0;
-  if(im){
-    (ITENS_COMPRAS||[]).forEach((item,idx)=>{
-      const camas=im.camas||[];
-      const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
-      const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
-      const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
-      totalCompras+=precoUn*qtdReal;
-    });
-  }
-  const frete=im?.freteTotal||0;
-  const subtotalOrc=totalCompras+frete+f+l+v+extras;
-  const margemValor=subtotalOrc*(mg/100);
-  const subtotalComMargem=subtotalOrc+margemValor;
-  const descTipo=(document.getElementById('ct-desc-tipo')?.value)||(im?.descontoTipo||'reais');
-  const descVal=+document.getElementById('ct-desc-val')?.value||(im?.descontoValor||0);
-  const descValor=descTipo==='reais'?descVal:subtotalComMargem*(descVal/100);
-  const totalProp=subtotalComMargem-descValor;
-  const rSubEl=document.getElementById('ct-resumo-subtotal');
-  const rMgLEl=document.getElementById('ct-resumo-margem-label');
-  const rMgVEl=document.getElementById('ct-resumo-margem-val');
-  const rTotEl=document.getElementById('ct-resumo-total');
-  if(rSubEl)rSubEl.textContent=fmtMoeda(subtotalOrc);
-  if(rMgLEl)rMgLEl.textContent=`Margem WeCare (${mg}%)`;
-  if(rMgVEl)rMgVEl.textContent=fmtMoeda(margemValor);
-  if(rTotEl)rTotEl.textContent=fmtMoeda(totalProp);
 }
 function addGastoSetup(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -1466,8 +1390,8 @@ function renderAbaCompras(im){
         if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else qtdNec=q;
-        const precoUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         const subKey=`${idx}_${tipoEnx}`;
+        const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
         const total=precoUn*falta;
@@ -1477,8 +1401,8 @@ function renderAbaCompras(im){
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
-      const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
+      const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
       const total=precoUn*falta;
@@ -1502,7 +1426,7 @@ function renderAbaCompras(im){
           <td style="text-align:center;color:var(--text-muted);">${qtdNec}</td>
           <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
-          <td style="text-align:right;padding:0 8px;">${fmtMoeda(precoUn)}</td>
+          <td style="text-align:right;padding:0 4px;"><input class="input" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" onchange="_onCompraPreco(this,'${subKey}')"></td>
           <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
         </tr>`).join('')}
@@ -1515,6 +1439,12 @@ function renderAbaCompras(im){
 
   const frete=im.freteTotal||0;
   const totalGeral=totalEstimado+frete+totalManutencao;
+  const margem=im.margemWecare||15;
+  const descTipo=im.descontoTipo||'reais';
+  const descVal=im.descontoValor||0;
+  const totalComMargem=totalGeral*(1+margem/100);
+  const descValor=descTipo==='reais'?descVal:totalComMargem*(descVal/100);
+  const totalProp=totalComMargem-descValor;
 
   const manutHtml=`<div style="margin-top:28px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -1566,6 +1496,23 @@ function renderAbaCompras(im){
     <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
   </div>
 
+  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-tag"></i> Desconto</div>
+  <div class="form-row">
+    <div class="form-group"><label>Tipo</label>
+      <select id="cp-desc-tipo" class="input" onchange="_onDescontoChange()">
+        <option value="reais"${descTipo==='reais'?' selected':''}>R$ (reais)</option>
+        <option value="percent"${descTipo==='percent'?' selected':''}>% (porcentagem)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Valor</label><input id="cp-desc-val" type="number" class="input" value="${descVal}" min="0" step="10" oninput="_onDescontoChange()"></div>
+  </div>
+  <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Total Compras+Frete+Manut.: ${fmtMoeda(totalGeral)} + Margem ${margem}% = ${fmtMoeda(totalComMargem)}</div>
+    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;">
+      <span>Total ao Proprietário</span><span id="cp-total-prop" style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
+    </div>
+  </div>
+
   <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval Buddemeyer</div>
   <textarea id="wamsg-enxoval" class="input" rows="9" style="font-size:11.5px;font-family:monospace;" readonly onclick="this.select()">${esc(msgWA)}</textarea>
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
@@ -1580,6 +1527,20 @@ function _onManutCusto(inp,manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
   const m=im.manutencoes.find(x=>x.id===manId);
   if(m){m.valor=+inp.value||0;saveAll();}
+}
+function _onCompraPreco(inp,subKey){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.compras)im.compras={};
+  if(!im.compras[subKey])im.compras[subKey]={};
+  im.compras[subKey].precoOverride=+inp.value||0;
+  saveAll();
+}
+function _onDescontoChange(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const tipo=document.getElementById('cp-desc-tipo')?.value||'reais';
+  const val=+document.getElementById('cp-desc-val')?.value||0;
+  im.descontoTipo=tipo;im.descontoValor=val;saveAll();
+  renderAba('compras');
 }
 function toggleFormManut(){
   const el=document.getElementById('form-add-manut');
