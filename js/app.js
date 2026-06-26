@@ -1475,7 +1475,7 @@ function renderAbaCompras(im){
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
       const precoUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
-      const qtdTem=compras[subKey]?.qtdTem!=null?compras[subKey].qtdTem:0;
+      const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
       const total=precoUn*falta;
       totalEstimado+=total;
