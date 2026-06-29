@@ -1587,23 +1587,9 @@ function _onCompraPreco(inp,subKey){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
   if(!im.compras[subKey])im.compras[subKey]={};
-  const preco=+inp.value||0;
-  im.compras[subKey].precoOverride=preco;
+  im.compras[subKey].precoOverride=+inp.value||0;
   saveAll();
-  // atualiza total da linha sem re-renderizar
-  const falta=+(document.querySelector(`[data-idx="${subKey}"]`)?.closest('tr')?.querySelector('.compra-qtd-input')?.value)||0;
-  const qtdNec=im.compras[subKey]?.qtdNec;
-  // calcula falta a partir das células da linha
-  const row=inp.closest('tr');
-  if(row){
-    const necEl=row.cells[2];
-    const temEl=row.querySelector('.compra-qtd-input');
-    const nec=necEl?+necEl.textContent:0;
-    const tem=temEl?+temEl.value:0;
-    const f=Math.max(0,nec-tem);
-    const totalEl=document.getElementById('cp-total-'+subKey);
-    if(totalEl)totalEl.textContent=fmtMoeda(preco*f);
-  }
+  renderAba('compras');
 }
 function _onDescontoChange(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
