@@ -196,7 +196,19 @@ function doLogin(){
   iniciarApp();
 }
 function carregarUsuarios(){try{usuarios=JSON.parse(localStorage.getItem('wc_users')||'[]');}catch{usuarios=[];}}
-function salvarUsuarios(){localStorage.setItem('wc_users',JSON.stringify(usuarios));_kvPushDebounced();}
+function salvarUsuarios(){
+  localStorage.setItem('wc_users',JSON.stringify(usuarios));
+  // push imediato para KV (sem aguardar __servidorLido — usuários precisam sincronizar sempre)
+  const s=window.WC_SYNC||{};
+  if(s.url){
+    const blob={};
+    SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
+    blob.lastSaved=Date.now();
+    localStorage.setItem('lastSaved',String(blob.lastSaved));
+    fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)}).catch(()=>{});
+  }
+}
 function garantirAdminPadrao(){
   carregarUsuarios();
   if(!usuarios.length){
