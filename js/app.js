@@ -2863,18 +2863,29 @@ function abrirModalMembro(){
 function salvarMembro(){
   const nome=document.getElementById('mb-nome').value.trim();
   if(!nome){showToast('Informe o nome.','peach');return;}
-  const email=document.getElementById('mb-email').value.trim();
+  const emailRaw=document.getElementById('mb-email').value.trim();
+  const email=emailRaw.toLowerCase();
   if(!email){showToast('Informe o e-mail.','peach');return;}
   const senha=document.getElementById('mb-senha').value.trim();
   if(!senha){showToast('Informe a senha.','peach');return;}
   const funcao=document.getElementById('mb-funcao').value.trim();
   if(!membros)membros=[];
-  membros.push({id:uid(),nome,funcao,email,senha});
+  const id=uid();
+  membros.push({id,nome,funcao,email,senha});
+  // criar login
+  carregarUsuarios();
+  if(!usuarios.find(u=>u.email===email)){
+    usuarios.push({id,email,senha,nome,perfil:'operacional',modulos:[]});
+    salvarUsuarios();
+  }
   saveAll();closeModal('modal-membro');renderConfig();showToast('Membro adicionado!','sage');
 }
 function apagarMembro(i){
   if(!confirm(`Remover "${membros[i]?.nome}"?`))return;
-  membros.splice(i,1);saveAll();renderConfig();showToast('Removido.','peach');
+  const emailRemover=membros[i]?.email;
+  membros.splice(i,1);
+  if(emailRemover){carregarUsuarios();usuarios=usuarios.filter(u=>u.email!==emailRemover);salvarUsuarios();}
+  saveAll();renderConfig();showToast('Removido.','peach');
 }
 
 // ── Item de Compras ──
