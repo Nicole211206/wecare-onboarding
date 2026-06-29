@@ -228,6 +228,8 @@ async function sincronizarUsuariosNuvem(){
       carregarUsuarios();
     }
   }catch{}
+  // marca que já comunicou com o servidor — libera o push de dados
+  window.__servidorLido=true;
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
@@ -1439,7 +1441,7 @@ function renderAbaCompras(im){
           <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 4px;"><input class="input" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" onchange="_onCompraPreco(this,'${subKey}')"></td>
-          <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
+          <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
         </tr>`).join('')}
         </tbody>
@@ -1585,8 +1587,23 @@ function _onCompraPreco(inp,subKey){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
   if(!im.compras[subKey])im.compras[subKey]={};
-  im.compras[subKey].precoOverride=+inp.value||0;
+  const preco=+inp.value||0;
+  im.compras[subKey].precoOverride=preco;
   saveAll();
+  // atualiza total da linha sem re-renderizar
+  const falta=+(document.querySelector(`[data-idx="${subKey}"]`)?.closest('tr')?.querySelector('.compra-qtd-input')?.value)||0;
+  const qtdNec=im.compras[subKey]?.qtdNec;
+  // calcula falta a partir das células da linha
+  const row=inp.closest('tr');
+  if(row){
+    const necEl=row.cells[2];
+    const temEl=row.querySelector('.compra-qtd-input');
+    const nec=necEl?+necEl.textContent:0;
+    const tem=temEl?+temEl.value:0;
+    const f=Math.max(0,nec-tem);
+    const totalEl=document.getElementById('cp-total-'+subKey);
+    if(totalEl)totalEl.textContent=fmtMoeda(preco*f);
+  }
 }
 function _onDescontoChange(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
