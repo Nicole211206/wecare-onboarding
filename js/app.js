@@ -1449,8 +1449,48 @@ function renderAbaCompras(im){
 
   const msgWA=_gerarMsgWhatsAppEnxoval(im,rows);
 
+  const itensExtras=im.itensExtras||[];
+  let totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
+
+  const extrasHtml=`<div style="margin-top:28px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-circle-plus"></i> Itens Extras (solicitados pelo proprietário)</div>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormExtra()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    <div id="form-add-extra" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:2;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Item</label><input id="extra-nome-input" class="input" placeholder="Ex: Espelho para quarto"></div>
+        <div style="width:64px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Qtd</label><input id="extra-qtd-input" class="input" type="number" min="1" value="1" style="width:100%;"></div>
+        <div style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Preço unit. (R$)</label><input id="extra-preco-input" class="input" type="number" min="0" step="10" value="0" style="width:100%;"></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-sage" onclick="confirmarItemExtra()"><i class="fa-solid fa-check"></i> Salvar</button>
+          <button class="btn btn-sm btn-outline" onclick="toggleFormExtra()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+    </div>
+    ${!itensExtras.length?`<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Nenhum item extra registrado.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)">
+        <th style="padding:6px 8px;">Item</th>
+        <th style="text-align:center;padding:6px 8px;">Qtd</th>
+        <th style="text-align:right;padding:6px 8px;">R$/Un</th>
+        <th style="text-align:right;padding:6px 8px;">Total</th>
+        <th style="padding:6px 4px;width:32px;"></th>
+      </tr></thead>
+      <tbody>
+      ${itensExtras.map((x,xi)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;">${esc(x.nome||'')}</td>
+        <td style="text-align:center;padding:4px 8px;"><input class="input" style="width:56px;padding:3px 6px;text-align:center;" type="number" min="1" value="${+x.qtd||1}" onchange="_onExtraQtd(this,${xi})"></td>
+        <td style="text-align:right;padding:4px 8px;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${+x.precoUn||0}" onchange="_onExtraPreco(this,${xi})"></td>
+        <td style="text-align:right;padding:4px 8px;font-weight:600;">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
+        <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarItemExtra(${xi})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
   const frete=im.freteTotal||0;
-  const totalGeral=totalEstimado+frete+totalManutencao;
+  const totalGeral=totalEstimado+totalExtras+frete+totalManutencao;
   const margem=im.margemWecare||15;
   const descTipo=im.descontoTipo||'reais';
   const descVal=im.descontoValor||0;
@@ -1501,11 +1541,12 @@ function renderAbaCompras(im){
     </div>
   </div>
   ${tabelasCat}
+  ${extrasHtml}
   ${manutHtml}
   <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
     <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
     ${numInput({id:'compras-frete',value:frete,min:0,step:10,onchange:'_onFreteChange(this)'})}
-    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
+    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Extras: ${fmtMoeda(totalExtras)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
   </div>
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-tag"></i> Desconto</div>
@@ -1553,6 +1594,40 @@ function _onDescontoChange(){
   const val=+document.getElementById('cp-desc-val')?.value||0;
   im.descontoTipo=tipo;im.descontoValor=val;saveAll();
   renderAba('compras');
+}
+function toggleFormExtra(){
+  const el=document.getElementById('form-add-extra');
+  if(!el)return;
+  const visible=el.style.display!=='none';
+  el.style.display=visible?'none':'block';
+  if(!visible){
+    const ni=document.getElementById('extra-nome-input');
+    if(ni){ni.value='';ni.focus();}
+    document.getElementById('extra-qtd-input').value='1';
+    document.getElementById('extra-preco-input').value='0';
+  }
+}
+function confirmarItemExtra(){
+  const nome=(document.getElementById('extra-nome-input')||{}).value||'';
+  if(!nome.trim()){showToast('Informe o nome do item.','peach');return;}
+  const qtd=+(document.getElementById('extra-qtd-input')||{}).value||1;
+  const precoUn=+(document.getElementById('extra-preco-input')||{}).value||0;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.itensExtras)im.itensExtras=[];
+  im.itensExtras.push({id:uid(),nome:nome.trim(),qtd,precoUn});
+  saveAll();renderAba('compras');showToast('Item extra adicionado!','sage');
+}
+function _apagarItemExtra(xi){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras)return;
+  im.itensExtras.splice(xi,1);saveAll();renderAba('compras');
+}
+function _onExtraQtd(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  im.itensExtras[xi].qtd=+inp.value||1;saveAll();
+}
+function _onExtraPreco(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  im.itensExtras[xi].precoUn=+inp.value||0;saveAll();
 }
 function toggleFormManut(){
   const el=document.getElementById('form-add-manut');
@@ -1679,6 +1754,8 @@ function gerarPDFCompras(){
   const totalItens=rows.reduce((s,r)=>s+r.total,0);
   const manutencoes=(im.manutencoes||[]).filter(m=>m.status!=='resolvido');
   const totalManut=manutencoes.reduce((s,m)=>s+(m.valor??m.custo??0),0);
+  const itensExtras=im.itensExtras||[];
+  const totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
   const cats=[...new Set(rows.map(r=>r.cat))];
   const tabelas=cats.map(cat=>{
     const itens=rows.filter(r=>r.cat===cat);
@@ -1741,12 +1818,23 @@ function gerarPDFCompras(){
     <tr class="total-row"><td colspan="3" style="padding:10px;text-align:right;">Subtotal compras</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalItens)}</td></tr>
     </tbody>
   </table>`:''}
+  ${itensExtras.length?`<div style="margin-top:28px;">
+    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Itens Extras (solicitados pelo proprietário)</div>
+    <table>
+      <thead><tr><th>Item</th><th style="text-align:center;">Qtd</th><th style="text-align:right;">R$/Un</th><th style="text-align:right;">Total</th></tr></thead>
+      <tbody>`+
+      itensExtras.map(x=>`<tr><td style="padding:7px 10px;">${esc(x.nome||'')}</td><td style="text-align:center;padding:7px 10px;">${+x.qtd||1}</td><td style="text-align:right;padding:7px 10px;color:#888;">${fmtMoeda(+x.precoUn||0)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td></tr>`).join('')+
+      `<tr class="total-row"><td colspan="3" style="padding:10px;text-align:right;">Subtotal extras</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalExtras)}</td></tr>
+      </tbody>
+    </table>
+  </div>`:''}
   ${manutHtml}
   <div class="summary">
     ${rows.length?`<div class="summary-line"><span>Compras</span><span>${fmtMoeda(totalItens)}</span></div>`:''}
+    ${itensExtras.length?`<div class="summary-line"><span>Itens Extras</span><span>${fmtMoeda(totalExtras)}</span></div>`:''}
     ${frete?`<div class="summary-line"><span>Frete estimado</span><span>${fmtMoeda(frete)}</span></div>`:''}
     ${manutencoes.length?`<div class="summary-line"><span>Manutenções</span><span>${fmtMoeda(totalManut)}</span></div>`:''}
-    <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+frete+totalManut)}</span></div>
+    <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+totalExtras+frete+totalManut)}</span></div>
   </div>`}
   </body></html>`);
   win.document.close();win.print();
