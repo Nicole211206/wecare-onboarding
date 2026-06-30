@@ -244,6 +244,8 @@ function saveAll(){
   localStorage.setItem('wc_limpeza',JSON.stringify(PRECOS_PRIMEIRA_LIMPEZA));
   localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
+  // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
+  localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
   _publicarStats();
 }
@@ -1768,14 +1770,6 @@ function _rowsComprasFalta(im){
 }
 function gerarPDFCompras(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  // lê preços diretamente dos inputs visíveis na tela
-  if(!im.compras)im.compras={};
-  document.querySelectorAll('.compra-preco-input').forEach(inp=>{
-    const sk=inp.getAttribute('data-subkey');
-    if(!sk)return;
-    if(!im.compras[sk])im.compras[sk]={};
-    im.compras[sk].precoOverride=+inp.value||0;
-  });
   const rows=_rowsComprasFalta(im);
   const frete=im.freteTotal||0;
   const totalItens=rows.reduce((s,r)=>s+r.total,0);
