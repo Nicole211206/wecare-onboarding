@@ -1737,12 +1737,12 @@ function _rowsComprasFalta(im){
         const subKey=`${idx}_${tipoEnx}`;
         const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
-        if(falta>0){const pUn=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
+        if(falta>0){const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
-      const pUn=item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas);
       const subKey=String(idx);
+      const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
       if(falta>0)rows.push({label:item.nome,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});
