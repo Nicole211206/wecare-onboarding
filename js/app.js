@@ -650,7 +650,9 @@ function _coletarCompras(im){
   document.querySelectorAll('.compra-qtd-input').forEach(inp=>{
     const idx=inp.dataset.idx;
     if(!im.compras)im.compras={};
-    im.compras[idx]={qtdReal:+inp.value||0,comprado:inp.closest('tr')?.querySelector('.compra-check')?.checked||false};
+    if(!im.compras[idx])im.compras[idx]={};
+    im.compras[idx].qtdReal=+inp.value||0;
+    im.compras[idx].comprado=inp.closest('tr')?.querySelector('.compra-check')?.checked||false;
   });
   const freteEl=document.getElementById('compras-frete');
   if(freteEl)im.freteTotal=+freteEl.value||0;
