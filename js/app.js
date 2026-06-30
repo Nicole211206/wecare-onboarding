@@ -1440,7 +1440,7 @@ function renderAbaCompras(im){
           <td style="text-align:center;color:var(--text-muted);">${qtdNec}</td>
           <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
-          <td style="text-align:right;padding:0 4px;"><input class="input" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
+          <td style="text-align:right;padding:0 4px;"><input class="input compra-preco-input" data-subkey="${subKey}" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
         </tr>`).join('')}
@@ -1768,6 +1768,14 @@ function _rowsComprasFalta(im){
 }
 function gerarPDFCompras(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
+  // lê preços diretamente dos inputs visíveis na tela
+  if(!im.compras)im.compras={};
+  document.querySelectorAll('.compra-preco-input').forEach(inp=>{
+    const sk=inp.getAttribute('data-subkey');
+    if(!sk)return;
+    if(!im.compras[sk])im.compras[sk]={};
+    im.compras[sk].precoOverride=+inp.value||0;
+  });
   const rows=_rowsComprasFalta(im);
   const frete=im.freteTotal||0;
   const totalItens=rows.reduce((s,r)=>s+r.total,0);
