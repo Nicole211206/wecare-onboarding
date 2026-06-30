@@ -1440,7 +1440,7 @@ function renderAbaCompras(im){
           <td style="text-align:center;color:var(--text-muted);">${qtdNec}</td>
           <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
-          <td style="text-align:right;padding:0 4px;"><input class="input" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" onchange="_onCompraPreco(this,'${subKey}')"></td>
+          <td style="text-align:right;padding:0 4px;"><input class="input" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
         </tr>`).join('')}
@@ -1583,7 +1583,23 @@ function _onManutCusto(inp,manId){
   const m=im.manutencoes.find(x=>x.id===manId);
   if(m){m.valor=+inp.value||0;saveAll();}
 }
+function _onCompraPrecoinput(inp,subKey){
+  // salva imediatamente enquanto digita (para PDF capturar valor atual)
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.compras)im.compras={};
+  if(!im.compras[subKey])im.compras[subKey]={};
+  const preco=+inp.value||0;
+  im.compras[subKey].precoOverride=preco;
+  // atualiza total da linha inline
+  const row=inp.closest('tr');
+  if(row){
+    const falta=parseInt(row.cells[4]?.textContent)||0;
+    const totalEl=document.getElementById('cp-total-'+subKey);
+    if(totalEl)totalEl.textContent=fmtMoeda(preco*falta);
+  }
+}
 function _onCompraPreco(inp,subKey){
+  // ao sair do campo: persiste e re-renderiza para atualizar totais gerais
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.compras)im.compras={};
   if(!im.compras[subKey])im.compras[subKey]={};
