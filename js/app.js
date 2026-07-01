@@ -598,7 +598,6 @@ function _coletarDadosAba(aba,im){
   if(aba==='definicoes'){
     im.seguroEasyCover=gc('def-seguro'); im.kitAmenities=gc('def-amenities');
     im.internetClaro=gc('def-internet'); im.ecohost=gc('def-ecohost'); im.fechaduraEletronica=gc('def-fechadura');
-    im.defPagadoria={seguroEasyCover:g('def-pag-seguroEasyCover')||'wecare',kitAmenities:g('def-pag-kitAmenities')||'wecare',internetClaro:g('def-pag-internetClaro')||'wecare',ecohost:g('def-pag-ecohost')||'wecare',fechaduraEletronica:g('def-pag-fechaduraEletronica')||'wecare'};
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
     im.defEnxoval={tipo:g('def-enxoval-tipo'),fornecedor:g('def-enxoval-forn'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
@@ -1097,27 +1096,12 @@ function marcarContratoAssinadoManual(){
 function renderAbaDefinicoes(im){
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
-  <table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <thead><tr style="background:var(--surface-2);">
-      <th style="padding:7px 10px;text-align:left;">Serviço</th>
-      <th style="padding:7px 10px;text-align:center;">Ativo</th>
-      <th style="padding:7px 10px;text-align:left;">Pago por</th>
-    </tr></thead>
-    <tbody>
+  <div class="form-row" style="flex-wrap:wrap;gap:16px;">
     ${[['def-seguro','seguroEasyCover','Seguro EasyCover'],['def-amenities','kitAmenities','Kit Amenities WeCare'],
        ['def-internet','internetClaro','Internet Claro'],['def-ecohost','ecohost','Sistema EcoHost'],
-       ['def-fechadura','fechaduraEletronica','Fechadura Eletrônica']].map(([id,k,label])=>{
-      const pag=(im.defPagadoria||{})[k]||'wecare';
-      return`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:6px 10px;">${label}</td>
-        <td style="padding:6px 10px;text-align:center;"><input type="checkbox" id="${id}"${im[k]?' checked':''}></td>
-        <td style="padding:6px 10px;"><select id="def-pag-${k}" class="input" style="padding:4px 8px;font-size:12px;width:140px;">
-          <option value="wecare"${pag==='wecare'?' selected':''}>WeCare</option>
-          <option value="proprietario"${pag==='proprietario'?' selected':''}>Proprietário</option>
-        </select></td>
-      </tr>`;}).join('')}
-    </tbody>
-  </table>
+       ['def-fechadura','fechaduraEletronica','Fechadura Eletrônica']].map(([id,k,label])=>
+      `<label class="checkbox-label"><input type="checkbox" id="${id}"${im[k]?' checked':''}> ${label}</label>`).join('')}
+  </div>
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-broom"></i> Equipe de Limpeza</div>
   <div class="form-group">
@@ -1488,7 +1472,6 @@ function renderAbaCompras(im){
         <div style="flex:2;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Item</label><input id="extra-nome-input" class="input" placeholder="Ex: Espelho para quarto"></div>
         <div style="width:64px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Qtd</label><input id="extra-qtd-input" class="input" type="number" min="1" value="1" style="width:100%;"></div>
         <div style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Preço unit. (R$)</label><input id="extra-preco-input" class="input" type="number" min="0" step="10" value="0" style="width:100%;"></div>
-        <div style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Pago por</label><select id="extra-pagadoria-input" class="input" style="width:100%;"><option value="wecare">WeCare</option><option value="proprietario">Proprietário</option></select></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm btn-sage" onclick="confirmarItemExtra()"><i class="fa-solid fa-check"></i> Salvar</button>
           <button class="btn btn-sm btn-outline" onclick="toggleFormExtra()"><i class="fa-solid fa-xmark"></i></button>
@@ -1502,7 +1485,6 @@ function renderAbaCompras(im){
         <th style="text-align:center;padding:6px 8px;">Qtd</th>
         <th style="text-align:right;padding:6px 8px;">R$/Un</th>
         <th style="text-align:right;padding:6px 8px;">Total</th>
-        <th style="padding:6px 8px;">Pago por</th>
         <th style="padding:6px 4px;width:32px;"></th>
       </tr></thead>
       <tbody>
@@ -1511,7 +1493,6 @@ function renderAbaCompras(im){
         <td style="text-align:center;padding:4px 8px;"><input class="input" style="width:56px;padding:3px 6px;text-align:center;" type="number" min="1" value="${+x.qtd||1}" oninput="_onExtraQtdInput(this,${xi})" onblur="_onExtraQtd(this,${xi})"></td>
         <td style="text-align:right;padding:4px 8px;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${+x.precoUn||0}" oninput="_onExtraPrecoInput(this,${xi})" onblur="_onExtraPreco(this,${xi})"></td>
         <td style="text-align:right;padding:4px 8px;font-weight:600;" id="ext-total-${xi}">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
-        <td style="padding:4px 8px;"><select class="input" style="padding:3px 6px;font-size:11px;" onchange="_onExtraPagadoria(this,${xi})"><option value="wecare"${(x.pagadoria||'wecare')==='wecare'?' selected':''}>WeCare</option><option value="proprietario"${x.pagadoria==='proprietario'?' selected':''}>Proprietário</option></select></td>
         <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarItemExtra(${xi})"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
@@ -1658,10 +1639,9 @@ function confirmarItemExtra(){
   if(!nome.trim()){showToast('Informe o nome do item.','peach');return;}
   const qtd=+(document.getElementById('extra-qtd-input')||{}).value||1;
   const precoUn=+(document.getElementById('extra-preco-input')||{}).value||0;
-  const pagadoria=(document.getElementById('extra-pagadoria-input')||{}).value||'wecare';
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.itensExtras)im.itensExtras=[];
-  im.itensExtras.push({id:uid(),nome:nome.trim(),qtd,precoUn,pagadoria});
+  im.itensExtras.push({id:uid(),nome:nome.trim(),qtd,precoUn});
   saveAll();renderAba('compras');showToast('Item extra adicionado!','sage');
 }
 function _apagarItemExtra(xi){
