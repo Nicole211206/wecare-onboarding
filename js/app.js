@@ -644,7 +644,7 @@ function _coletarDadosAba(aba,im){
 function _autoRascunhoFromDados(im){
   if(!im.formRascunho)im.formRascunho={};
   const conf=im.formConfirmados||{};
-  const set=(qid,val)=>{ if(!conf[qid]&&val&&String(val).trim()) im.formRascunho[qid]=String(val).trim(); };
+  const set=(qid,val)=>{ if(!conf[qid]&&val!=null&&String(val).trim()) im.formRascunho[qid]=String(val).trim(); };
   // q81: como hóspedes acessam o imóvel
   const acessoParts=[im.acesso,im.senhaPorta?`Senha da porta: ${im.senhaPorta}`:'',im.vaga?`Vaga: ${im.vaga}`:''].filter(Boolean);
   if(acessoParts.length) set('q81',acessoParts.join('\n'));
@@ -1176,9 +1176,18 @@ function renderAbaFormulario(im){
       const confirmado=confirmados[p.id];
       const statusIcon=confirmado?'<span class="tag tag-sage" title="Confirmado pelo proprietário"><i class="fa-solid fa-check"></i></span>'
         :(respDada!=null&&String(respDada).trim()?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
-      const campo = p.tipo==='textarea'
-        ? `<textarea class="input form-rascunho" data-qid="${p.id}" rows="2" placeholder="Pré-preencher (opcional)">${esc(val)}</textarea>`
-        : `<input class="input form-rascunho" data-qid="${p.id}" type="${p.tipo==='number'?'number':'text'}" placeholder="Pré-preencher (opcional)" value="${esc(val)}">`;
+      let campo;
+      if(p.tipo==='radio'||p.tipo==='checkbox'){
+        const selecionadas=val?val.split(',').map(x=>x.trim()).filter(Boolean):[];
+        const pills=(p.opcoes||[]).map(op=>
+          `<button type="button" class="rascunho-pill${selecionadas.includes(op)?' selected':''}" data-op="${esc(op)}" data-tipo="${p.tipo}" onclick="_toggleRascunhoPill(this)">${esc(op)}</button>`
+        ).join('');
+        campo = `<div class="rascunho-pill-grid">${pills}</div><input type="hidden" class="input form-rascunho" data-qid="${p.id}" value="${esc(val)}">`;
+      } else if(p.tipo==='textarea'){
+        campo = `<textarea class="input form-rascunho" data-qid="${p.id}" rows="2" placeholder="Pré-preencher (opcional)">${esc(val)}</textarea>`;
+      } else {
+        campo = `<input class="input form-rascunho" data-qid="${p.id}" type="${p.tipo==='number'?'number':'text'}" placeholder="Pré-preencher (opcional)" value="${esc(val)}">`;
+      }
       return `<div class="form-group">
         <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span>${esc(p.label)}</span> ${statusIcon}
@@ -1382,6 +1391,23 @@ async function importarDeJarvis(){
   }catch(e){
     if(status)status.style.color='var(--rose)';
     if(status)status.textContent='Falha na conexão: '+e.message;
+  }
+}
+function _toggleRascunhoPill(btn){
+  const grid=btn.parentElement;
+  const hidden=grid.nextElementSibling;
+  const op=btn.dataset.op, tipo=btn.dataset.tipo;
+  if(tipo==='radio'){
+    grid.querySelectorAll('.rascunho-pill').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    hidden.value=op;
+  } else {
+    btn.classList.toggle('selected');
+    const cur=hidden.value?hidden.value.split(',').map(x=>x.trim()).filter(Boolean):[];
+    const i=cur.indexOf(op);
+    if(btn.classList.contains('selected')){ if(i===-1)cur.push(op); }
+    else if(i>-1){ cur.splice(i,1); }
+    hidden.value=cur.join(', ');
   }
 }
 function _coletarRascunho(){

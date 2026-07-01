@@ -36,6 +36,11 @@ function unauthorized() {
   return json({ ok: false, error: 'Unauthorized' }, 401);
 }
 
+// diferente de `if(val)`: aceita 0 como valor válido (ex: "0 lavabos", "andar 0")
+function hasVal(v) {
+  return v !== undefined && v !== null && v !== '';
+}
+
 function checkAuth(token, env) {
   if (!env.AUTH_TOKEN) return false;
   return token === env.AUTH_TOKEN;
@@ -83,14 +88,26 @@ function extractFolderId(driveUrl) {
 }
 
 async function listDriveFolder(folderId, accessToken) {
-  // Busca o driveId diretamente no metadata da pasta
+  // Detecta se é pasta normal, pasta dentro de Shared Drive, ou raiz de Shared Drive
   async function findSharedDriveId() {
+    // Tenta como arquivo/pasta
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId&supportsAllDrives=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const data = await res.json();
-    return data.driveId || null;
+    if (!data.error) return data.driveId || null; // pasta normal ou dentro de shared drive
+
+    // Se 404, pode ser a raiz de um Shared Drive (drive ID = folder ID)
+    if (data.error && data.error.code === 404) {
+      const driveRes = await fetch(
+        `https://www.googleapis.com/drive/v3/drives/${folderId}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const driveData = await driveRes.json();
+      if (!driveData.error) return folderId; // é um Shared Drive root
+    }
+    return null;
   }
 
   const sharedDriveId = await findSharedDriveId();
@@ -458,7 +475,7 @@ Regras:
       // Mapeia campos nomeados → formRascunho automaticamente
       if (!im.formRascunho) im.formRascunho = {};
       const conf = im.formConfirmados || {};
-      const _set = (qid, val) => { if (!conf[qid] && val) im.formRascunho[qid] = String(val); };
+      const _set = (qid, val) => { if (!conf[qid] && hasVal(val)) im.formRascunho[qid] = String(val); };
       const wifiRede  = dados.wifi_rede  || im.wifi?.rede  || '';
       const wifiSenha = dados.wifi_senha || im.wifi?.senha || '';
       const acesso    = dados.acesso     || im.acesso      || '';
@@ -590,7 +607,7 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       return json({ ok: true, dados });
     }
 
-    // ── GET /drive-debug — diagnóstico temporário ────────────────────────────
+// ── GET /drive-debug — diagnóstico temporário ────────────────────────────
     if (request.method === 'GET' && path === '/drive-debug') {
       if (!checkAuth(token, env)) return unauthorized();
       try {
@@ -646,10 +663,20 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
       try { accessToken = await getGoogleAccessToken(env); }
       catch(e) { return json({ ok: false, error: 'Erro Google Auth: ' + e.message }, 500); }
 
+      // Debug: verificar qual conta está autenticada e metadata da pasta
+      const aboutMe = await fetch(
+        `https://www.googleapis.com/drive/v3/about?fields=user`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ).then(r => r.json());
+      const folderMeta = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId,parents,mimeType&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ).then(r => r.json());
+
       // Listar arquivos da pasta
       let files;
       try { files = await listDriveFolder(folderId, accessToken); }
-      catch(e) { return json({ ok: false, error: 'Erro Drive API: ' + e.message, folderId }, 500); }
+      catch(e) { return json({ ok: false, error: 'Erro Drive API: ' + e.message, folderId, folderMeta }, 500); }
 
       // Baixar conteúdo relevante
       const IMAGE_TYPES = ['image/jpeg','image/png','image/webp'];
@@ -747,7 +774,7 @@ Regras:
         userContent.push(img);
       }
       if (!userContent.length) {
-        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta. Arquivos encontrados: ' + (filesSeen.length ? filesSeen.join(', ') : 'nenhum'), filesFound: filesSeen }, 400);
+        return json({ ok: false, error: 'Nenhum conteúdo analisável. Arquivos: ' + (filesSeen.length ? filesSeen.join(', ') : 'nenhum') + ' | Conta: ' + (aboutMe.user?.emailAddress||'?') + ' | Pasta: ' + JSON.stringify(folderMeta), filesFound: filesSeen }, 400);
       }
       userContent.push({ type: 'text', text: 'Extraia os dados do imóvel e retorne o JSON.' });
 
@@ -788,7 +815,7 @@ Regras:
       }
       const numCampos = ['quartos','salas','banheirosCompletos','banheirosLavabo','cozinha','lavanderia','areaExterna','varanda'];
       for (const k of numCampos) {
-        if (resultado[k] && !im[k]) im[k] = +resultado[k];
+        if (hasVal(resultado[k]) && !im[k]) im[k] = +resultado[k];
       }
       if (Array.isArray(resultado.camas) && resultado.camas.length && (!Array.isArray(im.camas) || !im.camas.length)) {
         im.camas = resultado.camas;
@@ -805,7 +832,7 @@ Regras:
       const conf = im.formConfirmados || {};
       const fr = resultado.formRascunho || {};
       for (const [qid, val] of Object.entries(fr)) {
-        if (!conf[qid] && val) im.formRascunho[qid] = String(val);
+        if (!conf[qid] && hasVal(val)) im.formRascunho[qid] = String(val);
       }
 
       im.claudeAnalisadoEm  = new Date().toISOString();
