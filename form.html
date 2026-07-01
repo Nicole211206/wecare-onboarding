@@ -171,7 +171,7 @@
 <script>
 (function(){
   function qs(s){return document.querySelector(s);}
-  function show(id){qs('#'+id).style.display='';}
+  function show(id){qs('#'+id).style.display='block';}
   function hide(id){qs('#'+id).style.display='none';}
   function getParams(){const p=new URLSearchParams(location.search);return{id:p.get('id')||'',t:p.get('t')||''};}
   function showError(msg){hide('loading-state');hide('form-state');hide('success-state');if(msg)qs('#error-detail').textContent=msg;show('error-state');}
