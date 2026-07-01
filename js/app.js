@@ -971,7 +971,9 @@ function renderAbaContrato(im){
   const custoVistoria=+ops.vistoria?.custo||0;
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
   const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
-  const margem=im.margemWecare||15;
+  const valorSetupCobrado=im.valorSetupCobrado||0;
+  const margemSetup=valorSetupCobrado-totalSetupBase;
+  const pctMargem=valorSetupCobrado>0?Math.round((margemSetup/valorSetupCobrado)*1000)/10:0;
 
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-file-signature"></i> Contrato</div>
@@ -1008,22 +1010,22 @@ function renderAbaContrato(im){
     <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
   </div>
 
-  <div class="form-group"><label>Margem WeCare (%)</label>${numInput({id:'ct-margem',value:margem,min:0,max:100,oninput:'_atualizarSubtotalSetup()'})}</div>
+  <div class="form-group"><label>Valor cobrado ao proprietário pelo Setup (R$)</label>${numInput({id:'ct-setup-cobrado',value:valorSetupCobrado,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);">
-      <span>Subtotal (sem compras)</span>
+      <span>Total de Gastos</span>
       <span id="ct-subtotal-val">${fmtMoeda(totalSetupBase)}</span>
     </div>
     <div id="ct-subtotal-detail" style="font-size:11px;color:var(--text-muted);margin-top:4px;">
       Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-top:6px;">
-      <span id="ct-setup-margem-label">Margem WeCare (${margem}%)</span>
-      <span id="ct-setup-margem-val">${fmtMoeda(totalSetupBase*(margem/100))}</span>
+      <span id="ct-setup-margem-label">Margem WeCare (${pctMargem}%)</span>
+      <span id="ct-setup-margem-val" style="color:${margemSetup>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(margemSetup)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:var(--rose);border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">
-      <span>Total Setup</span>
-      <span id="ct-setup-total">${fmtMoeda(totalSetupBase*(1+margem/100))}</span>
+      <span>Valor Cobrado (Setup)</span>
+      <span id="ct-setup-total">${fmtMoeda(valorSetupCobrado)}</span>
     </div>
   </div>
 
@@ -1052,18 +1054,20 @@ function _atualizarSubtotalSetup(){
   const im=getImovel(_imovelAtivoId);
   const extras=(im?.gastosSetup||[]).reduce((s,g)=>s+(+g.valor||0),0);
   const total=f+l+v+extras;
+  const cobrado=+document.getElementById('ct-setup-cobrado')?.value||0;
+  const margem=cobrado-total;
+  const pct=cobrado>0?Math.round((margem/cobrado)*1000)/10:0;
   const valEl=document.getElementById('ct-subtotal-val');
   const detEl=document.getElementById('ct-subtotal-detail');
   if(valEl)valEl.textContent=fmtMoeda(total);
   if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
-  // atualiza box margem/total setup
-  const mg=+document.getElementById('ct-margem')?.value||(im?.margemWecare||15);
-  const mgSetupEl=document.getElementById('ct-setup-margem-label');
-  const mgSetupValEl=document.getElementById('ct-setup-margem-val');
-  const totalSetupEl=document.getElementById('ct-setup-total');
-  if(mgSetupEl)mgSetupEl.textContent=`Margem WeCare (${mg}%)`;
-  if(mgSetupValEl)mgSetupValEl.textContent=fmtMoeda(total*(mg/100));
-  if(totalSetupEl)totalSetupEl.textContent=fmtMoeda(total*(1+mg/100));
+  const mgEl=document.getElementById('ct-setup-margem-label');
+  const mgValEl=document.getElementById('ct-setup-margem-val');
+  const totalEl=document.getElementById('ct-setup-total');
+  if(mgEl)mgEl.textContent=`Margem WeCare (${pct}%)`;
+  if(mgValEl){mgValEl.textContent=fmtMoeda(margem);mgValEl.style.color=margem>=0?'var(--sage)':'var(--rose)';}
+  if(totalEl)totalEl.textContent=fmtMoeda(cobrado);
+  if(im){im.valorSetupCobrado=cobrado;saveAll();}
 }
 function addGastoSetup(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -1468,6 +1472,7 @@ function renderAbaCompras(im){
         <div style="flex:2;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Item</label><input id="extra-nome-input" class="input" placeholder="Ex: Espelho para quarto"></div>
         <div style="width:64px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Qtd</label><input id="extra-qtd-input" class="input" type="number" min="1" value="1" style="width:100%;"></div>
         <div style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Preço unit. (R$)</label><input id="extra-preco-input" class="input" type="number" min="0" step="10" value="0" style="width:100%;"></div>
+        <div style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Pago por</label><select id="extra-pagadoria-input" class="input" style="width:100%;"><option value="wecare">WeCare</option><option value="proprietario">Proprietário</option></select></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm btn-sage" onclick="confirmarItemExtra()"><i class="fa-solid fa-check"></i> Salvar</button>
           <button class="btn btn-sm btn-outline" onclick="toggleFormExtra()"><i class="fa-solid fa-xmark"></i></button>
@@ -1481,14 +1486,16 @@ function renderAbaCompras(im){
         <th style="text-align:center;padding:6px 8px;">Qtd</th>
         <th style="text-align:right;padding:6px 8px;">R$/Un</th>
         <th style="text-align:right;padding:6px 8px;">Total</th>
+        <th style="padding:6px 8px;">Pago por</th>
         <th style="padding:6px 4px;width:32px;"></th>
       </tr></thead>
       <tbody>
       ${itensExtras.map((x,xi)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:4px 8px;">${esc(x.nome||'')}</td>
-        <td style="text-align:center;padding:4px 8px;"><input class="input" style="width:56px;padding:3px 6px;text-align:center;" type="number" min="1" value="${+x.qtd||1}" onchange="_onExtraQtd(this,${xi})"></td>
-        <td style="text-align:right;padding:4px 8px;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${+x.precoUn||0}" onchange="_onExtraPreco(this,${xi})"></td>
-        <td style="text-align:right;padding:4px 8px;font-weight:600;">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
+        <td style="padding:4px 8px;"><input class="input" style="width:100%;min-width:110px;padding:3px 6px;" value="${esc(x.nome||'')}" oninput="_onExtraNome(this,${xi})" onblur="_onExtraNomeBlur(this,${xi})"></td>
+        <td style="text-align:center;padding:4px 8px;"><input class="input" style="width:56px;padding:3px 6px;text-align:center;" type="number" min="1" value="${+x.qtd||1}" oninput="_onExtraQtdInput(this,${xi})" onblur="_onExtraQtd(this,${xi})"></td>
+        <td style="text-align:right;padding:4px 8px;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${+x.precoUn||0}" oninput="_onExtraPrecoInput(this,${xi})" onblur="_onExtraPreco(this,${xi})"></td>
+        <td style="text-align:right;padding:4px 8px;font-weight:600;" id="ext-total-${xi}">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
+        <td style="padding:4px 8px;"><select class="input" style="padding:3px 6px;font-size:11px;" onchange="_onExtraPagadoria(this,${xi})"><option value="wecare"${(x.pagadoria||'wecare')==='wecare'?' selected':''}>WeCare</option><option value="proprietario"${x.pagadoria==='proprietario'?' selected':''}>Proprietário</option></select></td>
         <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarItemExtra(${xi})"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
@@ -1635,22 +1642,49 @@ function confirmarItemExtra(){
   if(!nome.trim()){showToast('Informe o nome do item.','peach');return;}
   const qtd=+(document.getElementById('extra-qtd-input')||{}).value||1;
   const precoUn=+(document.getElementById('extra-preco-input')||{}).value||0;
+  const pagadoria=(document.getElementById('extra-pagadoria-input')||{}).value||'wecare';
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.itensExtras)im.itensExtras=[];
-  im.itensExtras.push({id:uid(),nome:nome.trim(),qtd,precoUn});
+  im.itensExtras.push({id:uid(),nome:nome.trim(),qtd,precoUn,pagadoria});
   saveAll();renderAba('compras');showToast('Item extra adicionado!','sage');
 }
 function _apagarItemExtra(xi){
   const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras)return;
   im.itensExtras.splice(xi,1);saveAll();renderAba('compras');
 }
+function _onExtraNome(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
+  im.itensExtras[xi].nome=inp.value;
+}
+function _onExtraNomeBlur(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
+  im.itensExtras[xi].nome=inp.value;saveAll();
+}
+function _onExtraQtdInput(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
+  const qtd=+inp.value||1;
+  im.itensExtras[xi].qtd=qtd;
+  const el=document.getElementById('ext-total-'+xi);
+  if(el)el.textContent=fmtMoeda(qtd*(im.itensExtras[xi].precoUn||0));
+}
 function _onExtraQtd(inp,xi){
-  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
   im.itensExtras[xi].qtd=+inp.value||1;saveAll();
 }
+function _onExtraPrecoInput(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
+  const preco=+inp.value||0;
+  im.itensExtras[xi].precoUn=preco;
+  const el=document.getElementById('ext-total-'+xi);
+  if(el)el.textContent=fmtMoeda(preco*(im.itensExtras[xi].qtd||1));
+}
 function _onExtraPreco(inp,xi){
-  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
   im.itensExtras[xi].precoUn=+inp.value||0;saveAll();
+}
+function _onExtraPagadoria(sel,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||im.itensExtras?.[xi]==null)return;
+  im.itensExtras[xi].pagadoria=sel.value;saveAll();
 }
 function toggleFormManut(){
   const el=document.getElementById('form-add-manut');
