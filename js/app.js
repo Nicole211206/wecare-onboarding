@@ -1193,7 +1193,7 @@ function renderAbaFormulario(im){
           <span>${esc(p.label)}</span> ${statusIcon}
         </label>
         ${campo}
-        ${respDada!=null&&String(respDada).trim()&&String(respDada)!==String(val)?`<div class="hint" style="color:var(--purple-text)"><i class="fa-solid fa-reply"></i> Resposta do proprietário: <strong>${esc(respDada)}</strong></div>`:''}
+        ${respDada!=null&&String(respDada).trim()&&String(respDada)!==String(val)?`<div class="hint" style="color:var(--purple-text)"><i class="fa-solid fa-reply"></i> Resposta do proprietário: <strong>${esc(respDada)}</strong>${!confirmado?` · <a href="#" onclick="event.preventDefault();_limparRespostaOwner('${p.id}')" style="color:var(--brand-red);">limpar resposta antiga</a>`:''}</div>`:''}
       </div>`;
     }).join('')}
   `).join('');
@@ -1392,6 +1392,12 @@ async function importarDeJarvis(){
     if(status)status.style.color='var(--rose)';
     if(status)status.textContent='Falha na conexão: '+e.message;
   }
+}
+function _limparRespostaOwner(qid){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(im.formRespostas) delete im.formRespostas[qid];
+  saveAll();
+  renderAba('formulario');
 }
 function _toggleRascunhoPill(btn){
   const grid=btn.parentElement;

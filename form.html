@@ -176,7 +176,12 @@
   function getParams(){const p=new URLSearchParams(location.search);return{id:p.get('id')||'',t:p.get('t')||''};}
   function showError(msg){hide('loading-state');hide('form-state');hide('success-state');if(msg)qs('#error-detail').textContent=msg;show('error-state');}
 
-  let _valores={}, _confirmados={};
+  let _valores={}, _confirmados={}, _tocados={}, _respostasOriginais={};
+  function _payloadRespostas(){
+    const out=Object.assign({},_respostasOriginais);
+    for(const qid in _tocados) if(_tocados[qid]) out[qid]=_valores[qid];
+    return out;
+  }
   const _hasSR='SpeechRecognition' in window||'webkitSpeechRecognition' in window;
 
   function _addVoiceBtn(wrap, getEl){
@@ -204,7 +209,7 @@
   function buildForm(secoes, rascunho, respostas, confirmados){
     const cont=qs('#secoes-container');
     cont.innerHTML='';
-    _valores={}; _confirmados={};
+    _valores={}; _confirmados={}; _tocados={}; _respostasOriginais=respostas||{};
 
     secoes.forEach(function(sec, secIdx){
       const val0=function(qid){
@@ -260,6 +265,7 @@
             inp.name=p.id; inp.value=op;
             if(selected.includes(op)) inp.checked=true;
             inp.addEventListener('change',function(){
+              _tocados[p.id]=true;
               if(p.tipo==='radio'){
                 grid.querySelectorAll('.option-pill').forEach(function(x){x.classList.remove('selected');});
                 pill.classList.add('selected');
@@ -287,8 +293,8 @@
           const valEl=document.createElement('span'); valEl.className='stepper-val'; valEl.textContent=v||'0';
           const btnP=document.createElement('button'); btnP.type='button'; btnP.className='stepper-btn'; btnP.textContent='+';
           _valores[p.id]=v||'0';
-          btnM.addEventListener('click',function(){const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);});
-          btnP.addEventListener('click',function(){const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);});
+          btnM.addEventListener('click',function(){_tocados[p.id]=true;const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);});
+          btnP.addEventListener('click',function(){_tocados[p.id]=true;const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);});
           stepper.appendChild(btnM); stepper.appendChild(valEl); stepper.appendChild(btnP);
           field.appendChild(stepper);
         }
@@ -299,7 +305,7 @@
           if(p.tipo==='textarea'){input=document.createElement('textarea');}
           else{input=document.createElement('input'); input.type='text';}
           input.value=v; input.placeholder='Digite aqui…';
-          input.addEventListener('input',function(){_valores[p.id]=input.value;});
+          input.addEventListener('input',function(){_tocados[p.id]=true;_valores[p.id]=input.value;});
           wrap.appendChild(input);
           _addVoiceBtn(wrap, function(){return input;});
           field.appendChild(wrap);
@@ -312,6 +318,7 @@
         chk.innerHTML='<span class="box"><i class="fa-solid fa-check"></i></span> Está correto';
         chk.addEventListener('click',function(){
           _confirmados[p.id]=!_confirmados[p.id];
+          if(_confirmados[p.id]) _tocados[p.id]=true;
           chk.classList.toggle('on',_confirmados[p.id]);
           field.classList.toggle('confirmado',_confirmados[p.id]);
           updateProgress();
@@ -338,7 +345,7 @@
       if(!workerUrl||!_asId||!_asT){_mostrarStatus('⚠ Link inválido, não foi possível salvar.','#C0392B');return;}
       const url=workerUrl+'/form-save?id='+encodeURIComponent(_asId)+'&t='+encodeURIComponent(_asT);
       fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
+        body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados})})
       .then(function(r){if(!r.ok)throw new Error('erro');
         const h=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
         _mostrarStatus('✓ Salvo às '+h+' — você pode fechar e continuar depois pelo mesmo link.','#6b8f71');
@@ -399,7 +406,7 @@
     const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
     const url=workerUrl+'/form-save?id='+encodeURIComponent(id)+'&t='+encodeURIComponent(t);
     fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({respostas:_valores,confirmados:_confirmados})})
+      body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados})})
     .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Erro ao salvar');});return r.json();})
     .then(function(){if(window._autoSaveInterval){clearInterval(window._autoSaveInterval);window._autoSaveInterval=null;}hide('form-state');show('success-state');window.scrollTo(0,0);})
     .catch(function(err){btn.disabled=false;btn.textContent='Enviar informações';errEl.textContent=err.message||'Erro ao enviar. Tente novamente.';errEl.style.display='block';});
