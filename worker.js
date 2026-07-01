@@ -357,6 +357,7 @@ Regras:
       im.formRespostas     = body.respostas   ?? {};
       im.formConfirmados   = body.confirmados ?? {};
       im.formPreenchidoEm  = new Date().toISOString();
+      if (body.enviado === true) im.formEnviadoEm = new Date().toISOString();
       state.lastSaved      = Date.now(); // garante que o pull no app detecte mudança
 
       await putState(env, state);

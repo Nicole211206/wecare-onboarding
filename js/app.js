@@ -413,7 +413,8 @@ function renderCard(im){
       ${im.quartos?`<span class="tag tag-neutral"><i class="fa-solid fa-bed"></i> ${im.quartos}q</span>`:''}
       ${im.status==='ativo'?`<span class="tag tag-sage">Ativo</span>`:`<span class="tag tag-${cor}">${FASE_LABEL[im.status]||im.status}</span>`}
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
-      ${im.formPreenchidoEm?'<span class="tag tag-lav" title="Formulário preenchido"><i class="fa-solid fa-clipboard-check"></i></span>':''}
+      ${im.formEnviadoEm?'<span class="tag tag-sage" title="Formulário enviado pelo proprietário"><i class="fa-solid fa-clipboard-check"></i></span>'
+        :(im.formPreenchidoEm?'<span class="tag tag-lav" title="Proprietário está preenchendo, ainda não enviou"><i class="fa-solid fa-clipboard"></i></span>':'')}
       ${((im.manutencoes||[]).filter(m=>m.status!=='resolvido').length)?`<span class="tag tag-amber" title="Manutenções pendentes"><i class="fa-solid fa-wrench"></i> ${(im.manutencoes||[]).filter(m=>m.status!=='resolvido').length}</span>`:''}
       ${im.restricoes?`<span class="tag tag-peach" title="${esc(im.restricoes)}"><i class="fa-solid fa-triangle-exclamation"></i> Restrições</span>`:''}
     </div>
@@ -471,7 +472,7 @@ function salvarNovoImovel(){
     // reunião
     reuniao:{nomeArquivo:'', texto:'', dataUpload:null, iaPreenchidoEm:null, iaEncontrados:0},
     // formulário
-    formToken:uid()+uid(), formRascunho:{}, formRespostas:{}, formConfirmados:{}, formPreenchidoEm:null,
+    formToken:uid()+uid(), formRascunho:{}, formRespostas:{}, formConfirmados:{}, formPreenchidoEm:null, formEnviadoEm:null,
     // operacional
     ops:{fotos:{data:'',responsavel:'',hora:'',custo:0},limpeza:{data:'',responsavel:'',hora:'',custo:0},vistoria:{data:'',responsavel:'',hora:'',custo:0,localizacao:'central'}},
     // custos
@@ -1226,8 +1227,9 @@ function renderAbaFormulario(im){
     </div>
     <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>.</div>
   </div>
-  ${im.formPreenchidoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Proprietário respondeu em <strong>${fmtDate(im.formPreenchidoEm)}</strong></div>`
-    :'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Aguardando o proprietário confirmar/preencher.</div>'}
+  ${im.formEnviadoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Proprietário enviou o formulário em <strong>${fmtDate(im.formEnviadoEm)}</strong></div>`
+    :(im.formPreenchidoEm?`<div class="alert-warn"><i class="fa-solid fa-pen"></i> Proprietário está preenchendo, mas ainda <strong>não enviou</strong> — última atividade em ${fmtDate(im.formPreenchidoEm)}.</div>`
+    :'<div class="alert-info"><i class="fa-solid fa-info-circle"></i> Aguardando o proprietário confirmar/preencher.</div>')}
   <div class="hint" style="margin-top:4px;">Progresso do pré-preenchimento: <strong>${preenchidas}/${totalPerg}</strong> campos.</div>
 
   <div style="display:flex;gap:8px;margin-top:12px;">
@@ -2238,7 +2240,7 @@ function renderAbaFinal(im){
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist Final</div>
   ${_checklistItem('Contrato assinado',im.contratoAssinado)}
-  ${_checklistItem('Formulário preenchido pelo proprietário',!!im.formPreenchidoEm)}
+  ${_checklistItem('Formulário enviado pelo proprietário',!!im.formEnviadoEm)}
   ${_checklistItem('Fotos realizadas',!!(im.ops?.fotos?.data&&im.ops?.fotos?.responsavel))}
   ${_checklistItem('Primeira limpeza realizada',!!(im.ops?.limpeza?.data))}
   ${_checklistItem('Vistoria realizada',!!(im.ops?.vistoria?.data))}

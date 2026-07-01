@@ -406,7 +406,7 @@
     const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
     const url=workerUrl+'/form-save?id='+encodeURIComponent(id)+'&t='+encodeURIComponent(t);
     fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados})})
+      body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados,enviado:true})})
     .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Erro ao salvar');});return r.json();})
     .then(function(){if(window._autoSaveInterval){clearInterval(window._autoSaveInterval);window._autoSaveInterval=null;}hide('form-state');show('success-state');window.scrollTo(0,0);})
     .catch(function(err){btn.disabled=false;btn.textContent='Enviar informações';errEl.textContent=err.message||'Erro ao enviar. Tente novamente.';errEl.style.display='block';});
