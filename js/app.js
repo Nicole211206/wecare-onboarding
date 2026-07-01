@@ -598,6 +598,7 @@ function _coletarDadosAba(aba,im){
   if(aba==='definicoes'){
     im.seguroEasyCover=gc('def-seguro'); im.kitAmenities=gc('def-amenities');
     im.internetClaro=gc('def-internet'); im.ecohost=gc('def-ecohost'); im.fechaduraEletronica=gc('def-fechadura');
+    im.defPagadoria={seguroEasyCover:g('def-pag-seguroEasyCover')||'wecare',kitAmenities:g('def-pag-kitAmenities')||'wecare',internetClaro:g('def-pag-internetClaro')||'wecare',ecohost:g('def-pag-ecohost')||'wecare',fechaduraEletronica:g('def-pag-fechaduraEletronica')||'wecare'};
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
     im.defEnxoval={tipo:g('def-enxoval-tipo'),fornecedor:g('def-enxoval-forn'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
@@ -1096,12 +1097,27 @@ function marcarContratoAssinadoManual(){
 function renderAbaDefinicoes(im){
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
-  <div class="form-row" style="flex-wrap:wrap;gap:16px;">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:var(--surface-2);">
+      <th style="padding:7px 10px;text-align:left;">Serviço</th>
+      <th style="padding:7px 10px;text-align:center;">Ativo</th>
+      <th style="padding:7px 10px;text-align:left;">Pago por</th>
+    </tr></thead>
+    <tbody>
     ${[['def-seguro','seguroEasyCover','Seguro EasyCover'],['def-amenities','kitAmenities','Kit Amenities WeCare'],
        ['def-internet','internetClaro','Internet Claro'],['def-ecohost','ecohost','Sistema EcoHost'],
-       ['def-fechadura','fechaduraEletronica','Fechadura Eletrônica']].map(([id,k,label])=>
-      `<label class="checkbox-label"><input type="checkbox" id="${id}"${im[k]?' checked':''}> ${label}</label>`).join('')}
-  </div>
+       ['def-fechadura','fechaduraEletronica','Fechadura Eletrônica']].map(([id,k,label])=>{
+      const pag=(im.defPagadoria||{})[k]||'wecare';
+      return`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px 10px;">${label}</td>
+        <td style="padding:6px 10px;text-align:center;"><input type="checkbox" id="${id}"${im[k]?' checked':''}></td>
+        <td style="padding:6px 10px;"><select id="def-pag-${k}" class="input" style="padding:4px 8px;font-size:12px;width:140px;">
+          <option value="wecare"${pag==='wecare'?' selected':''}>WeCare</option>
+          <option value="proprietario"${pag==='proprietario'?' selected':''}>Proprietário</option>
+        </select></td>
+      </tr>`;}).join('')}
+    </tbody>
+  </table>
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-broom"></i> Equipe de Limpeza</div>
   <div class="form-group">
