@@ -83,29 +83,20 @@ function extractFolderId(driveUrl) {
 }
 
 async function listDriveFolder(folderId, accessToken) {
-  // Detecta em qual Shared Drive a pasta está (necessário para listar corretamente)
+  // Busca o driveId diretamente no metadata da pasta
   async function findSharedDriveId() {
-    const drivesRes = await fetch(
-      'https://www.googleapis.com/drive/v3/drives?pageSize=20',
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${folderId}?fields=id,name,driveId&supportsAllDrives=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    const drivesData = await drivesRes.json();
-    for (const drive of (drivesData.drives || [])) {
-      const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-      const r = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${drive.id}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const d = await r.json();
-      if (!d.error) return drive.id;
-    }
-    return null; // My Drive
+    const data = await res.json();
+    return data.driveId || null;
   }
 
   const sharedDriveId = await findSharedDriveId();
   const extraParams = sharedDriveId
     ? `&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${sharedDriveId}`
-    : '';
+    : `&supportsAllDrives=true&includeItemsFromAllDrives=true`;
 
   async function listLevel(id) {
     const q = encodeURIComponent(`'${id}' in parents and trashed=false`);
