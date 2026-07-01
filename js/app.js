@@ -102,7 +102,7 @@ const PRECOS_FOTOS={
   3:{min:350,max:420,resp:'Flavia Mansur'},
   4:{min:350,max:420,resp:'Flavia Mansur'},
 };
-let DEF_PAGADORIA={seguroEasyCover:'wecare',kitAmenities:'wecare',internetClaro:'wecare',ecohost:'wecare',fechaduraEletronica:'wecare'};
+let DEF_OPERACIONAIS=[{id:'seguroEasyCover',nome:'Seguro EasyCover'},{id:'kitAmenities',nome:'Kit Amenities WeCare'},{id:'internetClaro',nome:'Internet Claro'},{id:'ecohost',nome:'Sistema EcoHost'},{id:'fechaduraEletronica',nome:'Fechadura Eletrônica'}];
 const FLASHEE_PACKAGES=[
   {id:'queen-2g',      label:'1 Queen (2 hóspedes)',           custo:119.90,cobrado:160,setup:290},
   {id:'queen-sofa',    label:'Queen + Sofá-cama Casal (4)',    custo:219.90,cobrado:260,setup:290},
@@ -234,7 +234,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users','wc_def_pagadoria'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -245,7 +245,7 @@ function saveAll(){
   localStorage.setItem('wc_limpeza',JSON.stringify(PRECOS_PRIMEIRA_LIMPEZA));
   localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
-  localStorage.setItem('wc_def_pagadoria',JSON.stringify(DEF_PAGADORIA));
+  localStorage.setItem('wc_def_operacionais',JSON.stringify(DEF_OPERACIONAIS));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -261,7 +261,7 @@ function loadAll(){
   v=g('wc_limpeza');   if(v&&typeof v==='object')PRECOS_PRIMEIRA_LIMPEZA=Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
   v=g('wc_fotos');     if(v&&typeof v==='object')PRECOS_FOTOS=Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
-  v=g('wc_def_pagadoria');if(v&&typeof v==='object')DEF_PAGADORIA=Object.assign(DEF_PAGADORIA,v);
+  v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
 }
 
 let _kvTimer=null;
@@ -599,8 +599,14 @@ function _coletarDadosAba(aba,im){
     im.formasPagamento=g('ct-pagamento');
   }
   if(aba==='definicoes'){
-    im.seguroEasyCover=gc('def-seguro'); im.kitAmenities=gc('def-amenities');
-    im.internetClaro=gc('def-internet'); im.ecohost=gc('def-ecohost'); im.fechaduraEletronica=gc('def-fechadura');
+    if(!im.defOperacionais)im.defOperacionais={};
+    DEF_OPERACIONAIS.forEach(s=>{im.defOperacionais[s.id]=!!document.getElementById('def-op-'+s.id)?.checked;});
+    // compat legado
+    im.seguroEasyCover=im.defOperacionais['seguroEasyCover']||false;
+    im.kitAmenities=im.defOperacionais['kitAmenities']||false;
+    im.internetClaro=im.defOperacionais['internetClaro']||false;
+    im.ecohost=im.defOperacionais['ecohost']||false;
+    im.fechaduraEletronica=im.defOperacionais['fechaduraEletronica']||false;
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
     im.defEnxoval={tipo:g('def-enxoval-tipo'),fornecedor:g('def-enxoval-forn'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
@@ -1100,10 +1106,8 @@ function renderAbaDefinicoes(im){
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
   <div class="form-row" style="flex-wrap:wrap;gap:16px;">
-    ${[['def-seguro','seguroEasyCover','Seguro EasyCover'],['def-amenities','kitAmenities','Kit Amenities WeCare'],
-       ['def-internet','internetClaro','Internet Claro'],['def-ecohost','ecohost','Sistema EcoHost'],
-       ['def-fechadura','fechaduraEletronica','Fechadura Eletrônica']].map(([id,k,label])=>
-      `<label class="checkbox-label"><input type="checkbox" id="${id}"${im[k]?' checked':''}> ${label}</label>`).join('')}
+    ${DEF_OPERACIONAIS.map(s=>`<label class="checkbox-label"><input type="checkbox" id="def-op-${esc(s.id)}"${(im.defOperacionais||{})[s.id]?' checked':''}> ${esc(s.nome)}</label>`).join('')}
+    ${!DEF_OPERACIONAIS.length?`<span style="font-size:12px;color:var(--text-muted);">Nenhum serviço configurado. Adicione em Configurações.</span>`:''}
   </div>
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-broom"></i> Equipe de Limpeza</div>
@@ -2893,35 +2897,40 @@ function renderConfig(){
 function _renderConfigDefPagadoria(){
   const el=document.getElementById('config-def-pagadoria');
   if(!el)return;
-  const servicos=[
-    ['seguroEasyCover','Seguro EasyCover'],
-    ['kitAmenities','Kit Amenities WeCare'],
-    ['internetClaro','Internet Claro'],
-    ['ecohost','Sistema EcoHost'],
-    ['fechaduraEletronica','Fechadura Eletrônica']
-  ];
-  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <thead><tr style="background:var(--surface-2);">
-      <th style="padding:7px 10px;text-align:left;">Serviço</th>
-      <th style="padding:7px 10px;text-align:left;">Pago por padrão</th>
-    </tr></thead>
-    <tbody>
-    ${servicos.map(([k,label])=>`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:7px 10px;">${label}</td>
-      <td style="padding:7px 10px;">
-        <select class="input" style="padding:4px 8px;font-size:12px;width:160px;" onchange="salvarDefPagadoria('${k}',this.value)">
-          <option value="wecare"${(DEF_PAGADORIA[k]||'wecare')==='wecare'?' selected':''}>WeCare</option>
-          <option value="proprietario"${DEF_PAGADORIA[k]==='proprietario'?' selected':''}>Proprietário</option>
-        </select>
-      </td>
-    </tr>`).join('')}
-    </tbody>
-  </table>`;
+  el.innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+      <input id="def-op-novo-nome" class="input" placeholder="Nome do serviço..." style="flex:1;">
+      <button class="btn btn-sm btn-sage" onclick="_addDefOperacional()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    ${!DEF_OPERACIONAIS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum serviço cadastrado.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--surface-2);">
+        <th style="padding:7px 10px;text-align:left;">Serviço</th>
+        <th style="padding:7px 4px;width:36px;"></th>
+      </tr></thead>
+      <tbody>
+      ${DEF_OPERACIONAIS.map((s,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px;">${esc(s.nome)}</td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerDefOperacional(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}`;
 }
-function salvarDefPagadoria(k,val){
-  DEF_PAGADORIA[k]=val;
-  saveAll();
-  showToast('Pagadoria salva!','sage');
+function _addDefOperacional(){
+  const inp=document.getElementById('def-op-novo-nome');
+  const nome=(inp?.value||'').trim();
+  if(!nome){showToast('Informe o nome do serviço.','peach');return;}
+  const id='def_'+nome.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+  DEF_OPERACIONAIS.push({id,nome});
+  saveAll();_renderConfigDefPagadoria();
+  if(inp)inp.value='';
+  showToast('Serviço adicionado!','sage');
+}
+function _removerDefOperacional(i){
+  if(!confirm(`Remover "${DEF_OPERACIONAIS[i]?.nome}"?`))return;
+  DEF_OPERACIONAIS.splice(i,1);
+  saveAll();_renderConfigDefPagadoria();
+  showToast('Removido.','peach');
 }
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
