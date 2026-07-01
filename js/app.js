@@ -102,6 +102,7 @@ const PRECOS_FOTOS={
   3:{min:350,max:420,resp:'Flavia Mansur'},
   4:{min:350,max:420,resp:'Flavia Mansur'},
 };
+let DEF_PAGADORIA={seguroEasyCover:'wecare',kitAmenities:'wecare',internetClaro:'wecare',ecohost:'wecare',fechaduraEletronica:'wecare'};
 const FLASHEE_PACKAGES=[
   {id:'queen-2g',      label:'1 Queen (2 hóspedes)',           custo:119.90,cobrado:160,setup:290},
   {id:'queen-sofa',    label:'Queen + Sofá-cama Casal (4)',    custo:219.90,cobrado:260,setup:290},
@@ -233,7 +234,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users','wc_def_pagadoria'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -244,6 +245,7 @@ function saveAll(){
   localStorage.setItem('wc_limpeza',JSON.stringify(PRECOS_PRIMEIRA_LIMPEZA));
   localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
+  localStorage.setItem('wc_def_pagadoria',JSON.stringify(DEF_PAGADORIA));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -259,6 +261,7 @@ function loadAll(){
   v=g('wc_limpeza');   if(v&&typeof v==='object')PRECOS_PRIMEIRA_LIMPEZA=Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
   v=g('wc_fotos');     if(v&&typeof v==='object')PRECOS_FOTOS=Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
+  v=g('wc_def_pagadoria');if(v&&typeof v==='object')DEF_PAGADORIA=Object.assign(DEF_PAGADORIA,v);
 }
 
 let _kvTimer=null;
@@ -2885,6 +2888,40 @@ function renderConfig(){
           <th style="text-align:right;padding:5px 4px;">Mín</th><th style="text-align:right;padding:5px 4px;">Máx</th><th></th>
         </tr></thead><tbody>${fotoRows}</tbody></table>`;
   }
+  _renderConfigDefPagadoria();
+}
+function _renderConfigDefPagadoria(){
+  const el=document.getElementById('config-def-pagadoria');
+  if(!el)return;
+  const servicos=[
+    ['seguroEasyCover','Seguro EasyCover'],
+    ['kitAmenities','Kit Amenities WeCare'],
+    ['internetClaro','Internet Claro'],
+    ['ecohost','Sistema EcoHost'],
+    ['fechaduraEletronica','Fechadura Eletrônica']
+  ];
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:var(--surface-2);">
+      <th style="padding:7px 10px;text-align:left;">Serviço</th>
+      <th style="padding:7px 10px;text-align:left;">Pago por padrão</th>
+    </tr></thead>
+    <tbody>
+    ${servicos.map(([k,label])=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:7px 10px;">${label}</td>
+      <td style="padding:7px 10px;">
+        <select class="input" style="padding:4px 8px;font-size:12px;width:160px;" onchange="salvarDefPagadoria('${k}',this.value)">
+          <option value="wecare"${(DEF_PAGADORIA[k]||'wecare')==='wecare'?' selected':''}>WeCare</option>
+          <option value="proprietario"${DEF_PAGADORIA[k]==='proprietario'?' selected':''}>Proprietário</option>
+        </select>
+      </td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+function salvarDefPagadoria(k,val){
+  DEF_PAGADORIA[k]=val;
+  saveAll();
+  showToast('Pagadoria salva!','sage');
 }
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
