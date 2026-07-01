@@ -747,7 +747,7 @@ Regras:
         userContent.push(img);
       }
       if (!userContent.length) {
-        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta', filesFound: filesSeen }, 400);
+        return json({ ok: false, error: 'Nenhum conteúdo analisável encontrado na pasta. Arquivos encontrados: ' + (filesSeen.length ? filesSeen.join(', ') : 'nenhum'), filesFound: filesSeen }, 400);
       }
       userContent.push({ type: 'text', text: 'Extraia os dados do imóvel e retorne o JSON.' });
 
