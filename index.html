@@ -102,6 +102,7 @@
   <div id="topbar">
     <span class="topbar-title" id="panel-title">Kanban</span>
     <div class="topbar-right">
+      <button class="topbar-btn" onclick="abrirComoUsar()" title="Como usar"><i class="fa-solid fa-circle-question"></i></button>
       <button class="topbar-btn" onclick="kvPull(true)" title="Sincronizar"><i class="fa-solid fa-rotate"></i></button>
       <button class="btn btn-rose btn-sm" onclick="abrirNovoImovel()" id="btn-novo-imovel">
         <i class="fa-solid fa-plus"></i> Novo Imóvel
@@ -324,6 +325,7 @@
     <!-- Tabs -->
     <div class="tabs-bar" id="detalhe-tabs">
       <button class="tab-btn active"   onclick="showTab('captacao',this)">📁 Captação</button>
+      <button class="tab-btn"          onclick="showTab('atualizacoes',this)">📝 Atualizações</button>
       <button class="tab-btn"          onclick="showTab('dados',this)">Dados</button>
       <button class="tab-btn"          onclick="showTab('contrato',this)">Contrato</button>
       <button class="tab-btn"          onclick="showTab('definicoes',this)">Definições</button>
@@ -501,6 +503,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=15"></script>
+<script src="js/app.js?v=16"></script>
 </body>
 </html>

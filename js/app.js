@@ -4,15 +4,25 @@ let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 
 // ═══════════════════ FASES ═══════════════════
-const FASES=['contrato','compras','formulario','producao','compilamento','anuncio','auditoria'];
+const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
 const FASE_LABEL={
-  contrato:'Contrato Assinado', compras:'Compras', formulario:'Formulário',
-  producao:'Produção', compilamento:'Compilamento', anuncio:'Criação do Anúncio', auditoria:'Auditoria'
+  contrato:'Contrato', setup:'Setup e Definições', vistoria_compras:'Vistoria e Compras',
+  formulario:'Formulário', preparacao:'Preparação do Imóvel', anuncio:'Criação do Anúncio'
 };
 const FASE_COLOR={
-  contrato:'sky', compras:'gold', formulario:'lav',
-  producao:'peach', compilamento:'rose', anuncio:'lavender', auditoria:'sage'
+  contrato:'sky', setup:'gold', vistoria_compras:'peach',
+  formulario:'lav', preparacao:'rose', anuncio:'lavender'
 };
+// Migração: imóveis com status das fases antigas (antes do reagrupamento de 2026-07) caem na fase nova equivalente
+const FASES_LEGADO_MAP={compras:'vistoria_compras', producao:'preparacao', compilamento:'anuncio', auditoria:'anuncio'};
+function _migrarFasesAntigas(){
+  let mudou=false;
+  imoveis.forEach(im=>{
+    if(FASES_LEGADO_MAP[im.status]){im.status=FASES_LEGADO_MAP[im.status];mudou=true;}
+    if(FASES_LEGADO_MAP[im.statusAnterior]){im.statusAnterior=FASES_LEGADO_MAP[im.statusAnterior];}
+  });
+  if(mudou)saveAll();
+}
 
 // ═══════════════════ ITENS DE COMPRAS ═══════════════════
 let ITENS_COMPRAS=[
@@ -262,6 +272,7 @@ function loadAll(){
   v=g('wc_fotos');     if(v&&typeof v==='object')PRECOS_FOTOS=Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
+  _migrarFasesAntigas();
 }
 
 let _autoSaveTimer=null;
@@ -425,6 +436,25 @@ function _verificarAtrasado(im){
   return new Date()>new Date(new Date(im.dataEnvioParaCriacao).getTime()+im.prazoAtivacaoHoras*3600000)&&im.status!=='ativo';
 }
 
+// ═══════════════════ COMO USAR ═══════════════════
+function abrirComoUsar(){
+  document.getElementById('generico-titulo').textContent='Como usar o WeCare Onboarding';
+  document.getElementById('generico-body').innerHTML=`
+  <div style="font-size:13.5px;line-height:1.65;color:var(--text2,#444);">
+    <p><strong>Fluxo do imóvel (Kanban)</strong><br>
+    Cada imóvel passa pelas fases, nessa ordem: <strong>Contrato → Setup e Definições → Vistoria e Compras → Formulário → Preparação do Imóvel → Criação do Anúncio → Ativo</strong>. Abra o card do imóvel e use o botão de avançar fase no topo do modal pra mover pra próxima etapa.</p>
+    <p><strong>Formulário do proprietário</strong><br>
+    Na aba "Formulário" de cada imóvel, pré-preencha o que já souber (clique nas opções ou digite os números). Copie o link e mande pro proprietário — ele confirma ou ajusta cada campo. Um badge verde "enviado" aparece quando ele realmente clicar em enviar (não só quando ele salva rascunho).</p>
+    <p><strong>Fornecedores</strong><br>
+    Cadastre prestadores de serviço (limpeza, fotógrafo, manutenção, etc.) na aba "Fornecedores" — dá pra filtrar por tipo e cidade.</p>
+    <p><strong>Atualizações do imóvel</strong><br>
+    Dentro do card do imóvel, a aba "Atualizações" mostra uma linha do tempo com o que está acontecendo — mudanças de fase automáticas e notas que a equipe escrever manualmente.</p>
+    <p><strong>Sincronização</strong><br>
+    O botão <i class="fa-solid fa-rotate"></i> no topo força uma sincronização manual com o servidor. O sistema também sincroniza sozinho a cada minuto.</p>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+
 // ═══════════════════ NOVO IMÓVEL ═══════════════════
 function abrirNovoImovel(){
   ['ni-nome','ni-endereco','ni-prop-nome','ni-prop-tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -473,6 +503,7 @@ function salvarNovoImovel(){
     reuniao:{nomeArquivo:'', texto:'', dataUpload:null, iaPreenchidoEm:null, iaEncontrados:0},
     // formulário
     formToken:uid()+uid(), formRascunho:{}, formRespostas:{}, formConfirmados:{}, formPreenchidoEm:null, formEnviadoEm:null,
+    atualizacoes:[],
     // operacional
     ops:{fotos:{data:'',responsavel:'',hora:'',custo:0},limpeza:{data:'',responsavel:'',hora:'',custo:0},vistoria:{data:'',responsavel:'',hora:'',custo:0,localizacao:'central'}},
     // custos
@@ -514,7 +545,7 @@ function _atualizarHeaderDetalhe(im){
   else if(idx>=0&&idx<FASES.length-1){
     btnAv.style.display='';btnAv.innerHTML=`<i class="fa-solid fa-arrow-right"></i> ${FASE_LABEL[FASES[idx+1]]}`;
     btnPerd.style.display='';
-  } else if(im.status==='auditoria'){
+  } else if(idx===FASES.length-1){
     btnAv.style.display='';btnAv.innerHTML=`<i class="fa-solid fa-check"></i> Marcar como Ativo 🎉`;
     btnPerd.style.display='';
   }
@@ -530,7 +561,8 @@ function renderAba(aba){
   const fns={captacao:()=>renderAbaCaptacao(im),dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
     definicoes:()=>renderAbaDefinicoes(im),fotos:()=>renderAbaFotos(im),formulario:()=>renderAbaFormulario(im),
     compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),
-    operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im)};
+    operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im),
+    atualizacoes:()=>renderAbaAtualizacoes(im)};
   document.getElementById('detalhe-body').innerHTML=(fns[aba]||fns.dados)();
 }
 
@@ -546,20 +578,64 @@ function avancarFaseAtual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   _coletarDadosAba(_abaAtiva,im);
   const idx=FASES.indexOf(im.status);
-  if(im.status==='auditoria'){im.status='ativo';im.dataAtivacao=im.dataAtivacao||hoje();}
+  if(idx===FASES.length-1){im.status='ativo';im.dataAtivacao=im.dataAtivacao||hoje();}
   else if(idx>=0&&idx<FASES.length-1){im.status=FASES[idx+1];}
+  _addAtualizacao(im,`Avançou para a fase "${im.status==='ativo'?'Ativo':FASE_LABEL[im.status]}".`,'fase');
   saveAll();renderKanban();_atualizarHeaderDetalhe(im);
   showToast(`Avançado para "${im.status==='ativo'?'Ativo':FASE_LABEL[im.status]}"!`,'sage');
 }
 function togglePerdidoAtual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.statusAnterior=im.status;im.status='perdido';
+  _addAtualizacao(im,'Marcado como perdido.','fase');
   saveAll();renderKanban();closeModal('modal-detalhe');showToast('Marcado como perdido.','peach');
 }
 function voltarOperacao(id){
   const im=getImovel(id);if(!im)return;
   im.status=im.statusAnterior||'contrato';im.statusAnterior=null;
+  _addAtualizacao(im,`Voltou à operação, fase "${FASE_LABEL[im.status]||im.status}".`,'fase');
   saveAll();renderKanban();showToast('Voltou à operação.','sage');
+}
+function _addAtualizacao(im,texto,tipo){
+  if(!im.atualizacoes)im.atualizacoes=[];
+  const u=getCurrentUser();
+  im.atualizacoes.push({id:uid(),data:new Date().toISOString(),texto,tipo:tipo||'manual',autor:u?.nome||u?.email||'Equipe'});
+}
+function adicionarAtualizacaoManual(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const el=document.getElementById('nova-atualizacao-texto');
+  const texto=(el?.value||'').trim();
+  if(!texto){showToast('Escreva algo antes de adicionar.','peach');return;}
+  _addAtualizacao(im,texto,'manual');
+  saveAll();renderAba('atualizacoes');showToast('Atualização adicionada!','sage');
+}
+function apagarAtualizacao(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.atualizacoes=(im.atualizacoes||[]).filter(a=>a.id!==id);
+  saveAll();renderAba('atualizacoes');
+}
+function renderAbaAtualizacoes(im){
+  const lista=(im.atualizacoes||[]).slice().sort((a,b)=>new Date(b.data)-new Date(a.data));
+  return`<div class="form-grid">
+    <div class="form-section-title"><i class="fa-solid fa-timeline"></i> Atualizações do imóvel</div>
+    <div class="form-group">
+      <textarea class="input" id="nova-atualizacao-texto" rows="2" placeholder="Ex: vistoria feita, falta comprar toalhas..."></textarea>
+      <button class="btn btn-sm btn-primary" style="margin-top:8px;" onclick="adicionarAtualizacaoManual()"><i class="fa-solid fa-plus"></i> Adicionar atualização</button>
+    </div>
+    <div style="margin-top:8px;">
+      ${lista.length?lista.map(a=>`
+        <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:${a.tipo==='fase'?'var(--purple-bg)':'var(--surface-2)'};color:${a.tipo==='fase'?'var(--purple-text)':'var(--text-2)'};font-size:11px;">
+            <i class="fa-solid ${a.tipo==='fase'?'fa-arrow-right':'fa-note-sticky'}"></i>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:13px;">${esc(a.texto)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(a.autor||'')} · ${new Date(a.data).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+          ${a.tipo==='manual'?`<button class="btn btn-xs btn-outline" onclick="apagarAtualizacao('${a.id}')" title="Remover"><i class="fa-solid fa-trash"></i></button>`:''}
+        </div>`).join(''):'<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhuma atualização ainda.</div>'}
+    </div>
+  </div>`;
 }
 function confirmarApagarImovel(){if(confirm('Apagar este imóvel permanentemente?')){apagarImovel(_imovelAtivoId);closeModal('modal-detalhe');}}
 function apagarImovel(id){imoveis=imoveis.filter(x=>x.id!==id);saveAll();renderKanban();showToast('Apagado.','peach');}
@@ -1109,7 +1185,8 @@ function removerGastoSetup(id){
 function marcarContratoAssinadoManual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.contratoAssinado=true;im.dataContratoAssinado=hoje();
-  if(im.status==='contrato')im.status='compras';
+  _addAtualizacao(im,'Contrato marcado como assinado.','fase');
+  if(im.status==='contrato'){im.status=FASES[FASES.indexOf('contrato')+1];_addAtualizacao(im,`Avançou para a fase "${FASE_LABEL[im.status]}".`,'fase');}
   saveAll();renderKanban();renderAba('contrato');_atualizarHeaderDetalhe(im);
   showToast('Contrato marcado como assinado.','sage');
 }
