@@ -439,18 +439,59 @@ function _verificarAtrasado(im){
 // ═══════════════════ COMO USAR ═══════════════════
 function abrirComoUsar(){
   document.getElementById('generico-titulo').textContent='Como usar o WeCare Onboarding';
+  const secao=(titulo,html)=>`<div style="margin-bottom:18px;">
+    <div style="font-weight:700;font-size:13.5px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px;">${titulo}</div>
+    <div style="font-size:13px;line-height:1.65;color:var(--text-2);">${html}</div>
+  </div>`;
   document.getElementById('generico-body').innerHTML=`
-  <div style="font-size:13.5px;line-height:1.65;color:var(--text2,#444);">
-    <p><strong>Fluxo do imóvel (Kanban)</strong><br>
-    Cada imóvel passa pelas fases, nessa ordem: <strong>Contrato → Setup e Definições → Vistoria e Compras → Formulário → Preparação do Imóvel → Criação do Anúncio → Ativo</strong>. Abra o card do imóvel e use o botão de avançar fase no topo do modal pra mover pra próxima etapa.</p>
-    <p><strong>Formulário do proprietário</strong><br>
-    Na aba "Formulário" de cada imóvel, pré-preencha o que já souber (clique nas opções ou digite os números). Copie o link e mande pro proprietário — ele confirma ou ajusta cada campo. Um badge verde "enviado" aparece quando ele realmente clicar em enviar (não só quando ele salva rascunho).</p>
-    <p><strong>Fornecedores</strong><br>
-    Cadastre prestadores de serviço (limpeza, fotógrafo, manutenção, etc.) na aba "Fornecedores" — dá pra filtrar por tipo e cidade.</p>
-    <p><strong>Atualizações do imóvel</strong><br>
-    Dentro do card do imóvel, a aba "Atualizações" mostra uma linha do tempo com o que está acontecendo — mudanças de fase automáticas e notas que a equipe escrever manualmente.</p>
-    <p><strong>Sincronização</strong><br>
-    O botão <i class="fa-solid fa-rotate"></i> no topo força uma sincronização manual com o servidor. O sistema também sincroniza sozinho a cada minuto.</p>
+  <div>
+    ${secao('<i class="fa-solid fa-table-columns"></i> 1. O fluxo do imóvel (Kanban)', `
+      Todo imóvel novo entra na fase <strong>Contrato</strong> e vai passando pelas fases nessa ordem, clicando no botão de avançar fase dentro do card:
+      <ul style="margin:8px 0 0 18px;padding:0;">
+        <li><strong>Contrato</strong> — imóvel entrou e está aguardando assinatura.</li>
+        <li><strong>Setup e Definições</strong> — calculamos valores de fotos, limpeza e vistoria, e preparamos a equipe pra receber o imóvel.</li>
+        <li><strong>Vistoria e Compras</strong> — equipe faz a primeira vistoria, anota o que falta e compra.</li>
+        <li><strong>Formulário</strong> — com as informações da vistoria em mãos, preenchemos o formulário do proprietário.</li>
+        <li><strong>Preparação do Imóvel</strong> — segunda vistoria, agendamento de fotos, limpeza, etc.</li>
+        <li><strong>Criação do Anúncio</strong> — compilamos as informações e criamos o anúncio de fato.</li>
+        <li><strong>Ativo</strong> — onboarding finalizado, imóvel operando.</li>
+      </ul>
+      Se o negócio cair, use "Marcar como perdido" — o imóvel some do fluxo principal mas fica guardado em "Imóveis Perdidos" (dá pra trazer de volta).
+    `)}
+    ${secao('<i class="fa-solid fa-house"></i> 2. Cadastrando um imóvel novo', `
+      Clique em <strong>"+ Novo Imóvel"</strong> no topo do Kanban, preencha os dados básicos (nome, endereço, proprietário, comissão, quartos/banheiros) e salve. Ele já entra na fase Contrato.
+    `)}
+    ${secao('<i class="fa-solid fa-folder-open"></i> 3. As abas dentro do imóvel', `
+      Clicando em um card do Kanban, abre o detalhe do imóvel com várias abas:
+      <ul style="margin:8px 0 0 18px;padding:0;">
+        <li><strong>📁 Captação</strong> — link da pasta do Drive com contrato/reunião/fotos; a IA analisa o conteúdo dessa pasta e pré-preenche dados automaticamente.</li>
+        <li><strong>📝 Atualizações</strong> — linha do tempo do imóvel: mudanças de fase automáticas + notas que qualquer um da equipe escrever (ex: "vistoria feita, falta comprar toalhas").</li>
+        <li><strong>Dados</strong> — cômodos, camas, comissão, dados do proprietário, dados de acesso (wifi, senha, portaria).</li>
+        <li><strong>Contrato</strong> — status do contrato assinado, valores/custos de setup.</li>
+        <li><strong>Definições</strong> — serviços contratados (seguro, kit amenities, internet, fechadura eletrônica), responsável pela limpeza, enxoval.</li>
+        <li><strong>Formulário</strong> — pré-preenchimento e acompanhamento do formulário do proprietário (veja a seção 4).</li>
+        <li><strong>Compras</strong> — lista de itens de enxoval/compras necessários pro imóvel, com custos.</li>
+        <li><strong>Produção</strong> — agendamento de fotos, primeira limpeza e vistoria (data, responsável, custo).</li>
+        <li><strong>Final</strong> — checklist de tudo que precisa estar pronto antes de ativar o imóvel.</li>
+      </ul>
+    `)}
+    ${secao('<i class="fa-solid fa-clipboard-list"></i> 4. Formulário do proprietário', `
+      Na aba <strong>Formulário</strong>, pré-preencha o que já souber: perguntas com opções (tipo de espaço, comodidades) aparecem como botões clicáveis — não precisa digitar. Perguntas de número usam um contador +/-.<br><br>
+      Copie o link (botão de copiar ou WhatsApp direto) e mande pro proprietário. Ele abre sem login, confirma cada campo com "Está correto" ✓ ou edita, e pode salvar o progresso e voltar depois pelo mesmo link.<br><br>
+      Só aparece <strong>"Proprietário enviou o formulário"</strong> (badge/alerta verde) quando ele realmente clica em "Enviar informações" no final — se ele só abriu e mexeu um pouco sem enviar, aparece um aviso amarelo "ainda não enviou".
+    `)}
+    ${secao('<i class="fa-solid fa-address-book"></i> 5. Fornecedores', `
+      No menu lateral, "Fornecedores" tem o banco de prestadores de serviço (limpeza, fotógrafo, manutenção, etc.) — dá pra filtrar por tipo e cidade. Clique em "Novo Fornecedor" pra cadastrar, com telefone (vira link de WhatsApp), cidade, valor cobrado e nota.
+    `)}
+    ${secao('<i class="fa-solid fa-magnifying-glass-location"></i> 6. Intel de Mercado', `
+      Painel de apoio pra buscar prestadores locais perto do endereço do imóvel (mapa embutido) e consultar o mesmo banco de fornecedores rapidamente.
+    `)}
+    ${secao('<i class="fa-solid fa-clipboard-check"></i> 7. Vistoria', `
+      Painel dedicado às vistorias dos imóveis (rascunhos e vistorias finalizadas), separado da aba "Produção" de cada imóvel.
+    `)}
+    ${secao('<i class="fa-solid fa-rotate"></i> 8. Sincronização entre dispositivos', `
+      O sistema salva automaticamente no seu navegador e sincroniza com o servidor sozinho a cada minuto. O botão <i class="fa-solid fa-rotate"></i> no topo força uma sincronização manual na hora. Os dados nunca são apagados por uma sincronização — se um dispositivo tiver uma lista maior que a do servidor, a lista maior sempre é mantida.
+    `)}
   </div>`;
   document.getElementById('modal-generico').classList.add('open');
 }
@@ -858,10 +899,6 @@ function adicionarCama(){
 
 // ═══════════════════ ABA CAPTAÇÃO ═══════════════════
 function renderAbaCaptacao(im){
-  const base=(window.WC_SYNC?.url||'').replace(/\/$/,'');
-  const tkn=window.WC_SYNC?.token||'';
-  const webhookUrl=base+'/jarvis-notify?token='+encodeURIComponent(tkn)+'&id='+im.id;
-  const readUrl=base+'/imovel-dados?id='+im.id+'&token='+encodeURIComponent(tkn);
   const temLink=!!(im.captacaoLink||'').trim();
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-brands fa-google-drive"></i> Pasta de Captação</div>
@@ -880,41 +917,6 @@ function renderAbaCaptacao(im){
       ?`<div class="alert-success" style="margin-top:8px;display:flex;align-items:center;gap:8px;"><span><i class="fa-solid fa-check-circle"></i> ✅ Analisado em <strong>${fmtDate(im.claudeAnalisadoEm)}</strong> · ${im.arquivosAnalisados||0} arquivo(s)</span><button class="btn btn-sm btn-outline" style="margin-left:auto;" onclick="triggerDriveAnalysis(getImovel('${im.id}'))">🔄 Reanalisar</button></div>`
       :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
   }
-
-  <details style="margin-top:16px;">
-    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text3);user-select:none;padding:8px 0;">
-      <i class="fa-solid fa-gear"></i> Configuração de Integração (Jarvis)
-    </summary>
-    <div style="margin-top:12px;">
-      <div class="alert-info" style="margin-bottom:12px;"><i class="fa-solid fa-info-circle"></i> Configure estes endpoints no Jarvis. Ele lê a pasta automaticamente, preenche os campos e notifica o sistema.</div>
-
-      <div class="form-group">
-        <label>🔔 Webhook de Notificação (POST — Jarvis chama quando há novidade)</label>
-        <div style="display:flex;gap:8px;">
-          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(webhookUrl)}">
-          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(webhookUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
-        </div>
-        <div class="hint">Auth: token na query string <code>?token=...</code>. Body JSON: <code>{"id":"${im.id}", "dados":{...campos...}}</code></div>
-      </div>
-
-      <div class="form-group">
-        <label>📖 Endpoint de Leitura (GET — Jarvis consulta dados atuais)</label>
-        <div style="display:flex;gap:8px;">
-          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(readUrl)}">
-          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(readUrl)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
-        </div>
-        <div class="hint">Retorna JSON com todos os dados públicos do imóvel. Auth: <code>?token=...</code></div>
-      </div>
-
-      <div class="form-group" style="margin-top:8px;">
-        <label>🔑 Token de Autenticação</label>
-        <div style="display:flex;gap:8px;">
-          <input class="input" readonly style="font-family:monospace;font-size:11px;" value="${esc(tkn)}">
-          <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${esc(tkn)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
-        </div>
-      </div>
-    </div>
-  </details>
 
   <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
