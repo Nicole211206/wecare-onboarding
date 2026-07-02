@@ -987,7 +987,9 @@ function renderAbaCaptacao(im){
     <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
     ${temLink?`<a href="${esc(im.captacaoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-brands fa-google-drive"></i> Abrir pasta no Drive</a>`:''}
   </div>
-  </div>`;
+  </div>
+  <hr class="divider" style="margin:20px 0;">
+  ${renderAbaAtualizacoes(im)}`;
 }
 
 // ═══════════════════ ANÁLISE DRIVE + CLAUDE ═══════════════════
