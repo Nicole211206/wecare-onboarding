@@ -419,13 +419,13 @@ function renderKanban(){
       </div>
     </div>`;
   }).join('')+
-  (ativos2.length?`<div class="kanban-col">
+  `<div class="kanban-col">
     <div class="kanban-col-header" style="border-top:3px solid var(--sage);">
       <span class="kanban-col-title" style="color:var(--sage)">✅ Ativo</span>
       <span class="kanban-col-count">${ativos2.length}</span>
     </div>
-    <div class="kanban-cards">${ativos2.map(im=>renderCard(im)).join('')}</div>
-  </div>`:'');
+    <div class="kanban-cards">${ativos2.map(im=>renderCard(im)).join('')||'<div class="empty-state" style="padding:16px 8px;font-size:11px;">Nenhum imóvel</div>'}</div>
+  </div>`;
 
   // Perdidos
   const perdEl=document.getElementById('perdidos-lista');
