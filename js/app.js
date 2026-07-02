@@ -2849,10 +2849,19 @@ function _renderPrestadoresList(){
     </tr>`).join('')}</tbody>
   </table>`;
 }
+const TIPOS_PRESTADOR_BASE=['Limpeza','Fotógrafo','Hidráulica','Elétrica','Vistoria','Fechadura','Internet','Reforma','Outros'];
+function _tiposPrestadorDisponiveis(){
+  return[...new Set([...TIPOS_PRESTADOR_BASE,...prestadores.map(p=>p.tipo).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+function _atualizarListaTiposPrestador(){
+  const dl=document.getElementById('pr-tipo-list');
+  if(dl)dl.innerHTML=_tiposPrestadorDisponiveis().map(t=>`<option value="${esc(t)}">`).join('');
+}
 function abrirNovoPrestador(){
   _editPrestadorIdx=null;
   ['pr-nome','pr-tipo','pr-cidade','pr-tel','pr-obs','pr-valor'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const av=document.getElementById('pr-avaliacao');if(av)av.value='5';
+  _atualizarListaTiposPrestador();
   document.getElementById('modal-prestador').classList.add('open');
 }
 function editarPrestador(idx){
@@ -2864,6 +2873,7 @@ function editarPrestador(idx){
   const av=document.getElementById('pr-avaliacao');if(av)av.value=p.nota||'5';
   document.getElementById('pr-obs').value=p.obs||'';
   const vl=document.getElementById('pr-valor');if(vl)vl.value=p.valor||'';
+  _atualizarListaTiposPrestador();
   document.getElementById('modal-prestador').classList.add('open');
 }
 function salvarPrestador(){
@@ -3074,7 +3084,7 @@ function iniciarVistoria(){
 
 // ═══════════════════ FORNECEDORES ═══════════════════
 function renderFornecedores(){
-  const tipos=[...new Set(['Limpeza','Fotógrafo','Hidráulica','Elétrica','Vistoria','Fechadura','Internet','Reforma','Outros'])];
+  const tipos=_tiposPrestadorDisponiveis();
   const filtroTipo=document.getElementById('forn-filtro-tipo')?.value||'';
   const filtroCidade=document.getElementById('forn-filtro-cidade')?.value?.toLowerCase()||'';
   const lista=prestadores.filter(p=>
