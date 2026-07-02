@@ -755,8 +755,8 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
           } catch {}
           continue;
         }
-        // Texto puro / DOCX → tenta baixar como texto
-        if (file.mimeType === 'text/plain') {
+        // Texto puro / Markdown → tenta baixar como texto
+        if (file.mimeType === 'text/plain' || file.mimeType === 'text/markdown') {
           try {
             const r2 = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
             if (r2.ok) { const txt = await r2.text(); textParts.push(`=== ${file.name} ===\n${txt.slice(0,4000)}`); }

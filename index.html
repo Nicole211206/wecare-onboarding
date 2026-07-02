@@ -79,6 +79,9 @@
     <button class="nav-item" onclick="showPanel('vistoria',this)">
       <i class="fa-solid fa-clipboard-list"></i> Vistoria
     </button>
+    <button class="nav-item" onclick="showPanel('calendario',this)">
+      <i class="fa-solid fa-calendar-days"></i> Calendário
+    </button>
     <div class="nav-section" id="navsec-admin">Admin</div>
     <button class="nav-item" id="nav-config" onclick="showPanel('config',this)">
       <i class="fa-solid fa-sliders"></i> Configurações
@@ -202,6 +205,11 @@
       <div id="vistoria-wrap"></div>
     </div>
 
+    <!-- ── CALENDÁRIO ── -->
+    <div class="panel" id="panel-calendario">
+      <div id="calendario-wrap"></div>
+    </div>
+
     <!-- ── CONFIG ── -->
     <div class="panel" id="panel-config">
       <div class="section-title">Configurações</div>
@@ -223,7 +231,7 @@
         </div>
         <div class="card">
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-broom" style="color:var(--sage)"></i> Tabela de Limpeza e Fotos</span></div>
-          <div class="card-body" id="config-precos-ops" style="max-height:320px;overflow-y:auto;"></div>
+          <div class="card-body" id="config-precos-ops" style="max-height:480px;overflow-y:auto;"></div>
         </div>
         <div class="card" style="grid-column:1/-1;">
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-sliders" style="color:var(--lavender)"></i> Definições Operacionais — Pagadoria</span></div>
@@ -503,6 +511,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=21"></script>
+<script src="js/app.js?v=22"></script>
 </body>
 </html>

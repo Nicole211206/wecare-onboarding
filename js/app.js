@@ -101,10 +101,18 @@ const CAMA_TIPO_ENXOVAL={
 const CAMA_LEITOS={'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solteiro':1,'Sofá-cama Casal':1,'Beliche':2,'Bicama':2,'Viúva':1};
 
 const PRECOS_PRIMEIRA_LIMPEZA={
-  1:{dinairan:{custo:360,cobrado:396},flashee:{custo:350,cobrado:385}},
-  2:{dinairan:{custo:430,cobrado:473}},
-  3:{dinairan:{custo:500,cobrado:550}},
-  4:{dinairan:{custo:580,cobrado:638}},
+  1:{dinairan:{custo:360,cobrado:396},flashee:{custo:350,cobrado:385},'Intense Clean':{custo:250,cobrado:275}},
+  2:{dinairan:{custo:430,cobrado:473},'Intense Clean':{custo:250,cobrado:275}},
+  3:{dinairan:{custo:500,cobrado:550},'Intense Clean':{custo:250,cobrado:275}},
+  4:{dinairan:{custo:580,cobrado:638},'Intense Clean':{custo:250,cobrado:275}},
+};
+// Limpeza de check-out (entre hóspedes) — diferente da primeira limpeza/implementação.
+// Intense Clean pré-carregada com a faixa de 41-50m² (aproximando hóspedes≈quartos); ajuste os valores conforme o imóvel real.
+const PRECOS_LIMPEZA_CHECKOUT={
+  1:{'Intense Clean':{custo:195,cobrado:214.5}},
+  2:{'Intense Clean':{custo:210,cobrado:231}},
+  3:{'Intense Clean':{custo:225,cobrado:247.5}},
+  4:{'Intense Clean':{custo:225,cobrado:247.5}},
 };
 const PRECOS_FOTOS={
   1:{min:250,max:300,resp:'Flavia Mansur'},
@@ -157,13 +165,14 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',config:'Configurações',usuarios:'Usuários'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
   if(id==='vistoria')renderVistoria();
+  if(id==='calendario')renderCalendario();
   if(id==='config')renderConfig();
   if(id==='usuarios')renderUsuarios();
 }
@@ -259,7 +268,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -268,6 +277,7 @@ function saveAll(){
   localStorage.setItem('wc_itens',JSON.stringify(ITENS_COMPRAS));
   localStorage.setItem('wc_enxoval',JSON.stringify(PRECOS_ENXOVAL));
   localStorage.setItem('wc_limpeza',JSON.stringify(PRECOS_PRIMEIRA_LIMPEZA));
+  localStorage.setItem('wc_limpeza_checkout',JSON.stringify(PRECOS_LIMPEZA_CHECKOUT));
   localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
   localStorage.setItem('wc_def_operacionais',JSON.stringify(DEF_OPERACIONAIS));
@@ -284,6 +294,7 @@ function loadAll(){
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
   v=g('wc_limpeza');   if(v&&typeof v==='object')Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
+  v=g('wc_limpeza_checkout');if(v&&typeof v==='object')Object.assign(PRECOS_LIMPEZA_CHECKOUT,v);
   v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
@@ -2828,6 +2839,80 @@ function _migrarVistoriasAntigas(){
   if(alterou)localStorage.setItem('wc_vistorias',JSON.stringify(lista));
   return lista;
 }
+// ═══════════════════ CALENDÁRIO ═══════════════════
+const CAL_TIPOS=[
+  {key:'fotos',    label:'Fotos',    icon:'fa-camera',        cor:'gold'},
+  {key:'limpeza',  label:'Limpeza',  icon:'fa-broom',         cor:'sage'},
+  {key:'vistoria', label:'Vistoria', icon:'fa-clipboard-list',cor:'sky'},
+];
+let _calMesRef=null; // 'YYYY-MM'; null = mês atual
+function _calMesAtual(){return _calMesRef||hoje().slice(0,7);}
+function calendarioMudarMes(delta){
+  const[y,m]=_calMesAtual().split('-').map(Number);
+  const d=new Date(y,m-1+delta,1);
+  _calMesRef=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  renderCalendario();
+}
+function calendarioIrParaHoje(){_calMesRef=null;renderCalendario();}
+function _calEventosDoMes(mes){
+  const eventos={};
+  imoveis.filter(im=>im.status!=='perdido').forEach(im=>{
+    CAL_TIPOS.forEach(t=>{
+      const data=im.ops?.[t.key]?.data;
+      if(data&&data.slice(0,7)===mes){
+        if(!eventos[data])eventos[data]=[];
+        eventos[data].push({...t,imovel:im.nome,imovelId:im.id,responsavel:im.ops[t.key].responsavel||''});
+      }
+    });
+  });
+  return eventos;
+}
+function renderCalendario(){
+  const wrap=document.getElementById('calendario-wrap');
+  if(!wrap)return;
+  const mes=_calMesAtual();
+  const[ano,mesNum]=mes.split('-').map(Number);
+  const eventos=_calEventosDoMes(mes);
+  const primeiroDia=new Date(ano,mesNum-1,1);
+  const diasNoMes=new Date(ano,mesNum,0).getDate();
+  const diaSemanaInicio=primeiroDia.getDay();
+  const nomesMes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const hojeStr=hoje();
+  const celulas=[];
+  for(let i=0;i<diaSemanaInicio;i++)celulas.push('<div class="cal-dia cal-dia-vazio"></div>');
+  for(let d=1;d<=diasNoMes;d++){
+    const dataStr=mes+'-'+String(d).padStart(2,'0');
+    const evsDia=eventos[dataStr]||[];
+    celulas.push(`<div class="cal-dia${dataStr===hojeStr?' cal-dia-hoje':''}">
+      <div class="cal-dia-num">${d}</div>
+      <div class="cal-dia-eventos">
+        ${evsDia.map(e=>`<div class="cal-evento tag-${e.cor}" title="${esc(e.label)} · ${esc(e.imovel)}${e.responsavel?' · '+esc(e.responsavel):''}" onclick="abrirDetalhe('${e.imovelId}')">
+          <i class="fa-solid ${e.icon}"></i> ${esc(e.imovel)}
+        </div>`).join('')}
+      </div>
+    </div>`);
+  }
+  while(celulas.length%7!==0)celulas.push('<div class="cal-dia cal-dia-vazio"></div>');
+
+  wrap.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div class="section-title" style="margin-bottom:0;">Calendário de Fotos, Limpeza e Vistoria</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn btn-outline btn-sm" onclick="calendarioMudarMes(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+      <span style="font-weight:700;min-width:150px;text-align:center;">${nomesMes[mesNum-1]} de ${ano}</span>
+      <button class="btn btn-outline btn-sm" onclick="calendarioMudarMes(1)"><i class="fa-solid fa-chevron-right"></i></button>
+      <button class="btn btn-sm btn-outline" onclick="calendarioIrParaHoje()">Hoje</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;align-items:center;">
+    ${CAL_TIPOS.map(t=>`<span style="display:flex;align-items:center;gap:5px;"><span class="tag tag-${t.cor}" style="padding:2px 6px;"><i class="fa-solid ${t.icon}"></i></span> ${t.label}</span>`).join('')}
+  </div>
+  <div class="cal-grid cal-grid-header">
+    ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-dia-semana">${d}</div>`).join('')}
+  </div>
+  <div class="cal-grid">${celulas.join('')}</div>`;
+}
+
 function renderVistoria(){
   const imoveis=(JSON.parse(localStorage.getItem('wc_imoveis')||'[]')).filter(im=>im.status!=='perdido');
   const vistorias=_migrarVistoriasAntigas();
@@ -3062,39 +3147,70 @@ function renderConfig(){
       </div>`;
   }
 
-  // ── Tabela de Limpeza e Fotos ──
+  // ── Tabela de Limpeza (Primeira e Check-out) e Fotos ──
   const po=document.getElementById('config-precos-ops');
   if(po){
-    const limpRows=Object.entries(PRECOS_PRIMEIRA_LIMPEZA).map(([q,servs])=>
+    const _linhasLimpeza=(tabela,prefixo,fnSalvar,fnApagar)=>Object.entries(tabela).map(([q,servs])=>
       Object.entries(servs).map(([srv,v])=>
         `<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:4px;">${q} quarto(s)</td>
           <td style="padding:4px;">${esc(srv)}</td>
-          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${srv}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${srv}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-          <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="salvarPrecoLimpeza(${q},'${srv}')"><i class="fa-solid fa-check"></i></button></td>
+          <td style="padding:4px;text-align:right;"><input id="${prefixo}-${q}-${CSS.escape(srv)}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="${prefixo}-${q}-${CSS.escape(srv)}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;white-space:nowrap;">
+            <button class="btn btn-xs btn-sage" onclick="${fnSalvar}(${q},'${esc(srv)}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
+            <button class="btn btn-xs btn-danger" onclick="${fnApagar}(${q},'${esc(srv)}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+          </td>
         </tr>`).join('')).join('');
+    const _linhaAdicionarLimpeza=(prefixo,fnAdicionar)=>`<tr>
+      <td style="padding:4px;"><input id="${prefixo}-novo-q" type="number" min="1" class="input" placeholder="Qtd" style="width:50px;padding:3px 4px;font-size:12px;"></td>
+      <td style="padding:4px;"><input id="${prefixo}-novo-empresa" class="input" placeholder="Nome da empresa" style="width:100%;min-width:110px;padding:3px 4px;font-size:12px;"></td>
+      <td style="padding:4px;text-align:right;"><input id="${prefixo}-novo-c" type="number" min="0" class="input" placeholder="Custo" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+      <td style="padding:4px;text-align:right;"><input id="${prefixo}-novo-r" type="number" min="0" class="input" placeholder="Cobrado" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+      <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="${fnAdicionar}('${prefixo}')" title="Adicionar"><i class="fa-solid fa-plus"></i></button></td>
+    </tr>`;
+    const limpRows=_linhasLimpeza(PRECOS_PRIMEIRA_LIMPEZA,'limp','salvarPrecoLimpeza','apagarPrecoLimpeza');
+    const checkoutRows=_linhasLimpeza(PRECOS_LIMPEZA_CHECKOUT,'limpco','salvarPrecoLimpezaCheckout','apagarPrecoLimpezaCheckout');
     const fotoRows=Object.entries(PRECOS_FOTOS).map(([q,v])=>
       `<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px;">${q} quarto(s)</td>
         <td style="padding:4px;">${esc(v.resp||'')}</td>
         <td style="padding:4px;text-align:right;"><input id="foto-${q}-min" type="number" min="0" class="input" value="${v.min}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
         <td style="padding:4px;text-align:right;"><input id="foto-${q}-max" type="number" min="0" class="input" value="${v.max}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-        <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="salvarPrecoFoto(${q})"><i class="fa-solid fa-check"></i></button></td>
+        <td style="padding:4px;white-space:nowrap;">
+          <button class="btn btn-xs btn-sage" onclick="salvarPrecoFoto(${q})" title="Salvar"><i class="fa-solid fa-check"></i></button>
+          <button class="btn btn-xs btn-danger" onclick="apagarPrecoFoto(${q})" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+        </td>
       </tr>`).join('');
     po.innerHTML=`
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Primeira Limpeza</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Primeira Limpeza (implementação)</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);">
           <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Empresa</th>
           <th style="text-align:right;padding:5px 4px;">Custo</th><th style="text-align:right;padding:5px 4px;">Cobrado</th><th></th>
-        </tr></thead><tbody>${limpRows}</tbody></table>
+        </tr></thead><tbody>${limpRows}${_linhaAdicionarLimpeza('limp','adicionarPrecoLimpeza')}</tbody></table>
+
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Limpeza Check-out (entre hóspedes)</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Empresa</th>
+          <th style="text-align:right;padding:5px 4px;">Custo</th><th style="text-align:right;padding:5px 4px;">Cobrado</th><th></th>
+        </tr></thead><tbody>${checkoutRows}${_linhaAdicionarLimpeza('limpco','adicionarPrecoLimpezaCheckout')}</tbody></table>
+
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Fotos Profissionais</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);">
           <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Responsável</th>
           <th style="text-align:right;padding:5px 4px;">Mín</th><th style="text-align:right;padding:5px 4px;">Máx</th><th></th>
-        </tr></thead><tbody>${fotoRows}</tbody></table>`;
+        </tr></thead><tbody>${fotoRows}
+        <tr>
+          <td style="padding:4px;"><input id="foto-novo-q" type="number" min="1" class="input" placeholder="Qtd" style="width:50px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><input id="foto-novo-resp" class="input" placeholder="Responsável" style="width:100%;min-width:110px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="foto-novo-min" type="number" min="0" class="input" placeholder="Mín" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="foto-novo-max" type="number" min="0" class="input" placeholder="Máx" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="adicionarPrecoFoto()" title="Adicionar"><i class="fa-solid fa-plus"></i></button></td>
+        </tr>
+        </tbody></table>`;
   }
   _renderConfigDefPagadoria();
 }
@@ -3355,11 +3471,54 @@ function adicionarPrecoEnxoval(){
 
 // ── Limpeza e Fotos ──
 function salvarPrecoLimpeza(q,srv){
-  const c=+document.getElementById(`limp-${q}-${srv}-c`)?.value||0;
-  const r=+document.getElementById(`limp-${q}-${srv}-r`)?.value||0;
+  const c=+document.getElementById(`limp-${q}-${CSS.escape(srv)}-c`)?.value||0;
+  const r=+document.getElementById(`limp-${q}-${CSS.escape(srv)}-r`)?.value||0;
   if(!PRECOS_PRIMEIRA_LIMPEZA[q])PRECOS_PRIMEIRA_LIMPEZA[q]={};
   PRECOS_PRIMEIRA_LIMPEZA[q][srv]={custo:c,cobrado:r};
   saveAll();showToast('Salvo!','sage');
+}
+function apagarPrecoLimpeza(q,srv){
+  if(!confirm(`Apagar "${srv}" da Primeira Limpeza (${q} quarto(s))?`))return;
+  if(PRECOS_PRIMEIRA_LIMPEZA[q]){
+    delete PRECOS_PRIMEIRA_LIMPEZA[q][srv];
+    if(!Object.keys(PRECOS_PRIMEIRA_LIMPEZA[q]).length)delete PRECOS_PRIMEIRA_LIMPEZA[q];
+  }
+  saveAll();renderConfig();showToast('Removido.','peach');
+}
+function adicionarPrecoLimpeza(prefixo){
+  const q=+document.getElementById(`${prefixo}-novo-q`)?.value||0;
+  const empresa=(document.getElementById(`${prefixo}-novo-empresa`)?.value||'').trim();
+  const c=+document.getElementById(`${prefixo}-novo-c`)?.value||0;
+  const r=+document.getElementById(`${prefixo}-novo-r`)?.value||0;
+  if(!q||!empresa){showToast('Informe a quantidade de quartos e o nome da empresa.','peach');return;}
+  if(!PRECOS_PRIMEIRA_LIMPEZA[q])PRECOS_PRIMEIRA_LIMPEZA[q]={};
+  PRECOS_PRIMEIRA_LIMPEZA[q][empresa]={custo:c,cobrado:r};
+  saveAll();renderConfig();showToast('Adicionado!','sage');
+}
+function salvarPrecoLimpezaCheckout(q,srv){
+  const c=+document.getElementById(`limpco-${q}-${CSS.escape(srv)}-c`)?.value||0;
+  const r=+document.getElementById(`limpco-${q}-${CSS.escape(srv)}-r`)?.value||0;
+  if(!PRECOS_LIMPEZA_CHECKOUT[q])PRECOS_LIMPEZA_CHECKOUT[q]={};
+  PRECOS_LIMPEZA_CHECKOUT[q][srv]={custo:c,cobrado:r};
+  saveAll();showToast('Salvo!','sage');
+}
+function apagarPrecoLimpezaCheckout(q,srv){
+  if(!confirm(`Apagar "${srv}" da Limpeza Check-out (${q} quarto(s))?`))return;
+  if(PRECOS_LIMPEZA_CHECKOUT[q]){
+    delete PRECOS_LIMPEZA_CHECKOUT[q][srv];
+    if(!Object.keys(PRECOS_LIMPEZA_CHECKOUT[q]).length)delete PRECOS_LIMPEZA_CHECKOUT[q];
+  }
+  saveAll();renderConfig();showToast('Removido.','peach');
+}
+function adicionarPrecoLimpezaCheckout(prefixo){
+  const q=+document.getElementById(`${prefixo}-novo-q`)?.value||0;
+  const empresa=(document.getElementById(`${prefixo}-novo-empresa`)?.value||'').trim();
+  const c=+document.getElementById(`${prefixo}-novo-c`)?.value||0;
+  const r=+document.getElementById(`${prefixo}-novo-r`)?.value||0;
+  if(!q||!empresa){showToast('Informe a quantidade de quartos e o nome da empresa.','peach');return;}
+  if(!PRECOS_LIMPEZA_CHECKOUT[q])PRECOS_LIMPEZA_CHECKOUT[q]={};
+  PRECOS_LIMPEZA_CHECKOUT[q][empresa]={custo:c,cobrado:r};
+  saveAll();renderConfig();showToast('Adicionado!','sage');
 }
 function salvarPrecoFoto(q){
   const min=+document.getElementById(`foto-${q}-min`)?.value||0;
@@ -3367,6 +3526,20 @@ function salvarPrecoFoto(q){
   if(!PRECOS_FOTOS[q])PRECOS_FOTOS[q]={};
   PRECOS_FOTOS[q].min=min;PRECOS_FOTOS[q].max=max;
   saveAll();showToast('Salvo!','sage');
+}
+function apagarPrecoFoto(q){
+  if(!confirm(`Apagar a faixa de ${q} quarto(s) das Fotos Profissionais?`))return;
+  delete PRECOS_FOTOS[q];
+  saveAll();renderConfig();showToast('Removido.','peach');
+}
+function adicionarPrecoFoto(){
+  const q=+document.getElementById('foto-novo-q')?.value||0;
+  const resp=(document.getElementById('foto-novo-resp')?.value||'').trim();
+  const min=+document.getElementById('foto-novo-min')?.value||0;
+  const max=+document.getElementById('foto-novo-max')?.value||0;
+  if(!q){showToast('Informe a quantidade de quartos.','peach');return;}
+  PRECOS_FOTOS[q]={min,max,resp};
+  saveAll();renderConfig();showToast('Adicionado!','sage');
 }
 function aplicarPresetPerfil(){}
 
