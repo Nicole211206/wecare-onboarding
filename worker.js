@@ -210,6 +210,13 @@ export default {
           merged[k] = sv;
         }
       }
+      // Listas curtas e curadas manualmente (config) — qualquer encolhida é suspeita, nunca aceitar
+      const listKeysEstritas = ['wc_def_operacionais'];
+      for (const k of listKeysEstritas) {
+        const sv = Array.isArray(current[k]) ? current[k] : [];
+        const iv = Array.isArray(body[k])    ? body[k]    : [];
+        if (iv.length < sv.length) merged[k] = sv;
+      }
 
       // lastSaved: aceita o do cliente se for mais novo
       if (body.lastSaved && +body.lastSaved > +(current.lastSaved || 0)) {

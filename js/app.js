@@ -113,6 +113,21 @@ const PRECOS_FOTOS={
   4:{min:350,max:420,resp:'Flavia Mansur'},
 };
 let DEF_OPERACIONAIS=[{id:'seguroEasyCover',nome:'Seguro EasyCover'},{id:'kitAmenities',nome:'Kit Amenities WeCare'},{id:'internetClaro',nome:'Internet Claro'},{id:'ecohost',nome:'Sistema EcoHost'},{id:'fechaduraEletronica',nome:'Fechadura Eletrônica'}];
+
+const SERVICOS_OPCIONAIS_COMPRAS=[
+  {id:'servicoCompras',nome:'Serviço de compras',valor:300},
+  {id:'recebimentoOrganizacao',nome:'Recebimento e organização dos itens',valor:300},
+];
+function _totalServicosOpcionaisCompras(im){
+  const sel=im.servicosOpcionaisCompras||{};
+  return SERVICOS_OPCIONAIS_COMPRAS.reduce((s,so)=>s+(sel[so.id]?so.valor:0),0);
+}
+function _onServicoOpcionalCompra(cb,id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.servicosOpcionaisCompras)im.servicosOpcionaisCompras={};
+  im.servicosOpcionaisCompras[id]=cb.checked;
+  saveAll();renderAba('compras');
+}
 const FLASHEE_PACKAGES=[
   {id:'queen-2g',      label:'1 Queen (2 hóspedes)',           custo:119.90,cobrado:160,setup:290},
   {id:'queen-sofa',    label:'Queen + Sofá-cama Casal (4)',    custo:219.90,cobrado:260,setup:290},
@@ -550,7 +565,7 @@ function salvarNovoImovel(){
     // custos
     custos:[], margemWecare:15, descontoTipo:'reais', descontoValor:0, formasPagamento:'',
     // compras
-    compras:{}, freteTotal:0,
+    compras:{}, freteTotal:0, servicosOpcionaisCompras:{},
     // final
     linkFotos:'', linkRelatorio:'', responsavelCriacao:'', tarefaClaireId:null,
     prazoAtivacaoHoras:24, dataEnvioParaCriacao:null,
@@ -1654,7 +1669,15 @@ function renderAbaCompras(im){
   </div>`;
 
   const frete=im.freteTotal||0;
-  const totalGeral=totalEstimado+totalExtras+frete+totalManutencao;
+  const totalServicosOpcionais=_totalServicosOpcionaisCompras(im);
+  const servicosOpcionaisSel=im.servicosOpcionaisCompras||{};
+  const servicosOpcionaisHtml=`<div style="margin-top:20px;">
+    <div class="form-section-title"><i class="fa-solid fa-truck-ramp-box"></i> Serviços Opcionais</div>
+    ${SERVICOS_OPCIONAIS_COMPRAS.map(so=>`<label class="checkbox-label" style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+      <input type="checkbox" ${servicosOpcionaisSel[so.id]?'checked':''} onchange="_onServicoOpcionalCompra(this,'${so.id}')"> ${esc(so.nome)} — ${fmtMoeda(so.valor)}
+    </label>`).join('')}
+  </div>`;
+  const totalGeral=totalEstimado+totalExtras+frete+totalManutencao+totalServicosOpcionais;
   const margem=im.margemWecare||15;
   const descTipo=im.descontoTipo||'reais';
   const descVal=im.descontoValor||0;
@@ -1706,11 +1729,12 @@ function renderAbaCompras(im){
   </div>
   ${tabelasCat}
   ${extrasHtml}
+  ${servicosOpcionaisHtml}
   ${manutHtml}
   <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
     <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
     ${numInput({id:'compras-frete',value:frete,min:0,step:10,onchange:'_onFreteChange(this)'})}
-    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Extras: ${fmtMoeda(totalExtras)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
+    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Extras: ${fmtMoeda(totalExtras)} + Serviços opcionais: ${fmtMoeda(totalServicosOpcionais)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
   </div>
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-tag"></i> Desconto</div>
@@ -1963,6 +1987,9 @@ function gerarPDFCompras(){
   const totalManut=manutencoes.reduce((s,m)=>s+(m.valor??m.custo??0),0);
   const itensExtras=im.itensExtras||[];
   const totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
+  const servicosOpcionaisSelCompras=im.servicosOpcionaisCompras||{};
+  const servicosOpcionaisAtivosCompras=SERVICOS_OPCIONAIS_COMPRAS.filter(so=>servicosOpcionaisSelCompras[so.id]);
+  const totalServicosOpcionaisCompras=servicosOpcionaisAtivosCompras.reduce((s,so)=>s+so.valor,0);
   const cats=[...new Set(rows.map(r=>r.cat))];
   const tabelas=cats.map(cat=>{
     const itens=rows.filter(r=>r.cat===cat);
@@ -2035,13 +2062,24 @@ function gerarPDFCompras(){
       </tbody>
     </table>
   </div>`:''}
+  ${servicosOpcionaisAtivosCompras.length?`<div style="margin-top:28px;">
+    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Serviços Opcionais</div>
+    <table>
+      <thead><tr><th>Serviço</th><th style="text-align:right;">Valor</th></tr></thead>
+      <tbody>`+
+      servicosOpcionaisAtivosCompras.map(so=>`<tr><td style="padding:7px 10px;">${esc(so.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(so.valor)}</td></tr>`).join('')+
+      `<tr class="total-row"><td style="padding:10px;text-align:right;">Subtotal serviços opcionais</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalServicosOpcionaisCompras)}</td></tr>
+      </tbody>
+    </table>
+  </div>`:''}
   ${manutHtml}
   <div class="summary">
     ${rows.length?`<div class="summary-line"><span>Compras</span><span>${fmtMoeda(totalItens)}</span></div>`:''}
     ${itensExtras.length?`<div class="summary-line"><span>Itens Extras</span><span>${fmtMoeda(totalExtras)}</span></div>`:''}
+    ${servicosOpcionaisAtivosCompras.length?`<div class="summary-line"><span>Serviços Opcionais</span><span>${fmtMoeda(totalServicosOpcionaisCompras)}</span></div>`:''}
     ${frete?`<div class="summary-line"><span>Frete estimado</span><span>${fmtMoeda(frete)}</span></div>`:''}
     ${manutencoes.length?`<div class="summary-line"><span>Manutenções</span><span>${fmtMoeda(totalManut)}</span></div>`:''}
-    <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+totalExtras+frete+totalManut)}</span></div>
+    <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+totalExtras+totalServicosOpcionaisCompras+frete+totalManut)}</span></div>
   </div>`}
   </body></html>`);
   win.document.close();win.print();
@@ -2197,7 +2235,8 @@ function renderAbaCustos(im){
     totalCompras+=precoUn*qtdReal;
   });
   const freteCustos=im.freteTotal||0;
-  const subtotal=totalCompras+freteCustos;
+  const totalServicosOpcionaisCustos=_totalServicosOpcionaisCompras(im);
+  const subtotal=totalCompras+freteCustos+totalServicosOpcionaisCustos;
   const margem=im.margemWecare||15;
   const comissao=subtotal*(margem/100);
   let desc=0;
@@ -2209,6 +2248,7 @@ function renderAbaCustos(im){
   <div class="form-section-title"><i class="fa-solid fa-calculator"></i> Resumo de Custos (Compras)</div>
   <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
     <tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Total Compras</td><td style="text-align:right;">${fmtMoeda(totalCompras)}</td></tr>
+    ${totalServicosOpcionaisCustos?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Serviços Opcionais</td><td style="text-align:right;">${fmtMoeda(totalServicosOpcionaisCustos)}</td></tr>`:''}
     ${freteCustos?`<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 4px;">Frete</td><td style="text-align:right;">${fmtMoeda(freteCustos)}</td></tr>`:''}
     <tr style="border-top:2px solid var(--border)"><td style="padding:8px 4px;font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${fmtMoeda(subtotal)}</td></tr>
   </table>
@@ -2261,7 +2301,11 @@ function gerarPDFOrcamento(){
   const gastosSetup=im.gastosSetup||[];
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
   const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('');
-  const sub=totalC+frete+custoFotos+custoLimpeza+custoVistoria+custosExtras;
+  const servicosOpcionaisSelPdf=im.servicosOpcionaisCompras||{};
+  const servicosOpcionaisAtivos=SERVICOS_OPCIONAIS_COMPRAS.filter(so=>servicosOpcionaisSelPdf[so.id]);
+  const custosServicosOpcionais=servicosOpcionaisAtivos.reduce((s,so)=>s+so.valor,0);
+  const linhasServicosOpcionais=servicosOpcionaisAtivos.map(so=>`<tr><td style="padding:7px 10px;">${esc(so.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(so.valor)}</td></tr>`).join('');
+  const sub=totalC+frete+custoFotos+custoLimpeza+custoVistoria+custosExtras+custosServicosOpcionais;
   const marg=sub*(im.margemWecare||15)/100;
   const desc=im.descontoTipo==='reais'?(im.descontoValor||0):(sub+marg)*(im.descontoValor||0)/100;
   const total=sub+marg-desc;
@@ -2314,8 +2358,9 @@ function gerarPDFOrcamento(){
     ${custoFotos?`<tr><td style="padding:7px 10px;">Fotos profissionais</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoFotos)}</td></tr>`:''}
     ${custoLimpeza?`<tr><td style="padding:7px 10px;">Primeira limpeza</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoLimpeza)}</td></tr>`:''}
     ${custoVistoria?`<tr><td style="padding:7px 10px;">Vistoria</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(custoVistoria)}</td></tr>`:''}
+    ${linhasServicosOpcionais}
     ${linhasExtras}
-    ${(!frete&&!custoFotos&&!custoLimpeza&&!custoVistoria&&!linhasExtras)?'<tr><td style="padding:7px 10px;color:#aaa;" colspan="2">Nenhum custo de setup informado</td></tr>':''}
+    ${(!frete&&!custoFotos&&!custoLimpeza&&!custoVistoria&&!linhasServicosOpcionais&&!linhasExtras)?'<tr><td style="padding:7px 10px;color:#aaa;" colspan="2">Nenhum custo de setup informado</td></tr>':''}
   </tbody></table>
 
   <div class="summary">
@@ -2324,6 +2369,7 @@ function gerarPDFOrcamento(){
     ${custoFotos?`<div class="summary-line"><span>Fotos</span><span>${fmtMoeda(custoFotos)}</span></div>`:''}
     ${custoLimpeza?`<div class="summary-line"><span>Primeira limpeza</span><span>${fmtMoeda(custoLimpeza)}</span></div>`:''}
     ${custoVistoria?`<div class="summary-line"><span>Vistoria</span><span>${fmtMoeda(custoVistoria)}</span></div>`:''}
+    ${custosServicosOpcionais?`<div class="summary-line"><span>Serviços Opcionais</span><span>${fmtMoeda(custosServicosOpcionais)}</span></div>`:''}
     ${custosExtras?`<div class="summary-line"><span>Outros</span><span>${fmtMoeda(custosExtras)}</span></div>`:''}
     <div class="summary-sub"><span>Subtotal</span><span>${fmtMoeda(sub)}</span></div>
     <div class="summary-line"><span>Margem WeCare (${im.margemWecare||15}%)</span><span>${fmtMoeda(marg)}</span></div>
