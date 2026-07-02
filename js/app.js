@@ -2631,11 +2631,11 @@ function salvarPrestador(){
     obs:document.getElementById('pr-obs')?.value.trim()||''};
   if(_editPrestadorIdx!=null)prestadores[_editPrestadorIdx]=p;
   else prestadores.push(p);
-  saveAll();closeModal('modal-prestador');renderIntel();showToast('Prestador salvo!','sage');
+  saveAll();closeModal('modal-prestador');renderIntel();renderFornecedores();showToast('Prestador salvo!','sage');
 }
 function apagarPrestador(idx){
   if(!confirm('Apagar este prestador?'))return;
-  prestadores.splice(idx,1);saveAll();renderIntel();showToast('Removido.','peach');
+  prestadores.splice(idx,1);saveAll();renderIntel();renderFornecedores();showToast('Removido.','peach');
 }
 
 // ═══════════════════ VISTORIA ═══════════════════
