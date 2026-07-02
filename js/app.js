@@ -268,8 +268,8 @@ function loadAll(){
   v=g('wc_membros');   if(Array.isArray(v))membros=v;
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
-  v=g('wc_limpeza');   if(v&&typeof v==='object')PRECOS_PRIMEIRA_LIMPEZA=Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
-  v=g('wc_fotos');     if(v&&typeof v==='object')PRECOS_FOTOS=Object.assign(PRECOS_FOTOS,v);
+  v=g('wc_limpeza');   if(v&&typeof v==='object')Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
+  v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
   _migrarFasesAntigas();
