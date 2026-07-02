@@ -302,16 +302,32 @@ Regras:
       const stateRaw = await env.ONBOARDING_KV.get(KV_KEY);
       const state2 = stateRaw ? JSON.parse(stateRaw) : {};
       // Só inclui imóveis com contrato assinado (contratoAssinado=true ou passaram da fase 'contrato')
-      const imoveis = (Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : [])
+      const todosImoveis = Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : [];
+      const imoveis = todosImoveis
         .filter(im => im.status !== 'perdido' && (im.contratoAssinado === true || im.status !== 'contrato'))
-        .map(im => ({ nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao }));
+        .map(im => ({ nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao, incluirKpiClaire: !!im.incluirKpiClaire, mesReferenciaKpi: im.mesReferenciaKpi || null }));
       // KPIs calculados
       const ativos    = stats.filter(s => s.status === 'ativo' && s.diasOnboarding != null);
       const mediaOnboarding = ativos.length
         ? Math.round(ativos.reduce((s,x) => s + x.diasOnboarding, 0) / ativos.length)
         : null;
       const emOnboarding = stats.filter(s => s.status && s.status !== 'ativo' && s.status !== 'perdido').length;
-      return json({ ok: true, stats, imoveis, prestadores, kpi: { mediaOnboardingDias: mediaOnboarding, totalAtivos: ativos.length, emOnboarding }, atualizadoEm });
+      // Média de "tempo de onboarding" por mês de referência, só para imóveis marcados "colocar na Claire"
+      const kpiPorMes = {};
+      todosImoveis
+        .filter(im => im.incluirKpiClaire === true && im.mesReferenciaKpi && im.dataCriacao && im.dataAtivacao)
+        .forEach(im => {
+          const mes = im.mesReferenciaKpi;
+          const dias = (new Date(im.dataAtivacao) - new Date(im.dataCriacao)) / 86400000;
+          if (!kpiPorMes[mes]) kpiPorMes[mes] = { somaDias: 0, count: 0 };
+          kpiPorMes[mes].somaDias += dias;
+          kpiPorMes[mes].count += 1;
+        });
+      for (const mes in kpiPorMes) {
+        kpiPorMes[mes].mediaOnboardingDias = +(kpiPorMes[mes].somaDias / kpiPorMes[mes].count).toFixed(1);
+        delete kpiPorMes[mes].somaDias;
+      }
+      return json({ ok: true, stats, imoveis, prestadores, kpi: { mediaOnboardingDias: mediaOnboarding, totalAtivos: ativos.length, emOnboarding }, kpiPorMes, atualizadoEm });
     }
 
     // ── GET /form-load?id=IMOVEL_ID&t=FORM_TOKEN ─────────────────────────────

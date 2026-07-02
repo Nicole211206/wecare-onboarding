@@ -530,7 +530,7 @@ function salvarNovoImovel(){
     plataformas:[], camas:[], status:'contrato',
     dataAtivacao:null, statusAnterior:null,
     // captação
-    captacaoLink:'', jarvisPreenchidoEm:null,
+    captacaoLink:'', jarvisPreenchidoEm:null, incluirKpiClaire:false, mesReferenciaKpi:'',
     // fotos
     fotos:[], fotosIaEm:null, fotosIaEncontrados:0,
     // contrato
@@ -691,6 +691,10 @@ function _coletarDadosAba(aba,im){
     im.captacaoLink=g('cap-link');
     if(im.captacaoLink&&im.captacaoLink!==linkAnterior){
       triggerDriveAnalysis(im);
+    }
+    if(document.getElementById('cap-kpi-claire')){
+      im.incluirKpiClaire=gc('cap-kpi-claire');
+      im.mesReferenciaKpi=g('cap-kpi-mes');
     }
   }
   if(aba==='dados'){
@@ -917,6 +921,24 @@ function renderAbaCaptacao(im){
       ?`<div class="alert-success" style="margin-top:8px;display:flex;align-items:center;gap:8px;"><span><i class="fa-solid fa-check-circle"></i> ✅ Analisado em <strong>${fmtDate(im.claudeAnalisadoEm)}</strong> · ${im.arquivosAnalisados||0} arquivo(s)</span><button class="btn btn-sm btn-outline" style="margin-left:auto;" onclick="triggerDriveAnalysis(getImovel('${im.id}'))">🔄 Reanalisar</button></div>`
       :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
   }
+
+  ${isAdmin()?`
+  <details style="margin-top:16px;">
+    <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);user-select:none;padding:6px 0;">
+      <i class="fa-solid fa-chart-line"></i> Integração com Claire (KPI)
+    </summary>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" id="cap-kpi-claire" ${im.incluirKpiClaire?'checked':''}> Colocar na Claire?
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
+        Mês de referência:
+        <input type="month" id="cap-kpi-mes" class="input" style="width:150px;padding:4px 8px;font-size:12.5px;" value="${esc(im.mesReferenciaKpi||'')}">
+      </label>
+    </div>
+    <div class="hint" style="margin-top:6px;">Marca esse imóvel pra entrar na média de "Tempo de Onboarding" da Claire, no mês escolhido.</div>
+  </details>
+  `:''}
 
   <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
