@@ -545,7 +545,7 @@ function salvarNovoImovel(){
     plataformas:[], camas:[], status:'contrato',
     dataAtivacao:null, statusAnterior:null,
     // captação
-    captacaoLink:'', jarvisPreenchidoEm:null, incluirKpiClaire:false, mesReferenciaKpi:'',
+    captacaoLink:'', jarvisPreenchidoEm:null, incluirKpiClaire:false, incluirSetupClaire:false, mesReferenciaKpi:'',
     // fotos
     fotos:[], fotosIaEm:null, fotosIaEncontrados:0,
     // contrato
@@ -709,6 +709,7 @@ function _coletarDadosAba(aba,im){
     }
     if(document.getElementById('cap-kpi-claire')){
       im.incluirKpiClaire=gc('cap-kpi-claire');
+      im.incluirSetupClaire=gc('cap-kpi-setup');
       im.mesReferenciaKpi=g('cap-kpi-mes');
     }
   }
@@ -937,23 +938,33 @@ function renderAbaCaptacao(im){
       :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
   }
 
-  ${isAdmin()?`
+  ${isAdmin()?(()=>{
+    const custoFotosKpi=+im.ops?.fotos?.custo||0;
+    const custoLimpezaKpi=+im.ops?.limpeza?.custo||0;
+    const custoVistoriaKpi=+im.ops?.vistoria?.custo||0;
+    const gastoSetupKpi=custoFotosKpi+custoLimpezaKpi+custoVistoriaKpi;
+    const valorSetupCobradoKpi=im.valorSetupCobrado||0;
+    return`
   <details style="margin-top:16px;">
     <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);user-select:none;padding:6px 0;">
       <i class="fa-solid fa-chart-line"></i> Integração com Claire (KPI)
     </summary>
-    <div style="margin-top:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+    <div style="margin-top:10px;">
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
-        <input type="checkbox" id="cap-kpi-claire" ${im.incluirKpiClaire?'checked':''}> Colocar na Claire?
+        <input type="checkbox" id="cap-kpi-claire" ${im.incluirKpiClaire?'checked':''}> Colocar na Claire? <span class="text-muted" style="font-weight:400;">(Tempo de Onboarding)</span>
       </label>
+      ${!im.dataAtivacao?`<div class="hint" style="color:var(--brand-red,#c0392b);margin:2px 0 6px;"><i class="fa-solid fa-triangle-exclamation"></i> Esse imóvel ainda não tem data de ativação (não está "Ativo") — só entra na média de Tempo de Onboarding quando tiver.</div>`:''}
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-top:8px;">
+        <input type="checkbox" id="cap-kpi-setup" ${im.incluirSetupClaire?'checked':''}> Colocar o Setup na Claire? <span class="text-muted" style="font-weight:400;">(Redução de Custos)</span>
+      </label>
+      <div class="hint" style="margin:2px 0 8px;">Manda pra Claire: valor cobrado do Setup (${fmtMoeda(valorSetupCobradoKpi)}) como previsto, e Fotos+Limpeza+Vistoria (${fmtMoeda(gastoSetupKpi)}) como gasto. Preencha esses valores na aba Contrato antes de marcar.</div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
-        Mês de referência:
+        Mês de referência (vale pros dois acima):
         <input type="month" id="cap-kpi-mes" class="input" style="width:150px;padding:4px 8px;font-size:12.5px;" value="${esc(im.mesReferenciaKpi||'')}">
       </label>
     </div>
-    <div class="hint" style="margin-top:6px;">Marca esse imóvel pra entrar na média de "Tempo de Onboarding" da Claire, no mês escolhido.</div>
   </details>
-  `:''}
+  `;})():''}
 
   <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-sage btn-sm" onclick="salvarImovelAtual()"><i class="fa-solid fa-floppy-disk"></i> Salvar link da pasta</button>
