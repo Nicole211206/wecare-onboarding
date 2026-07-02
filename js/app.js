@@ -107,13 +107,18 @@ const PRECOS_PRIMEIRA_LIMPEZA={
   4:{dinairan:{custo:580,cobrado:638},'Intense Clean':{custo:250,cobrado:275}},
 };
 // Limpeza de check-out (entre hóspedes) — diferente da primeira limpeza/implementação.
-// Intense Clean pré-carregada com a faixa de 41-50m² (aproximando hóspedes≈quartos); ajuste os valores conforme o imóvel real.
-const PRECOS_LIMPEZA_CHECKOUT={
-  1:{'Intense Clean':{custo:195,cobrado:214.5}},
-  2:{'Intense Clean':{custo:210,cobrado:231}},
-  3:{'Intense Clean':{custo:225,cobrado:247.5}},
-  4:{'Intense Clean':{custo:225,cobrado:247.5}},
-};
+// Lista livre (empresa, especificação por hóspedes/metragem, custo, cobrado, região), não presa a "quartos".
+let PRECOS_LIMPEZA_CHECKOUT=[
+  {id:'co1',empresa:'Intense Clean',especificacao:'25-40m² · até 2 hóspedes',custo:180,cobrado:198,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co2',empresa:'Intense Clean',especificacao:'25-40m² · até 3 hóspedes',custo:195,cobrado:214.5,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co3',empresa:'Intense Clean',especificacao:'25-40m² · até 4 hóspedes',custo:210,cobrado:231,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co4',empresa:'Intense Clean',especificacao:'41-50m² · até 2 hóspedes',custo:195,cobrado:214.5,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co5',empresa:'Intense Clean',especificacao:'41-50m² · até 3 hóspedes',custo:210,cobrado:231,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co6',empresa:'Intense Clean',especificacao:'41-50m² · até 4 hóspedes',custo:225,cobrado:247.5,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co7',empresa:'Intense Clean',especificacao:'51-65m² · até 2 hóspedes',custo:210,cobrado:231,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co8',empresa:'Intense Clean',especificacao:'51-65m² · até 3 hóspedes',custo:225,cobrado:247.5,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+  {id:'co9',empresa:'Intense Clean',especificacao:'51-65m² · até 4 hóspedes',custo:240,cobrado:264,regiao:'Paulista, Vila Mariana, Centro, Saúde, Indianópolis, Ibirapuera, Brooklin, Vila Olímpia, Itaim, Campo Belo, Pinheiros, Butantã, Sumaré, Vila Madalena, Perdizes'},
+];
 const PRECOS_FOTOS={
   1:{min:250,max:300,resp:'Flavia Mansur'},
   2:{min:300,max:380,resp:'Flavia Mansur'},
@@ -294,7 +299,7 @@ function loadAll(){
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
   v=g('wc_limpeza');   if(v&&typeof v==='object')Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
-  v=g('wc_limpeza_checkout');if(v&&typeof v==='object')Object.assign(PRECOS_LIMPEZA_CHECKOUT,v);
+  v=g('wc_limpeza_checkout');if(Array.isArray(v)&&v.length)PRECOS_LIMPEZA_CHECKOUT=v;
   v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
@@ -3147,30 +3152,21 @@ function renderConfig(){
       </div>`;
   }
 
-  // ── Tabela de Limpeza (Primeira e Check-out) e Fotos ──
+  // ── Tabela de Primeira Limpeza e Fotos ──
   const po=document.getElementById('config-precos-ops');
   if(po){
-    const _linhasLimpeza=(tabela,prefixo,fnSalvar,fnApagar)=>Object.entries(tabela).map(([q,servs])=>
+    const limpRows=Object.entries(PRECOS_PRIMEIRA_LIMPEZA).map(([q,servs])=>
       Object.entries(servs).map(([srv,v])=>
         `<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:4px;">${q} quarto(s)</td>
           <td style="padding:4px;">${esc(srv)}</td>
-          <td style="padding:4px;text-align:right;"><input id="${prefixo}-${q}-${CSS.escape(srv)}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-          <td style="padding:4px;text-align:right;"><input id="${prefixo}-${q}-${CSS.escape(srv)}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${CSS.escape(srv)}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${CSS.escape(srv)}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
           <td style="padding:4px;white-space:nowrap;">
-            <button class="btn btn-xs btn-sage" onclick="${fnSalvar}(${q},'${esc(srv)}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
-            <button class="btn btn-xs btn-danger" onclick="${fnApagar}(${q},'${esc(srv)}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-xs btn-sage" onclick="salvarPrecoLimpeza(${q},'${esc(srv)}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
+            <button class="btn btn-xs btn-danger" onclick="apagarPrecoLimpeza(${q},'${esc(srv)}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
           </td>
         </tr>`).join('')).join('');
-    const _linhaAdicionarLimpeza=(prefixo,fnAdicionar)=>`<tr>
-      <td style="padding:4px;"><input id="${prefixo}-novo-q" type="number" min="1" class="input" placeholder="Qtd" style="width:50px;padding:3px 4px;font-size:12px;"></td>
-      <td style="padding:4px;"><input id="${prefixo}-novo-empresa" class="input" placeholder="Nome da empresa" style="width:100%;min-width:110px;padding:3px 4px;font-size:12px;"></td>
-      <td style="padding:4px;text-align:right;"><input id="${prefixo}-novo-c" type="number" min="0" class="input" placeholder="Custo" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-      <td style="padding:4px;text-align:right;"><input id="${prefixo}-novo-r" type="number" min="0" class="input" placeholder="Cobrado" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-      <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="${fnAdicionar}('${prefixo}')" title="Adicionar"><i class="fa-solid fa-plus"></i></button></td>
-    </tr>`;
-    const limpRows=_linhasLimpeza(PRECOS_PRIMEIRA_LIMPEZA,'limp','salvarPrecoLimpeza','apagarPrecoLimpeza');
-    const checkoutRows=_linhasLimpeza(PRECOS_LIMPEZA_CHECKOUT,'limpco','salvarPrecoLimpezaCheckout','apagarPrecoLimpezaCheckout');
     const fotoRows=Object.entries(PRECOS_FOTOS).map(([q,v])=>
       `<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px;">${q} quarto(s)</td>
@@ -3188,14 +3184,15 @@ function renderConfig(){
         <thead><tr style="border-bottom:2px solid var(--border);">
           <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Empresa</th>
           <th style="text-align:right;padding:5px 4px;">Custo</th><th style="text-align:right;padding:5px 4px;">Cobrado</th><th></th>
-        </tr></thead><tbody>${limpRows}${_linhaAdicionarLimpeza('limp','adicionarPrecoLimpeza')}</tbody></table>
-
-      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Limpeza Check-out (entre hóspedes)</div>
-      <table style="width:100%;font-size:12px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);">
-          <th style="text-align:left;padding:5px 4px;">Qtd Qts</th><th style="text-align:left;padding:5px 4px;">Empresa</th>
-          <th style="text-align:right;padding:5px 4px;">Custo</th><th style="text-align:right;padding:5px 4px;">Cobrado</th><th></th>
-        </tr></thead><tbody>${checkoutRows}${_linhaAdicionarLimpeza('limpco','adicionarPrecoLimpezaCheckout')}</tbody></table>
+        </tr></thead><tbody>${limpRows}
+        <tr>
+          <td style="padding:4px;"><input id="limp-novo-q" type="number" min="1" class="input" placeholder="Qtd" style="width:50px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><input id="limp-novo-empresa" class="input" placeholder="Nome da empresa" style="width:100%;min-width:110px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-novo-c" type="number" min="0" class="input" placeholder="Custo" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-novo-r" type="number" min="0" class="input" placeholder="Cobrado" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="adicionarPrecoLimpeza('limp')" title="Adicionar"><i class="fa-solid fa-plus"></i></button></td>
+        </tr>
+        </tbody></table>
 
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:14px;margin-bottom:6px;">Fotos Profissionais</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
@@ -3212,7 +3209,45 @@ function renderConfig(){
         </tr>
         </tbody></table>`;
   }
+
+  // ── Tabela de Limpeza Check-out (espaço próprio) ──
+  _renderConfigLimpezaCheckout();
   _renderConfigDefPagadoria();
+}
+function _renderConfigLimpezaCheckout(){
+  const el=document.getElementById('config-precos-checkout');
+  if(!el)return;
+  const linhas=PRECOS_LIMPEZA_CHECKOUT.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:4px;"><input id="co-${r.id}-empresa" class="input" value="${esc(r.empresa)}" style="width:100%;min-width:100px;padding:3px 4px;font-size:12px;"></td>
+    <td style="padding:4px;"><input id="co-${r.id}-espec" class="input" value="${esc(r.especificacao)}" style="width:100%;min-width:140px;padding:3px 4px;font-size:12px;"></td>
+    <td style="padding:4px;text-align:right;"><input id="co-${r.id}-custo" type="number" min="0" class="input" value="${r.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+    <td style="padding:4px;text-align:right;"><input id="co-${r.id}-cobrado" type="number" min="0" class="input" value="${r.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+    <td style="padding:4px;"><input id="co-${r.id}-regiao" class="input" value="${esc(r.regiao||'')}" style="width:100%;min-width:120px;padding:3px 4px;font-size:12px;"></td>
+    <td style="padding:4px;white-space:nowrap;">
+      <button class="btn btn-xs btn-sage" onclick="salvarLinhaLimpezaCheckout('${r.id}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
+      <button class="btn btn-xs btn-danger" onclick="apagarLinhaLimpezaCheckout('${r.id}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+    </td>
+  </tr>`).join('');
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:8px;">Limpeza feita entre hóspedes (turnover) — diferente da Primeira Limpeza, que é o serviço único de implementação.</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:5px 4px;">Empresa</th>
+        <th style="text-align:left;padding:5px 4px;">Especificação (hóspedes/metragem)</th>
+        <th style="text-align:right;padding:5px 4px;">Custo</th>
+        <th style="text-align:right;padding:5px 4px;">Cobrado</th>
+        <th style="text-align:left;padding:5px 4px;">Região</th>
+        <th></th>
+      </tr></thead><tbody>${linhas}
+      <tr>
+        <td style="padding:4px;"><input id="co-novo-empresa" class="input" placeholder="Nome da empresa" style="width:100%;min-width:100px;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><input id="co-novo-espec" class="input" placeholder="Ex: até 3 hóspedes, 41-50m²" style="width:100%;min-width:140px;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;text-align:right;"><input id="co-novo-custo" type="number" min="0" class="input" placeholder="Custo" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;text-align:right;"><input id="co-novo-cobrado" type="number" min="0" class="input" placeholder="Cobrado" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><input id="co-novo-regiao" class="input" placeholder="Região" style="width:100%;min-width:120px;padding:3px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-sage" onclick="adicionarLinhaLimpezaCheckout()" title="Adicionar"><i class="fa-solid fa-plus"></i></button></td>
+      </tr>
+      </tbody></table>`;
 }
 function _renderConfigDefPagadoria(){
   const el=document.getElementById('config-def-pagadoria');
@@ -3495,29 +3530,28 @@ function adicionarPrecoLimpeza(prefixo){
   PRECOS_PRIMEIRA_LIMPEZA[q][empresa]={custo:c,cobrado:r};
   saveAll();renderConfig();showToast('Adicionado!','sage');
 }
-function salvarPrecoLimpezaCheckout(q,srv){
-  const c=+document.getElementById(`limpco-${q}-${CSS.escape(srv)}-c`)?.value||0;
-  const r=+document.getElementById(`limpco-${q}-${CSS.escape(srv)}-r`)?.value||0;
-  if(!PRECOS_LIMPEZA_CHECKOUT[q])PRECOS_LIMPEZA_CHECKOUT[q]={};
-  PRECOS_LIMPEZA_CHECKOUT[q][srv]={custo:c,cobrado:r};
+function salvarLinhaLimpezaCheckout(id){
+  const r=PRECOS_LIMPEZA_CHECKOUT.find(x=>x.id===id);if(!r)return;
+  r.empresa=(document.getElementById(`co-${id}-empresa`)?.value||'').trim();
+  r.especificacao=(document.getElementById(`co-${id}-espec`)?.value||'').trim();
+  r.custo=+document.getElementById(`co-${id}-custo`)?.value||0;
+  r.cobrado=+document.getElementById(`co-${id}-cobrado`)?.value||0;
+  r.regiao=(document.getElementById(`co-${id}-regiao`)?.value||'').trim();
   saveAll();showToast('Salvo!','sage');
 }
-function apagarPrecoLimpezaCheckout(q,srv){
-  if(!confirm(`Apagar "${srv}" da Limpeza Check-out (${q} quarto(s))?`))return;
-  if(PRECOS_LIMPEZA_CHECKOUT[q]){
-    delete PRECOS_LIMPEZA_CHECKOUT[q][srv];
-    if(!Object.keys(PRECOS_LIMPEZA_CHECKOUT[q]).length)delete PRECOS_LIMPEZA_CHECKOUT[q];
-  }
+function apagarLinhaLimpezaCheckout(id){
+  if(!confirm('Apagar esta linha da Limpeza Check-out?'))return;
+  PRECOS_LIMPEZA_CHECKOUT=PRECOS_LIMPEZA_CHECKOUT.filter(x=>x.id!==id);
   saveAll();renderConfig();showToast('Removido.','peach');
 }
-function adicionarPrecoLimpezaCheckout(prefixo){
-  const q=+document.getElementById(`${prefixo}-novo-q`)?.value||0;
-  const empresa=(document.getElementById(`${prefixo}-novo-empresa`)?.value||'').trim();
-  const c=+document.getElementById(`${prefixo}-novo-c`)?.value||0;
-  const r=+document.getElementById(`${prefixo}-novo-r`)?.value||0;
-  if(!q||!empresa){showToast('Informe a quantidade de quartos e o nome da empresa.','peach');return;}
-  if(!PRECOS_LIMPEZA_CHECKOUT[q])PRECOS_LIMPEZA_CHECKOUT[q]={};
-  PRECOS_LIMPEZA_CHECKOUT[q][empresa]={custo:c,cobrado:r};
+function adicionarLinhaLimpezaCheckout(){
+  const empresa=(document.getElementById('co-novo-empresa')?.value||'').trim();
+  const especificacao=(document.getElementById('co-novo-espec')?.value||'').trim();
+  const custo=+document.getElementById('co-novo-custo')?.value||0;
+  const cobrado=+document.getElementById('co-novo-cobrado')?.value||0;
+  const regiao=(document.getElementById('co-novo-regiao')?.value||'').trim();
+  if(!empresa){showToast('Informe o nome da empresa.','peach');return;}
+  PRECOS_LIMPEZA_CHECKOUT.push({id:uid(),empresa,especificacao,custo,cobrado,regiao});
   saveAll();renderConfig();showToast('Adicionado!','sage');
 }
 function salvarPrecoFoto(q){
