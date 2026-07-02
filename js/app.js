@@ -578,6 +578,7 @@ function salvarNovoImovel(){
     atualizacoes:[],
     // operacional
     ops:{fotos:{data:'',responsavel:'',hora:'',custo:0},limpeza:{data:'',responsavel:'',hora:'',custo:0},vistoria:{data:'',responsavel:'',hora:'',custo:0,localizacao:'central'}},
+    eventosExtras:[],
     // custos
     custos:[], margemWecare:15, descontoTipo:'reais', descontoValor:0, formasPagamento:'',
     // compras
@@ -1922,6 +1923,32 @@ function _apagarManutencao(manId){
   im.manutencoes=im.manutencoes.filter(m=>m.id!==manId);
   saveAll();renderAba('compras');renderKanban();showToast('Removida.','peach');
 }
+function adicionarEventoExtra(){
+  const titulo=(document.getElementById('evx-novo-titulo')?.value||'').trim();
+  if(!titulo){showToast('Informe o título do evento.','peach');return;}
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.eventosExtras)im.eventosExtras=[];
+  im.eventosExtras.push({
+    id:uid(),titulo,
+    data:document.getElementById('evx-novo-data')?.value||'',
+    hora:document.getElementById('evx-novo-hora')?.value||'',
+    responsavel:(document.getElementById('evx-novo-resp')?.value||'').trim(),
+    custo:+document.getElementById('evx-novo-custo')?.value||0,
+  });
+  saveAll();renderAba('operacional');showToast('Evento adicionado!','sage');
+}
+function _onEventoExtraChange(id,campo,valor){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
+  const ev=im.eventosExtras.find(e=>e.id===id);if(!ev)return;
+  ev[campo]=campo==='custo'?(+valor||0):valor;
+  saveAll();
+}
+function apagarEventoExtra(id){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
+  if(!confirm('Apagar este evento?'))return;
+  im.eventosExtras=im.eventosExtras.filter(e=>e.id!==id);
+  saveAll();renderAba('operacional');showToast('Removido.','peach');
+}
 function _onFreteChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.freteTotal=+inp.value||0;
@@ -2247,6 +2274,37 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+  </div>
+
+  <div class="form-section-title" style="margin-top:8px;"><i class="fa-solid fa-calendar-plus"></i> Outros Eventos</div>
+  <div class="hint" style="margin-bottom:10px;">Ex: segunda vistoria, instalação de internet, manutenção agendada — aparecem no Calendário junto com fotos/limpeza/vistoria.</div>
+  ${(im.eventosExtras||[]).length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
+    <thead><tr style="background:var(--surface-2)">
+      <th style="text-align:left;padding:6px 8px;">Título</th>
+      <th style="padding:6px 8px;">Data</th>
+      <th style="padding:6px 8px;">Hora</th>
+      <th style="text-align:left;padding:6px 8px;">Responsável</th>
+      <th style="text-align:right;padding:6px 8px;">Custo (R$)</th>
+      <th style="padding:6px 4px;width:32px;"></th>
+    </tr></thead>
+    <tbody>
+    ${(im.eventosExtras||[]).map(ev=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:4px 6px;"><input class="input" style="padding:3px 6px;" value="${esc(ev.titulo)}" onchange="_onEventoExtraChange('${ev.id}','titulo',this.value)"></td>
+      <td style="padding:4px 6px;"><input class="input" type="date" style="padding:3px 6px;" value="${ev.data||''}" onchange="_onEventoExtraChange('${ev.id}','data',this.value)"></td>
+      <td style="padding:4px 6px;"><input class="input" type="time" style="padding:3px 6px;" value="${ev.hora||''}" onchange="_onEventoExtraChange('${ev.id}','hora',this.value)"></td>
+      <td style="padding:4px 6px;"><input class="input" style="padding:3px 6px;" value="${esc(ev.responsavel||'')}" onchange="_onEventoExtraChange('${ev.id}','responsavel',this.value)"></td>
+      <td style="padding:4px 6px;text-align:right;"><input class="input" type="number" min="0" style="width:80px;text-align:right;padding:3px 6px;" value="${ev.custo||0}" onchange="_onEventoExtraChange('${ev.id}','custo',this.value)"></td>
+      <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="apagarEventoExtra('${ev.id}')"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`:''}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;">
+    <div style="flex:1;min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Título</label><input id="evx-novo-titulo" class="input" placeholder="Ex: Instalação da internet" style="width:100%;"></div>
+    <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="evx-novo-data" type="date" class="input"></div>
+    <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Hora</label><input id="evx-novo-hora" type="time" class="input"></div>
+    <div style="min-width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Responsável</label><input id="evx-novo-resp" class="input" style="width:100%;"></div>
+    <div style="width:100px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Custo (R$)</label><input id="evx-novo-custo" type="number" min="0" class="input" value="0" style="width:100%;"></div>
+    <button class="btn btn-sm btn-sage" onclick="adicionarEventoExtra()"><i class="fa-solid fa-plus"></i> Adicionar</button>
   </div>
   </div>`;
 }
@@ -2869,6 +2927,12 @@ function _calEventosDoMes(mes){
         eventos[data].push({...t,imovel:im.nome,imovelId:im.id,responsavel:im.ops[t.key].responsavel||''});
       }
     });
+    (im.eventosExtras||[]).forEach(ev=>{
+      if(ev.data&&ev.data.slice(0,7)===mes){
+        if(!eventos[ev.data])eventos[ev.data]=[];
+        eventos[ev.data].push({key:'extra',label:ev.titulo,icon:'fa-calendar-check',cor:'rose',imovel:im.nome,imovelId:im.id,responsavel:ev.responsavel||''});
+      }
+    });
   });
   return eventos;
 }
@@ -2911,6 +2975,7 @@ function renderCalendario(){
   </div>
   <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;align-items:center;">
     ${CAL_TIPOS.map(t=>`<span style="display:flex;align-items:center;gap:5px;"><span class="tag tag-${t.cor}" style="padding:2px 6px;"><i class="fa-solid ${t.icon}"></i></span> ${t.label}</span>`).join('')}
+    <span style="display:flex;align-items:center;gap:5px;"><span class="tag tag-rose" style="padding:2px 6px;"><i class="fa-solid fa-calendar-check"></i></span> Outros eventos</span>
   </div>
   <div class="cal-grid cal-grid-header">
     ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-dia-semana">${d}</div>`).join('')}
