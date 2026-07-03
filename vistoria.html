@@ -868,9 +868,7 @@ select.urg-select {
   <div class="section-body">
     <div class="form-row">
       <label>Imóvel</label>
-      <select id="field-imovel" onchange="onImovelChange()">
-        <option value="wc-00667">WC-00667 — Apto Riviera Mar</option>
-      </select>
+      <input type="text" id="field-imovel-display" disabled style="background:var(--gray-100);color:var(--gray-500);font-weight:600;">
     </div>
     <div class="form-grid">
       <div class="form-row">
@@ -1088,12 +1086,15 @@ const DECO_ROOMS = ['Sala', 'Cozinha', 'Quarto 1', 'Quarto 2', 'Banheiro 1', 'Ba
 // WORKER CONFIG
 // ═══════════════════════════════════════════════════════
 const WC_WORKER_URL = 'https://wecare-onboarding.nicole-0e7.workers.dev';
-const WC_TOKEN = 'wecare_sync_7k2p9m';
+// Sem token mestre aqui de propósito — esta página é aberta por um link externo
+// (vistoriador sem login). Tudo passa pelo token escopado da própria vistoria
+// (parâmetro `t` da URL), validado no worker em /vistoria-load e /vistoria-save.
 
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
 let currentImovel = MOCK_IMOVEL;
+let VISTORIA_ID = null, VISTORIA_TOKEN = null, VISTORIA_STATUS = 'rascunho';
 // videoFiles[idx] = File[] (armazenado em memória, não no localStorage)
 const videoFiles = {};
 
@@ -1108,25 +1109,76 @@ function tipoBaseComodo(nome) {
   return nome;
 }
 
-function _carregarCamposVistoria() {
-  try {
-    const v = JSON.parse(localStorage.getItem('wc_vistoria_campos') || '[]');
-    if (Array.isArray(v)) VISTORIA_CAMPOS = v;
-  } catch {}
+function getComodosAtuais() {
+  return (currentImovel.comodosSnapshot && currentImovel.comodosSnapshot.length) ? currentImovel.comodosSnapshot : getComodos(currentImovel);
 }
 
-// Busca a config mais recente na nuvem — vistoria.html não tem o loop de sync do app.js,
-// então sem isso um campo criado em outro dispositivo só apareceria aqui depois que
-// alguém abrisse o painel principal nesse navegador.
-async function _sincronizarCamposVistoria() {
+// Carrega a vistoria (imóvel, cômodos travados na criação, checklist configurado e
+// rascunho já salvo) via link escopado — id do imóvel + id da vistoria + token.
+// Não usa localStorage nem token mestre: essa página roda no navegador de alguém
+// de fora da equipe, então só pode enxergar exatamente essa vistoria.
+async function _carregarVistoria() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id'), vid = params.get('vid'), t = params.get('t');
+  if (!id || !vid || !t) { showLinkError('Link incompleto. Peça um novo link à equipe WeCare.'); return false; }
   try {
-    const r = await fetch(`${WC_WORKER_URL}/load?token=${encodeURIComponent(WC_TOKEN)}`);
+    const r = await fetch(`${WC_WORKER_URL}/vistoria-load?id=${encodeURIComponent(id)}&vid=${encodeURIComponent(vid)}&t=${encodeURIComponent(t)}`);
     const j = await r.json();
-    if (j && j.data && Array.isArray(j.data.wc_vistoria_campos)) {
-      VISTORIA_CAMPOS = j.data.wc_vistoria_campos;
-      localStorage.setItem('wc_vistoria_campos', JSON.stringify(VISTORIA_CAMPOS));
-    }
-  } catch {}
+    if (!r.ok || !j.ok) { showLinkError(j.error === 'Token inválido' ? 'Link inválido ou expirado. Peça um novo link à equipe WeCare.' : (j.error || 'Não foi possível carregar a vistoria.')); return false; }
+    VISTORIA_ID = vid; VISTORIA_TOKEN = t; VISTORIA_STATUS = j.status || 'rascunho';
+    currentImovel = { id, nome: j.imovelNome || id, comodosSnapshot: j.comodos || [] };
+    VISTORIA_CAMPOS = Array.isArray(j.camposVistoria) ? j.camposVistoria : [];
+    return j.dados || {};
+  } catch (e) {
+    showLinkError('Erro de conexão. Verifique sua internet e tente novamente.');
+    return false;
+  }
+}
+
+function showLinkError(msg) {
+  document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;">
+    <div>
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:36px;color:var(--amber);margin-bottom:12px;display:block;"></i>
+      <div style="font-size:16px;font-weight:600;color:var(--gray-700);">${esc(msg)}</div>
+    </div>
+  </div>`;
+}
+
+// Preenche os campos da tela com um rascunho já salvo (autosave anterior ou reabertura
+// de um link já usado antes) — antes disso, um autosave existia mas nunca era recarregado.
+function _restaurarDados(dados) {
+  if (!dados || !Object.keys(dados).length) return;
+  if (dados.data) document.getElementById('field-data').value = dados.data;
+  if (dados.vistoriador) document.getElementById('field-vistoriador').value = dados.vistoriador;
+  if (dados.aptoPara) { const r = document.querySelector(`input[name="apto"][value="${dados.aptoPara}"]`); if (r) r.checked = true; }
+  if (dados.obsFinais) document.getElementById('field-obs-finais').value = dados.obsFinais;
+  if (dados.nomeConc) document.getElementById('field-nome-conclusao').value = dados.nomeConc;
+  Object.entries(dados.camposGerais || {}).forEach(([label, val]) => {
+    const campo = VISTORIA_CAMPOS.find(c => c.label === label && c.escopo === 'geral');
+    if (!campo) return;
+    const el = document.getElementById(`geral-${campo.id}`);
+    if (!el) return;
+    if (campo.tipo === 'checkbox') el.checked = !!val; else el.value = val ?? '';
+  });
+  (dados.comodos || []).forEach((c, idx) => {
+    const irreg = document.getElementById('irreg-' + idx);
+    if (irreg && c.irregularidade) irreg.value = c.irregularidade;
+    Object.entries(c.camposExtras || {}).forEach(([label, val]) => {
+      const campo = VISTORIA_CAMPOS.find(x => x.label === label && x.escopo === 'comodo');
+      if (!campo) return;
+      const el = document.getElementById(`campo-${campo.id}-${idx}`);
+      if (!el) return;
+      if (campo.tipo === 'checkbox') el.checked = !!val; else el.value = val ?? '';
+    });
+  });
+}
+
+function _bloquearFormularioEnviado() {
+  document.querySelectorAll('input, textarea, select').forEach(el => el.disabled = true);
+  document.querySelector('.float-submit-btn')?.setAttribute('disabled', 'true');
+  document.getElementById('status-badge').className = 'status-badge status-sent';
+  document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-circle-check"></i> Enviado';
+  document.getElementById('autosave-indicator').innerHTML = '<i class="fa-solid fa-lock"></i> Vistoria já enviada — somente leitura';
 }
 
 function renderCampoExtra(campo, elId) {
@@ -1210,7 +1262,7 @@ function getComodoIcon(nome) {
 }
 
 function buildComodos() {
-  const comodos = getComodos(currentImovel);
+  const comodos = getComodosAtuais();
   const container = document.getElementById('comodos-container');
   const navContainer = document.getElementById('nav-comodos');
   let sectionsHtml = '';
@@ -1314,42 +1366,23 @@ function renderVideoGrid(idx) {
 // ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
-function _carregarImovelReal() {
-  const params = new URLSearchParams(location.search);
-  const id = params.get('id');
-  if (!id) return;
-  try {
-    const lista = JSON.parse(localStorage.getItem('wc_imoveis') || '[]');
-    const im = lista.find(i => String(i.id) === String(id));
-    if (!im) return;
-    currentImovel = {
-      id: im.id,
-      nome: im.nome || im.id,
-      endereco: im.endereco || '',
-      quartos: im.quartos || 0,
-      banheiros: im.banheiros || 0,
-      banheirosCompletos: im.banheirosCompletos || 0,
-      banheirosLavabo: im.banheirosLavabo || 0,
-      salas: im.salas != null ? im.salas : 1,
-      cozinha: im.cozinha !== undefined ? im.cozinha : 1,
-      lavanderia: im.lavanderia || 0,
-      areaExterna: im.areaExterna || 0,
-      varanda: im.varanda || 0,
-      camas: im.camas || [],
-    };
-  } catch(e) { console.warn('Erro ao carregar imóvel real', e); }
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
-  _carregarImovelReal();
-  _carregarCamposVistoria();
-  await _sincronizarCamposVistoria();
+  const dados = await _carregarVistoria();
+  if (dados === false) return; // link inválido — showLinkError já substituiu a tela
+
   document.getElementById('field-data').value = new Date().toISOString().split('T')[0];
   document.getElementById('header-imovel-name').textContent = currentImovel.nome;
+  document.getElementById('field-imovel-display').value = currentImovel.nome;
   buildGeral();
   buildComodos();
-  startAutosave();
+  _restaurarDados(dados);
   updateProgress();
+
+  if (VISTORIA_STATUS === 'enviado') {
+    _bloquearFormularioEnviado();
+  } else {
+    startAutosave();
+  }
 });
 
 // ═══════════════════════════════════════════════════════
@@ -1380,7 +1413,7 @@ function closeSidebar() {
 // PROGRESSO
 // ═══════════════════════════════════════════════════════
 function updateProgress() {
-  const comodos = getComodos(currentImovel);
+  const comodos = getComodosAtuais();
   const total = 1 + comodos.length + 1; // cabeçalho + cômodos + conclusão
   let done = 0;
 
@@ -1419,12 +1452,26 @@ document.addEventListener('change', updateProgress);
 // ═══════════════════════════════════════════════════════
 // AUTO-SAVE
 // ═══════════════════════════════════════════════════════
-function saveDraft() {
-  const data = collectFormData();
-  localStorage.setItem(`vistoria_draft_${currentImovel.id}`, JSON.stringify({ ...data, savedAt: new Date().toISOString() }));
+async function _vistoriaSave(extra) {
+  return fetch(`${WC_WORKER_URL}/vistoria-save?id=${encodeURIComponent(currentImovel.id)}&vid=${encodeURIComponent(VISTORIA_ID)}&t=${encodeURIComponent(VISTORIA_TOKEN)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dados: collectFormData(), ...extra }),
+  }).then(r => r.json());
+}
+
+async function saveDraft() {
   const ind = document.getElementById('autosave-indicator');
-  const now = new Date();
-  ind.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+  ind.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Salvando...`;
+  try {
+    const j = await _vistoriaSave({});
+    const now = new Date();
+    ind.innerHTML = j && j.ok
+      ? `<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`
+      : `<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Erro ao salvar`;
+  } catch {
+    ind.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Sem conexão — tentando de novo em 30s`;
+  }
 }
 
 function startAutosave() { setInterval(saveDraft, 30000); }
@@ -1455,7 +1502,7 @@ function _coletarCamposComodo(campos, idx) {
 }
 
 function collectFormData() {
-  const comodos = getComodos(currentImovel);
+  const comodos = getComodosAtuais();
   const comodosData = comodos.map((nome, idx) => ({
     nome,
     qtdVideos: (videoFiles[idx] || []).length,
@@ -1543,60 +1590,21 @@ function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
 }
 
-function confirmarEnvio() {
-  const data = collectFormData();
-  const sentAt = new Date().toISOString();
-  const baseId = `vistoria_${currentImovel.id}_${data.data}_${Date.now()}`;
-  const id = `vistoria_final_${baseId}`;
-  const registro = { ...data, id, status: 'enviado', sentAt };
-
-  localStorage.setItem(id, JSON.stringify(registro));
-
+async function confirmarEnvio() {
+  const btn = document.querySelector('.modal-footer .btn-gold');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...'; }
   try {
-    const lista = JSON.parse(localStorage.getItem('wc_vistorias') || '[]');
-    lista.push({
-      id,
-      imovelId: currentImovel.id,
-      imovelNome: currentImovel.nome || currentImovel.id,
-      data: data.data,
-      vistoriador: data.vistoriador,
-      apto: data.aptoPara,
-      pendencias: data.pendencias,
-      sentAt
-    });
-    localStorage.setItem('wc_vistorias', JSON.stringify(lista));
-  } catch(e) { console.warn('Erro ao salvar em wc_vistorias', e); }
-
-  // Criar manutenções no imóvel para cada pendência
-  if (data.pendencias.length) {
-    try {
-      const listaIm = JSON.parse(localStorage.getItem('wc_imoveis') || '[]');
-      const imIdx = listaIm.findIndex(i => String(i.id) === String(currentImovel.id));
-      if (imIdx >= 0) {
-        if (!listaIm[imIdx].manutencoes) listaIm[imIdx].manutencoes = [];
-        data.pendencias.forEach(p => {
-          listaIm[imIdx].manutencoes.push({
-            id: 'man_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            comodo: p.comodo,
-            descricao: p.descricao,
-            status: 'pendente',
-            custo: 0,
-            criadoEm: sentAt,
-            origem: 'vistoria',
-            vistoriaId: id
-          });
-        });
-        localStorage.setItem('wc_imoveis', JSON.stringify(listaIm));
-      }
-    } catch(e) { console.warn('Erro ao criar manutenções', e); }
+    const j = await _vistoriaSave({ enviado: true });
+    if (!j || !j.ok) throw new Error(j && j.error || 'Falha ao enviar');
+    VISTORIA_STATUS = 'enviado';
+    closeModal();
+    _bloquearFormularioEnviado();
+    showToast('Vistoria enviada! Preparando PDF...');
+    setTimeout(() => window.print(), 800);
+  } catch (e) {
+    showToast('Não foi possível enviar. Verifique sua internet e tente de novo.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Confirmar e gerar PDF'; }
   }
-
-  document.getElementById('status-badge').className = 'status-badge status-sent';
-  document.getElementById('status-badge').innerHTML = '<i class="fa-solid fa-circle-check"></i> Enviado';
-
-  closeModal();
-  showToast('Vistoria salva! Preparando PDF...');
-  setTimeout(() => window.print(), 800);
 }
 
 // ═══════════════════════════════════════════════════════

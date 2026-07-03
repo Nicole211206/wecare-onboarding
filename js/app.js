@@ -201,6 +201,31 @@ function numInput({id,value=0,min=0,max='',step=1,style='',oninput='',onchange='
 // Converte campo cozinha/lavanderia/areaExterna que pode ser boolean (legado) ou number
 function _qtdComodo(v){if(v===true)return 1;if(!v)return 0;const n=parseInt(v);return isNaN(n)?0:n;}
 
+// Snapshot da lista de cômodos de um imóvel — mesma lógica de vistoria.html (getComodos),
+// duplicada aqui porque as duas telas não compartilham módulo JS. Usado ao criar uma
+// vistoria nova, pra travar os cômodos daquele momento (se o imóvel mudar depois, a
+// vistoria em andamento não se mexe).
+function _getComodosImovel(im){
+  const list=[];
+  const nq=parseInt(im.quartos)||0;
+  for(let i=1;i<=nq;i++)list.push(nq>1?'Quarto '+i:'Quarto');
+  const ns=parseInt(im.salas!=null?im.salas:1)||0;
+  for(let i=1;i<=ns;i++)list.push(ns>1?'Sala '+i:'Sala');
+  const nc=_qtdComodo(im.cozinha!==undefined?im.cozinha:1);
+  for(let i=1;i<=nc;i++)list.push(nc>1?'Cozinha '+i:'Cozinha');
+  const nbc=parseInt(im.banheirosCompletos)||parseInt(im.banheiros)||0;
+  for(let i=1;i<=nbc;i++)list.push(nbc>1?'Banheiro Completo '+i:'Banheiro Completo');
+  const nbv=parseInt(im.banheirosLavabo)||0;
+  for(let i=1;i<=nbv;i++)list.push(nbv>1?'Lavabo '+i:'Lavabo');
+  const nl=_qtdComodo(im.lavanderia);
+  for(let i=1;i<=nl;i++)list.push(nl>1?'Lavanderia '+i:'Lavanderia');
+  const na=_qtdComodo(im.areaExterna);
+  for(let i=1;i<=na;i++)list.push(na>1?'Área Externa '+i:'Área Externa');
+  const nv=_qtdComodo(im.varanda);
+  for(let i=1;i<=nv;i++)list.push(nv>1?'Varanda/Pátio '+i:'Varanda/Pátio');
+  return list;
+}
+
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
@@ -2902,36 +2927,88 @@ function apagarPrestador(idx){
 }
 
 // ═══════════════════ VISTORIA ═══════════════════
-function _migrarVistoriasAntigas(){
-  // Recupera vistorias salvas no formato antigo (vistoria_final_* e vistoria_draft_*)
-  const lista=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
-  const idsExistentes=new Set(lista.map(v=>v.id));
+// Vistorias vivem em im.vistorias[] (sincronizado normalmente via wc_imoveis), cada uma
+// com token próprio — mesmo padrão do formToken do proprietário (ver _formUrl). Isso
+// permite mandar o link pra um vistoriador externo sem expor o token mestre do sistema.
+let _vistoriasMigradas=false;
+function _migrarVistoriasParaImoveis(){
+  // Uma vez só: puxa vistorias do formato antigo (localStorage puro, sem sync) pra dentro
+  // do imóvel correspondente, como registro histórico (sem token — não dá pra reabrir
+  // o link, só ver os detalhes já enviados).
+  if(_vistoriasMigradas)return;
+  _vistoriasMigradas=true;
   let alterou=false;
+  const porImovel={};
+  imoveis.forEach(im=>{(im.vistorias||[]).forEach(v=>{if(v.legado)porImovel[v.id]=true;});});
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);
-    if(!key||(!key.startsWith('vistoria_final_')&&!key.startsWith('vistoria_draft_')))continue;
+    if(!key||!key.startsWith('vistoria_final_'))continue;
+    if(porImovel[key])continue;
     try{
       const d=JSON.parse(localStorage.getItem(key)||'{}');
-      if(!d.imovelId&&!d.currentImovel?.id)continue;
-      const imovelId=d.imovelId||d.currentImovel?.id||'';
-      const vid=key;
-      if(idsExistentes.has(vid))continue;
-      lista.push({
-        id:vid,
-        imovelId,
-        imovelNome:d.imovelNome||imovelId,
-        data:d.data||d.dataVistoria||'',
-        vistoriador:d.vistoriador||'',
-        apto:d.aptoPara||d.apto||'',
-        pendencias:d.pendencias||[],
-        sentAt:d.sentAt||d.savedAt||new Date().toISOString()
+      const imovelId=d.imovelId||'';
+      const im=imoveis.find(x=>x.id===imovelId);
+      if(!im)continue;
+      if(!im.vistorias)im.vistorias=[];
+      if(im.vistorias.some(v=>v.id===key))continue;
+      im.vistorias.push({
+        id:key, legado:true, status:'enviado',
+        criadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
+        enviadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
+        dados:d
       });
-      idsExistentes.add(vid);
       alterou=true;
     }catch(e){}
   }
-  if(alterou)localStorage.setItem('wc_vistorias',JSON.stringify(lista));
-  return lista;
+  if(alterou)saveAll();
+}
+function _vistoriaUrl(im,v){
+  const base=location.origin+location.pathname.replace(/[^/]*$/,'');
+  return`${base}vistoria.html?id=${im.id}&vid=${v.id}&t=${v.token}`;
+}
+function _mostrarLinkVistoria(im,v){
+  const url=_vistoriaUrl(im,v);
+  document.getElementById('generico-titulo').textContent='Link da Vistoria';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group" style="grid-column:1/-1;">
+      <label>Link para enviar ao vistoriador</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="input" readonly value="${esc(url)}" onclick="this.select()">
+        <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
+        <a href="${esc(url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>
+        <a href="https://wa.me/?text=${encodeURIComponent('Olá! Segue o link da vistoria do imóvel '+(im.nome||im.id)+': '+url)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;"><i class="fa-brands fa-whatsapp"></i></a>
+      </div>
+      <div class="hint">Quem abrir esse link não precisa de login e só enxerga essa vistoria — sem acesso ao resto do sistema. O progresso salva sozinho no servidor conforme ele preenche.</div>
+    </div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _verDetalhesVistoria(imovelId,vistoriaId){
+  const im=imoveis.find(i=>i.id===imovelId);
+  const v=im?.vistorias?.find(x=>x.id===vistoriaId);
+  if(!im||!v)return;
+  const d=v.dados||{};
+  const aptoLabel={sim:'✓ Apto para operação',nao:'✗ Não apto — pendências'}[d.aptoPara]||'—';
+  const comodosHtml=(d.comodos||[]).map(c=>{
+    const extras=Object.entries(c.camposExtras||{}).filter(([,val])=>val!==''&&val!==false&&val!=null);
+    return`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+      <strong>${esc(c.nome)}</strong>${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
+      ${extras.length?`<div style="font-size:12.5px;color:var(--text-muted);">${extras.map(([k,val])=>`${esc(k)}: ${val===true?'✓':esc(String(val))}`).join(' · ')}</div>`:''}
+    </div>`;
+  }).join('')||'<div class="text-muted" style="font-size:13px;">Sem detalhes de cômodos registrados.</div>';
+  const geraisHtml=Object.entries(d.camposGerais||{}).filter(([,val])=>val!==''&&val!==false&&val!=null)
+    .map(([k,val])=>`<div>${esc(k)}: <strong>${val===true?'Sim':esc(String(val))}</strong></div>`).join('')||'';
+  document.getElementById('generico-titulo').textContent='Detalhes da Vistoria';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group" style="grid-column:1/-1;">
+      <div><strong>${esc(im.nome)}</strong> · ${fmtDate(d.data)} · ${esc(d.vistoriador||'—')}</div>
+      <div style="margin-top:4px;">${aptoLabel}</div>
+      ${geraisHtml?`<div style="margin-top:8px;font-size:13px;">${geraisHtml}</div>`:''}
+      ${d.obsFinais?`<div class="hint" style="margin-top:8px;">${esc(d.obsFinais)}</div>`:''}
+      <div style="margin-top:12px;">${comodosHtml}</div>
+    </div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
 }
 // ═══════════════════ CALENDÁRIO ═══════════════════
 const CAL_TIPOS=[
@@ -3015,34 +3092,44 @@ function renderCalendario(){
 }
 
 function renderVistoria(){
-  const imoveis=(JSON.parse(localStorage.getItem('wc_imoveis')||'[]')).filter(im=>im.status!=='perdido');
-  const vistorias=_migrarVistoriasAntigas();
+  _migrarVistoriasParaImoveis();
+  const imoveisAtivos=imoveis.filter(im=>im.status!=='perdido');
+  const todasVistorias=imoveisAtivos.flatMap(im=>(im.vistorias||[]).map(v=>({...v,imovelId:im.id,imovelNome:im.nome})))
+    .sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
 
-  const linhas=vistorias.length?vistorias.slice().reverse().map(v=>{
-    const im=imoveis.find(i=>i.id===v.imovelId);
-    const cor=v.apto==='sim'?'sage':v.apto==='nao'?'rose':'gold';
-    const label=v.apto==='sim'?'Apto':v.apto==='nao'?'Não apto':'Parcial';
+  const linhas=todasVistorias.length?todasVistorias.map(v=>{
+    const d=v.dados||{};
+    const enviado=v.status==='enviado';
+    const statusTag=enviado?'<span class="tag tag-sage">Enviado</span>':'<span class="tag tag-gold">Rascunho</span>';
+    const cor=d.aptoPara==='sim'?'sage':d.aptoPara==='nao'?'rose':null;
+    const aptoTag=cor?`<span class="tag tag-${cor}">${d.aptoPara==='sim'?'Apto':'Não apto'}</span>`:'—';
+    const acaoPrincipal=enviado
+      ?`<button class="btn btn-xs btn-outline" onclick="_verDetalhesVistoria('${esc(v.imovelId)}','${esc(v.id)}')"><i class="fa-solid fa-eye"></i> Detalhes</button>`
+      :(v.legado?'—':`<button class="btn btn-xs btn-outline" onclick="_mostrarLinkVistoria(imoveis.find(i=>i.id==='${esc(v.imovelId)}'),imoveis.find(i=>i.id==='${esc(v.imovelId)}').vistorias.find(x=>x.id==='${esc(v.id)}'))"><i class="fa-solid fa-link"></i> Copiar link</button>`);
     return`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:10px 8px;font-weight:600;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${esc(im?.nome||v.imovelId)}</td>
-      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${fmtDate(v.data)}</td>
-      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${esc(v.vistoriador||'—')}</td>
-      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')"><span class="tag tag-${cor}">${label}</span></td>
-      <td style="padding:10px 8px;cursor:pointer;" onclick="window.open('vistoria.html?id=${encodeURIComponent(v.imovelId)}&vid=${encodeURIComponent(v.id)}','_blank')">${v.pendencias?.length||0} pendência(s)</td>
-      <td style="padding:10px 8px;text-align:center;"><button onclick="removerVistoria('${esc(v.id)}')" title="Apagar vistoria" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 6px;border-radius:4px;" onmouseover="this.style.color='var(--rose)'" onmouseout="this.style.color='var(--text-muted)'"><i class="fa-solid fa-trash"></i></button></td>
+      <td style="padding:10px 8px;font-weight:600;">${esc(v.imovelNome||v.imovelId)}</td>
+      <td style="padding:10px 8px;">${fmtDate(d.data)||'—'}</td>
+      <td style="padding:10px 8px;">${esc(d.vistoriador||'—')}</td>
+      <td style="padding:10px 8px;">${statusTag}</td>
+      <td style="padding:10px 8px;">${aptoTag}</td>
+      <td style="padding:10px 8px;">${d.pendencias?.length||0} pendência(s)</td>
+      <td style="padding:10px 8px;white-space:nowrap;">${acaoPrincipal}
+        <button onclick="removerVistoria('${esc(v.imovelId)}','${esc(v.id)}')" title="Apagar vistoria" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 6px;border-radius:4px;" onmouseover="this.style.color='var(--rose)'" onmouseout="this.style.color='var(--text-muted)'"><i class="fa-solid fa-trash"></i></button>
+      </td>
     </tr>`;
   }).join(''):
-  `<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--text-muted);">Nenhuma vistoria registrada ainda.</td></tr>`;
+  `<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--text-muted);">Nenhuma vistoria registrada ainda.</td></tr>`;
 
   document.getElementById('vistoria-wrap').innerHTML=`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
     <div>
       <div class="section-title" style="margin-bottom:4px;">Vistorias de Onboarding</div>
-      <div class="text-muted">Formulário digital de inspeção dos imóveis</div>
+      <div class="text-muted">Gere um link seguro pra um vistoriador preencher, sem precisar de login</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <select id="vistoria-select-imovel" class="input" style="min-width:200px;">
         <option value="">Selecionar imóvel…</option>
-        ${imoveis.map(im=>`<option value="${esc(im.id)}">${esc(im.nome)}</option>`).join('')}
+        ${imoveisAtivos.map(im=>`<option value="${esc(im.id)}">${esc(im.nome)}</option>`).join('')}
       </select>
       <button class="btn btn-rose" onclick="iniciarVistoria()">
         <i class="fa-solid fa-plus"></i> Nova Vistoria
@@ -3052,40 +3139,47 @@ function renderVistoria(){
 
   <div class="card">
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Histórico</span></div>
-    <div class="card-body" style="padding:0;">
+    <div class="card-body" style="padding:0;overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:var(--surface-2);">
           <th style="padding:8px;text-align:left;">Imóvel</th>
           <th style="padding:8px;text-align:left;">Data</th>
           <th style="padding:8px;text-align:left;">Vistoriador</th>
           <th style="padding:8px;text-align:left;">Status</th>
+          <th style="padding:8px;text-align:left;">Resultado</th>
           <th style="padding:8px;text-align:left;">Pendências</th>
-          <th style="padding:8px;width:40px;"></th>
+          <th style="padding:8px;width:120px;"></th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
   </div>`;
 }
-function removerVistoria(id){
+function removerVistoria(imovelId,vistoriaId){
+  const im=imoveis.find(i=>i.id===imovelId);
+  if(!im||!im.vistorias)return;
   if(!confirm('Apagar esta vistoria? Esta ação não pode ser desfeita.'))return;
-  try{
-    const lista=JSON.parse(localStorage.getItem('wc_vistorias')||'[]');
-    localStorage.setItem('wc_vistorias',JSON.stringify(lista.filter(v=>v.id!==id)));
-    // id já é a chave completa (ex: vistoria_final_...)
-    localStorage.removeItem(id);
-    // tentar remover draft associado ao imóvel
-    const drafts=Object.keys(localStorage).filter(k=>k.startsWith('vistoria_draft_'));
-    drafts.forEach(k=>{try{const d=JSON.parse(localStorage.getItem(k)||'{}');if(d.vistoriaId===id||k===id)localStorage.removeItem(k);}catch(e){}});
-  }catch(e){console.warn('Erro ao remover vistoria',e);}
-  renderVistoria();
+  im.vistorias=im.vistorias.filter(v=>v.id!==vistoriaId);
+  saveAll();renderVistoria();showToast('Vistoria removida.','peach');
 }
 function iniciarVistoria(){
   const id=document.getElementById('vistoria-select-imovel')?.value;
-  const imoveis=JSON.parse(localStorage.getItem('wc_imoveis')||'[]');
+  if(!id){showToast('Selecione um imóvel.','peach');return;}
   const im=imoveis.find(i=>i.id===id);
-  const url='vistoria.html'+(id?`?id=${encodeURIComponent(id)}&nome=${encodeURIComponent(im?.nome||'')}`:``);
-  window.open(url,'_blank');
+  if(!im){showToast('Imóvel não encontrado.','peach');return;}
+  const v={
+    id:'vist_'+uid()+uid(),
+    token:uid()+uid(),
+    criadoEm:new Date().toISOString(),
+    status:'rascunho',
+    comodosSnapshot:_getComodosImovel(im),
+    dados:{}
+  };
+  if(!im.vistorias)im.vistorias=[];
+  im.vistorias.push(v);
+  saveAll();
+  renderVistoria();
+  _mostrarLinkVistoria(im,v);
 }
 
 // ═══════════════════ FORNECEDORES ═══════════════════

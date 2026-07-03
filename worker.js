@@ -9,6 +9,8 @@
 //   GET  /onboarding-stats              → retorna stats + prestadores (sem auth)
 //   GET  /form-load?id=X&t=TOKEN        → carrega formulário do imóvel
 //   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
+//   GET  /vistoria-load?id=X&vid=V&t=T  → carrega uma vistoria específica (token escopado, sem auth mestre)
+//   POST /vistoria-save?id=X&vid=V&t=T  → salva/envia uma vistoria específica
 //   POST /extrair-formulario            → IA extrai dados de transcrição
 //   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (metadados das fotos, sem base64)
 //   GET  /foto?id=X&index=N&token=T     → serve foto como binário (image/jpeg) diretamente do KV
@@ -42,6 +44,7 @@ function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
       ...im,
       itensExtras:   mergeItemArraysById(old.itensExtras,   im.itensExtras),
       eventosExtras: mergeItemArraysById(old.eventosExtras, im.eventosExtras),
+      vistorias:     mergeItemArraysById(old.vistorias,     im.vistorias),
     };
   });
 }
@@ -427,6 +430,83 @@ Regras:
       if (body.enviado === true) im.formEnviadoEm = new Date().toISOString();
       state.lastSaved      = Date.now(); // garante que o pull no app detecte mudança
 
+      await putState(env, state);
+      return json({ ok: true });
+    }
+
+    // ── GET /vistoria-load?id=IMOVEL_ID&vid=VISTORIA_ID&t=VISTORIA_TOKEN ─────
+    // Mesmo padrão do /form-load: token escopado a UMA vistoria de UM imóvel,
+    // nunca o token mestre — seguro pra mandar pra um vistoriador externo.
+    if (request.method === 'GET' && path === '/vistoria-load') {
+      const imovelId   = url.searchParams.get('id')  || '';
+      const vistoriaId = url.searchParams.get('vid') || '';
+      const vt         = url.searchParams.get('t')   || '';
+
+      if (!imovelId || !vistoriaId || !vt) return json({ ok: false, error: 'Link incompleto' }, 400);
+
+      const state = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im = imoveis.find(i => String(i.id) === imovelId || String(i.uuid) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+
+      const vistorias = Array.isArray(im.vistorias) ? im.vistorias : [];
+      const v = vistorias.find(x => x.id === vistoriaId);
+      if (!v)              return json({ ok: false, error: 'Vistoria não encontrada' }, 404);
+      if (v.token !== vt)  return json({ ok: false, error: 'Token inválido' },          403);
+
+      return json({
+        ok:            true,
+        imovelNome:    im.nome || im.id,
+        comodos:       Array.isArray(v.comodosSnapshot) ? v.comodosSnapshot : [],
+        camposVistoria: Array.isArray(state.wc_vistoria_campos) ? state.wc_vistoria_campos : [],
+        dados:         v.dados ?? {},
+        status:        v.status || 'rascunho',
+      });
+    }
+
+    // ── POST /vistoria-save?id=IMOVEL_ID&vid=VISTORIA_ID&t=VISTORIA_TOKEN ────
+    if (request.method === 'POST' && path === '/vistoria-save') {
+      const imovelId   = url.searchParams.get('id')  || '';
+      const vistoriaId = url.searchParams.get('vid') || '';
+      const vt         = url.searchParams.get('t')   || '';
+
+      if (!imovelId || !vistoriaId || !vt) return json({ ok: false, error: 'Link incompleto' }, 400);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+      const state = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im = imoveis.find(i => String(i.id) === imovelId || String(i.uuid) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+
+      const vistorias = Array.isArray(im.vistorias) ? im.vistorias : [];
+      const v = vistorias.find(x => x.id === vistoriaId);
+      if (!v)              return json({ ok: false, error: 'Vistoria não encontrada' }, 404);
+      if (v.token !== vt)  return json({ ok: false, error: 'Token inválido' },          403);
+
+      v.dados        = body.dados ?? {};
+      v.atualizadoEm = new Date().toISOString();
+
+      // Cria as manutenções pendentes só na primeira vez que a vistoria é marcada como enviada
+      // (evita duplicar se o cliente reenviar por retry de rede)
+      if (body.enviado === true && v.status !== 'enviado') {
+        v.status    = 'enviado';
+        v.enviadoEm = v.atualizadoEm;
+        const pendencias = Array.isArray(v.dados.pendencias) ? v.dados.pendencias : [];
+        if (pendencias.length) {
+          if (!im.manutencoes) im.manutencoes = [];
+          pendencias.forEach(p => {
+            im.manutencoes.push({
+              id: 'man_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+              comodo: p.comodo, descricao: p.descricao, status: 'pendente', custo: 0,
+              criadoEm: v.enviadoEm, origem: 'vistoria', vistoriaId: v.id,
+            });
+          });
+        }
+      }
+
+      state.lastSaved = Date.now();
       await putState(env, state);
       return json({ ok: true });
     }
