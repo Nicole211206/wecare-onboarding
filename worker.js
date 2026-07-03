@@ -238,7 +238,7 @@ export default {
         }
       }
       // Listas curtas e curadas manualmente (config) — qualquer encolhida é suspeita, nunca aceitar
-      const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout'];
+      const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout', 'wc_vistoria_campos'];
       for (const k of listKeysEstritas) {
         const sv = Array.isArray(current[k]) ? current[k] : [];
         const iv = Array.isArray(body[k])    ? body[k]    : [];

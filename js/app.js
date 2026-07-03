@@ -126,6 +126,10 @@ const PRECOS_FOTOS={
   4:{min:350,max:420,resp:'Flavia Mansur'},
 };
 let DEF_OPERACIONAIS=[{id:'seguroEasyCover',nome:'Seguro EasyCover'},{id:'kitAmenities',nome:'Kit Amenities WeCare'},{id:'internetClaro',nome:'Internet Claro'},{id:'ecohost',nome:'Sistema EcoHost'},{id:'fechaduraEletronica',nome:'Fechadura Eletrônica'}];
+// Campos extras configuráveis da vistoria (vistoria.html lê essa mesma lista via sync)
+// {id, label, tipo:'texto'|'numero'|'checkbox'|'select', opcoes?:string[], escopo:'geral'|'comodo', comodosTipos?:'todos'|string[]}
+let VISTORIA_CAMPOS=[];
+const VISTORIA_COMODO_TIPOS=['Quarto','Sala','Cozinha','Banheiro Completo','Lavabo','Lavanderia','Área Externa','Varanda/Pátio'];
 
 const SERVICOS_OPCIONAIS_COMPRAS=[
   {id:'servicoCompras',nome:'Serviço de compras',valor:300},
@@ -273,7 +277,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -286,6 +290,7 @@ function saveAll(){
   localStorage.setItem('wc_fotos',JSON.stringify(PRECOS_FOTOS));
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
   localStorage.setItem('wc_def_operacionais',JSON.stringify(DEF_OPERACIONAIS));
+  localStorage.setItem('wc_vistoria_campos',JSON.stringify(VISTORIA_CAMPOS));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -303,6 +308,7 @@ function loadAll(){
   v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
+  v=g('wc_vistoria_campos');if(Array.isArray(v))VISTORIA_CAMPOS=v;
   _migrarFasesAntigas();
 }
 
@@ -3303,6 +3309,7 @@ function renderConfig(){
   // ── Tabela de Limpeza Check-out (espaço próprio) ──
   _renderConfigLimpezaCheckout();
   _renderConfigDefPagadoria();
+  _renderConfigVistoriaCampos();
 }
 function _renderConfigLimpezaCheckout(){
   const el=document.getElementById('config-precos-checkout');
@@ -3376,6 +3383,100 @@ function _removerDefOperacional(i){
   DEF_OPERACIONAIS.splice(i,1);
   saveAll();_renderConfigDefPagadoria();
   showToast('Removido.','peach');
+}
+
+// ═══════════════════ CAMPOS EXTRAS DE VISTORIA ═══════════════════
+function _renderConfigVistoriaCampos(){
+  const el=document.getElementById('config-vistoria-campos');
+  if(!el)return;
+  const tipoLabel={texto:'Texto',numero:'Número',checkbox:'Sim/Não',select:'Múltipla escolha'};
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Vídeo por cômodo e irregularidades continuam fixos. Aqui você adiciona campos extras — gerais (uma vez na vistoria) ou por cômodo (repetem em cada cômodo do tipo escolhido).</div>
+    <div style="margin-bottom:12px;">
+      <button class="btn btn-sm btn-sage" onclick="abrirModalNovoCampoVistoria()"><i class="fa-solid fa-plus"></i> Novo Campo</button>
+    </div>
+    ${!VISTORIA_CAMPOS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum campo extra cadastrado ainda.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--surface-2);">
+        <th style="padding:7px 10px;text-align:left;">Campo</th>
+        <th style="padding:7px 10px;text-align:left;">Tipo</th>
+        <th style="padding:7px 10px;text-align:left;">Onde aparece</th>
+        <th style="padding:7px 4px;width:36px;"></th>
+      </tr></thead>
+      <tbody>
+      ${VISTORIA_CAMPOS.map((c,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px;">${esc(c.label)}</td>
+        <td style="padding:7px 10px;">${tipoLabel[c.tipo]||c.tipo}</td>
+        <td style="padding:7px 10px;">${c.escopo==='geral'?'Geral da vistoria':`Cômodo: ${c.comodosTipos==='todos'?'todos':esc((c.comodosTipos||[]).join(', '))}`}</td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerCampoVistoria(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}`;
+}
+function abrirModalNovoCampoVistoria(){
+  document.getElementById('generico-titulo').textContent='Novo Campo de Vistoria';
+  const comodoChecks=VISTORIA_COMODO_TIPOS.map(t=>`<label class="checkbox-label" style="margin-right:12px;display:inline-flex;"><input type="checkbox" class="campo-vist-comodo-tipo" value="${esc(t)}"> ${esc(t)}</label>`).join('');
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group" style="grid-column:1/-1;"><label>Nome do campo</label><input id="cv-label" class="input" placeholder="Ex: Ar-condicionado (quente/frio)"></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="cv-tipo" class="input" onchange="_toggleCampoVistoriaTipoUI()">
+        <option value="texto">Texto curto</option>
+        <option value="numero">Número</option>
+        <option value="checkbox">Sim/Não (check)</option>
+        <option value="select">Múltipla escolha</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Onde aparece</label>
+      <select id="cv-escopo" class="input" onchange="_toggleCampoVistoriaEscopoUI()">
+        <option value="geral">Geral da vistoria (uma vez)</option>
+        <option value="comodo">Por cômodo (repete)</option>
+      </select>
+    </div>
+    <div class="form-group" id="cv-opcoes-wrap" style="grid-column:1/-1;display:none;">
+      <label>Opções (uma por linha)</label>
+      <textarea id="cv-opcoes" class="input" rows="3" placeholder="Excelente&#10;Bom&#10;Regular&#10;Ruim"></textarea>
+    </div>
+    <div class="form-group" id="cv-comodos-wrap" style="grid-column:1/-1;display:none;">
+      <label>Em quais cômodos? (deixe todos desmarcados = aparece em todos)</label>
+      <div style="margin-top:6px;">${comodoChecks}</div>
+    </div>
+    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarNovoCampoVistoria()"><i class="fa-solid fa-save"></i> Salvar Campo</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _toggleCampoVistoriaTipoUI(){
+  const tipo=document.getElementById('cv-tipo').value;
+  document.getElementById('cv-opcoes-wrap').style.display=tipo==='select'?'block':'none';
+}
+function _toggleCampoVistoriaEscopoUI(){
+  const escopo=document.getElementById('cv-escopo').value;
+  document.getElementById('cv-comodos-wrap').style.display=escopo==='comodo'?'block':'none';
+}
+function _salvarNovoCampoVistoria(){
+  const label=(document.getElementById('cv-label').value||'').trim();
+  if(!label){showToast('Informe o nome do campo.','peach');return;}
+  const tipo=document.getElementById('cv-tipo').value;
+  const escopo=document.getElementById('cv-escopo').value;
+  const campo={id:'vc_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),label,tipo,escopo};
+  if(tipo==='select'){
+    const opcoes=(document.getElementById('cv-opcoes').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    if(!opcoes.length){showToast('Adicione ao menos uma opção.','peach');return;}
+    campo.opcoes=opcoes;
+  }
+  if(escopo==='comodo'){
+    const marcados=[...document.querySelectorAll('.campo-vist-comodo-tipo:checked')].map(c=>c.value);
+    campo.comodosTipos=marcados.length?marcados:'todos';
+  }
+  VISTORIA_CAMPOS.push(campo);
+  saveAll();closeModal('modal-generico');_renderConfigVistoriaCampos();
+  showToast('Campo de vistoria adicionado!','sage');
+}
+function _removerCampoVistoria(i){
+  const c=VISTORIA_CAMPOS[i];if(!c)return;
+  if(!confirm(`Remover o campo "${c.label}"?`))return;
+  VISTORIA_CAMPOS.splice(i,1);
+  saveAll();_renderConfigVistoriaCampos();
+  showToast('Campo removido.','peach');
 }
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;

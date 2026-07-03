@@ -841,6 +841,7 @@ select.urg-select {
       Cabeçalho
       <span class="nav-check"><i class="fa-solid fa-check"></i></span>
     </a>
+    <div id="nav-geral"></div>
     <div id="nav-comodos"></div>
     <a class="nav-item" href="#sec-conclusao" onclick="navClick(this)">
       <span class="nav-icon ic-fin"><i class="fa-solid fa-circle-check"></i></span>
@@ -891,6 +892,9 @@ select.urg-select {
     </div>
   </div>
 </div>
+
+<!-- Checklist Geral gerado dinamicamente via JS (só aparece se houver campos configurados) -->
+<div id="geral-container"></div>
 
 <!-- Cômodos gerados dinamicamente via JS -->
 <div id="comodos-container"></div>
@@ -1093,6 +1097,80 @@ let currentImovel = MOCK_IMOVEL;
 // videoFiles[idx] = File[] (armazenado em memória, não no localStorage)
 const videoFiles = {};
 
+// Campos extras configuráveis pela equipe (Configurações → Campos de Vistoria, no app.js)
+let VISTORIA_CAMPOS = [];
+const VISTORIA_COMODO_TIPOS = ['Quarto','Sala','Cozinha','Banheiro Completo','Lavabo','Lavanderia','Área Externa','Varanda/Pátio'];
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function tipoBaseComodo(nome) {
+  for (const t of VISTORIA_COMODO_TIPOS) if (nome.startsWith(t)) return t;
+  return nome;
+}
+
+function _carregarCamposVistoria() {
+  try {
+    const v = JSON.parse(localStorage.getItem('wc_vistoria_campos') || '[]');
+    if (Array.isArray(v)) VISTORIA_CAMPOS = v;
+  } catch {}
+}
+
+// Busca a config mais recente na nuvem — vistoria.html não tem o loop de sync do app.js,
+// então sem isso um campo criado em outro dispositivo só apareceria aqui depois que
+// alguém abrisse o painel principal nesse navegador.
+async function _sincronizarCamposVistoria() {
+  try {
+    const r = await fetch(`${WC_WORKER_URL}/load?token=${encodeURIComponent(WC_TOKEN)}`);
+    const j = await r.json();
+    if (j && j.data && Array.isArray(j.data.wc_vistoria_campos)) {
+      VISTORIA_CAMPOS = j.data.wc_vistoria_campos;
+      localStorage.setItem('wc_vistoria_campos', JSON.stringify(VISTORIA_CAMPOS));
+    }
+  } catch {}
+}
+
+function renderCampoExtra(campo, elId) {
+  switch (campo.tipo) {
+    case 'numero':
+      return `<div class="form-row"><label>${esc(campo.label)}</label><input type="number" id="${elId}" oninput="updateProgress()"></div>`;
+    case 'checkbox':
+      return `<label class="checkbox-label" style="display:flex;align-items:center;gap:6px;margin-top:8px;"><input type="checkbox" id="${elId}" onchange="updateProgress()"> ${esc(campo.label)}</label>`;
+    case 'select': {
+      const opts = (campo.opcoes || []).map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+      return `<div class="form-row"><label>${esc(campo.label)}</label><select id="${elId}" onchange="updateProgress()"><option value="">Selecione...</option>${opts}</select></div>`;
+    }
+    case 'texto':
+    default:
+      return `<div class="form-row"><label>${esc(campo.label)}</label><input type="text" id="${elId}" oninput="updateProgress()"></div>`;
+  }
+}
+
+function _camposComodoPara(tipoBase) {
+  return VISTORIA_CAMPOS.filter(c => c.escopo === 'comodo' && (c.comodosTipos === 'todos' || (c.comodosTipos || []).includes(tipoBase)));
+}
+
+function buildGeral() {
+  const campos = VISTORIA_CAMPOS.filter(c => c.escopo === 'geral');
+  const container = document.getElementById('geral-container');
+  const navContainer = document.getElementById('nav-geral');
+  if (!campos.length) { container.innerHTML = ''; navContainer.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div class="section-card" id="sec-geral">
+      <div class="section-header" onclick="toggleSection('sec-geral')">
+        <div class="section-icon ic-dec"><i class="fa-solid fa-list-check"></i></div>
+        <div class="section-title">Checklist Geral</div>
+        <i class="fa-solid fa-chevron-down section-chevron"></i>
+      </div>
+      <div class="section-body">${campos.map(c => renderCampoExtra(c, `geral-${c.id}`)).join('')}</div>
+    </div>`;
+  navContainer.innerHTML = `
+    <a class="nav-item" href="#sec-geral" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-list-check"></i></span>
+      Checklist Geral
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>`;
+}
+
 // ═══════════════════════════════════════════════════════
 // CÔMODOS
 // ═══════════════════════════════════════════════════════
@@ -1140,6 +1218,10 @@ function buildComodos() {
 
   comodos.forEach((nome, idx) => {
     const icon = getComodoIcon(nome);
+    const camposComodo = _camposComodoPara(tipoBaseComodo(nome));
+    const camposHtml = camposComodo.length
+      ? `<div style="margin-top:16px;border-top:1px solid var(--gray-200);padding-top:14px;">${camposComodo.map(c => renderCampoExtra(c, `campo-${c.id}-${idx}`)).join('')}</div>`
+      : '';
     sectionsHtml += `
     <div class="section-card" id="sec-comodo-${idx}">
       <div class="section-header" onclick="toggleSection('sec-comodo-${idx}')">
@@ -1163,6 +1245,7 @@ function buildComodos() {
           <label>Irregularidades encontradas</label>
           <textarea id="irreg-${idx}" rows="3" placeholder="Descreva problemas, danos ou itens com defeito neste cômodo..." oninput="updateProgress()" style="resize:vertical"></textarea>
         </div>
+        ${camposHtml}
       </div>
     </div>`;
 
@@ -1257,10 +1340,13 @@ function _carregarImovelReal() {
   } catch(e) { console.warn('Erro ao carregar imóvel real', e); }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   _carregarImovelReal();
+  _carregarCamposVistoria();
+  await _sincronizarCamposVistoria();
   document.getElementById('field-data').value = new Date().toISOString().split('T')[0];
   document.getElementById('header-imovel-name').textContent = currentImovel.nome;
+  buildGeral();
   buildComodos();
   startAutosave();
   updateProgress();
@@ -1346,12 +1432,35 @@ function startAutosave() { setInterval(saveDraft, 30000); }
 // ═══════════════════════════════════════════════════════
 // COLETA DE DADOS
 // ═══════════════════════════════════════════════════════
+function _coletarValorCampo(campo, elId) {
+  const el = document.getElementById(elId);
+  if (!el) return undefined;
+  return campo.tipo === 'checkbox' ? el.checked : el.value;
+}
+
+function _coletarCamposGerais() {
+  const out = {};
+  VISTORIA_CAMPOS.filter(c => c.escopo === 'geral').forEach(c => {
+    out[c.label] = _coletarValorCampo(c, `geral-${c.id}`);
+  });
+  return out;
+}
+
+function _coletarCamposComodo(campos, idx) {
+  const out = {};
+  campos.forEach(c => {
+    out[c.label] = _coletarValorCampo(c, `campo-${c.id}-${idx}`);
+  });
+  return out;
+}
+
 function collectFormData() {
   const comodos = getComodos(currentImovel);
   const comodosData = comodos.map((nome, idx) => ({
     nome,
     qtdVideos: (videoFiles[idx] || []).length,
-    irregularidade: (document.getElementById('irreg-' + idx) || {}).value || ''
+    irregularidade: (document.getElementById('irreg-' + idx) || {}).value || '',
+    camposExtras: _coletarCamposComodo(_camposComodoPara(tipoBaseComodo(nome)), idx)
   }));
 
   const irregularidades = comodosData.filter(c => c.irregularidade.trim());
@@ -1362,6 +1471,7 @@ function collectFormData() {
     data: document.getElementById('field-data').value,
     vistoriador: document.getElementById('field-vistoriador').value,
     comodos: comodosData,
+    camposGerais: _coletarCamposGerais(),
     aptoPara: (document.querySelector('input[name="apto"]:checked') || {}).value || null,
     obsFinais: document.getElementById('field-obs-finais').value,
     nomeConc: document.getElementById('field-nome-conclusao').value,
