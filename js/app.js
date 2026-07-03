@@ -2933,8 +2933,10 @@ function apagarPrestador(idx){
 let _vistoriasMigradas=false;
 function _migrarVistoriasParaImoveis(){
   // Uma vez só: puxa vistorias do formato antigo (localStorage puro, sem sync) pra dentro
-  // do imóvel correspondente, como registro histórico (sem token — não dá pra reabrir
-  // o link, só ver os detalhes já enviados).
+  // do imóvel correspondente. Duas origens possíveis nesse localStorage:
+  //  - vistoria_final_<chave>  → já tinha sido enviada (vira histórico só-leitura, sem token)
+  //  - vistoria_draft_<imovelId> → ainda em rascunho, nunca enviada (vira rascunho de verdade,
+  //    com token novo, pra dar pra continuar preenchendo por um link)
   if(_vistoriasMigradas)return;
   _vistoriasMigradas=true;
   let alterou=false;
@@ -2942,23 +2944,42 @@ function _migrarVistoriasParaImoveis(){
   imoveis.forEach(im=>{(im.vistorias||[]).forEach(v=>{if(v.legado)porImovel[v.id]=true;});});
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);
-    if(!key||!key.startsWith('vistoria_final_'))continue;
-    if(porImovel[key])continue;
-    try{
-      const d=JSON.parse(localStorage.getItem(key)||'{}');
-      const imovelId=d.imovelId||'';
-      const im=imoveis.find(x=>x.id===imovelId);
-      if(!im)continue;
-      if(!im.vistorias)im.vistorias=[];
-      if(im.vistorias.some(v=>v.id===key))continue;
-      im.vistorias.push({
-        id:key, legado:true, status:'enviado',
-        criadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
-        enviadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
-        dados:d
-      });
-      alterou=true;
-    }catch(e){}
+    if(!key)continue;
+    if(key.startsWith('vistoria_final_')){
+      if(porImovel[key])continue;
+      try{
+        const d=JSON.parse(localStorage.getItem(key)||'{}');
+        const im=imoveis.find(x=>x.id===(d.imovelId||''));
+        if(!im)continue;
+        if(!im.vistorias)im.vistorias=[];
+        if(im.vistorias.some(v=>v.id===key))continue;
+        im.vistorias.push({
+          id:key, legado:true, status:'enviado',
+          criadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
+          enviadoEm:d.sentAt||d.savedAt||new Date().toISOString(),
+          dados:d
+        });
+        alterou=true;
+      }catch(e){}
+    } else if(key.startsWith('vistoria_draft_')){
+      if(porImovel[key])continue;
+      try{
+        const imovelId=key.slice('vistoria_draft_'.length);
+        const d=JSON.parse(localStorage.getItem(key)||'{}');
+        const im=imoveis.find(x=>x.id===imovelId);
+        if(!im||!d||!Object.keys(d).length)continue;
+        if(!im.vistorias)im.vistorias=[];
+        if(im.vistorias.some(v=>v.id===key))continue;
+        im.vistorias.push({
+          id:key, legado:true, status:'rascunho',
+          token:uid()+uid(),
+          criadoEm:d.savedAt||new Date().toISOString(),
+          comodosSnapshot:_getComodosImovel(im),
+          dados:d
+        });
+        alterou=true;
+      }catch(e){}
+    }
   }
   if(alterou)saveAll();
 }
@@ -3105,7 +3126,7 @@ function renderVistoria(){
     const aptoTag=cor?`<span class="tag tag-${cor}">${d.aptoPara==='sim'?'Apto':'Não apto'}</span>`:'—';
     const acaoPrincipal=enviado
       ?`<button class="btn btn-xs btn-outline" onclick="_verDetalhesVistoria('${esc(v.imovelId)}','${esc(v.id)}')"><i class="fa-solid fa-eye"></i> Detalhes</button>`
-      :(v.legado?'—':`<button class="btn btn-xs btn-outline" onclick="_mostrarLinkVistoria(imoveis.find(i=>i.id==='${esc(v.imovelId)}'),imoveis.find(i=>i.id==='${esc(v.imovelId)}').vistorias.find(x=>x.id==='${esc(v.id)}'))"><i class="fa-solid fa-link"></i> Copiar link</button>`);
+      :(v.token?`<button class="btn btn-xs btn-outline" onclick="_mostrarLinkVistoria(imoveis.find(i=>i.id==='${esc(v.imovelId)}'),imoveis.find(i=>i.id==='${esc(v.imovelId)}').vistorias.find(x=>x.id==='${esc(v.id)}'))"><i class="fa-solid fa-link"></i> Copiar link</button>`:'—');
     return`<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:10px 8px;font-weight:600;">${esc(v.imovelNome||v.imovelId)}</td>
       <td style="padding:10px 8px;">${fmtDate(d.data)||'—'}</td>
