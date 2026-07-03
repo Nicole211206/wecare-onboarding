@@ -19,6 +19,33 @@
 const KV_KEY   = 'wc_state';
 const STATS_KEY = 'wc_stats';
 
+// Une duas listas de itens (cada um com `id`) sem nunca derrubar um item que só existe
+// em uma das duas — evita perda silenciosa quando um cliente com estado desatualizado
+// sobrescreve o imóvel inteiro (mesmo bug do merge de wc_imoveis, um nível abaixo).
+function mergeItemArraysById(oldArr, newArr) {
+  const oldA = Array.isArray(oldArr) ? oldArr : [];
+  const newA = Array.isArray(newArr) ? newArr : [];
+  const newIds = new Set(newA.filter(x => x && x.id).map(x => x.id));
+  const recuperados = oldA.filter(x => x && x.id && !newIds.has(x.id));
+  return [...newA, ...recuperados];
+}
+
+// Casa imóveis por id entre o estado antigo e o novo e recupera itens de sublistas
+// (itensExtras, eventosExtras) que sumiram no imóvel novo mas existiam no antigo.
+function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
+  if (!Array.isArray(oldImoveis) || !Array.isArray(newImoveis)) return newImoveis;
+  const oldById = new Map(oldImoveis.filter(i => i && i.id).map(i => [i.id, i]));
+  return newImoveis.map(im => {
+    if (!im || !im.id || !oldById.has(im.id)) return im;
+    const old = oldById.get(im.id);
+    return {
+      ...im,
+      itensExtras:   mergeItemArraysById(old.itensExtras,   im.itensExtras),
+      eventosExtras: mergeItemArraysById(old.eventosExtras, im.eventosExtras),
+    };
+  });
+}
+
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -217,6 +244,10 @@ export default {
         const iv = Array.isArray(body[k])    ? body[k]    : [];
         if (iv.length < sv.length) merged[k] = sv;
       }
+
+      // Recupera itensExtras/eventosExtras apagados por um save com wc_imoveis desatualizado
+      // (mesmo imóvel, mas o array veio sem itens que já existiam no servidor)
+      merged.wc_imoveis = reconciliarSublistasImoveis(current.wc_imoveis, merged.wc_imoveis);
 
       // lastSaved: aceita o do cliente se for mais novo
       if (body.lastSaved && +body.lastSaved > +(current.lastSaved || 0)) {
