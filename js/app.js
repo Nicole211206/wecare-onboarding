@@ -2067,7 +2067,25 @@ function _rowsComprasFalta(im){
   });
   return rows;
 }
-function gerarPDFCompras(){
+// ═══════════════════ LOGO NOS PDFs ═══════════════════
+// Busca a logo real (fundo claro, pra cair bem no papel branco dos PDFs) e converte pra
+// data URI — os PDFs abrem numa aba em branco via document.write, sem base URL confiável
+// pra resolver um <img src="img/..."> relativo, então precisa ir embutida.
+let _logoPdfCache=null;
+async function _logoPdfDataUri(){
+  if(_logoPdfCache)return _logoPdfCache;
+  try{
+    const resp=await fetch('img/logo-light-bg.png');
+    const buf=await resp.arrayBuffer();
+    // Não confia no Content-Type do servidor pro mime da data URI (alguns hosts servem
+    // .png sem o header certo) — monta a data URI manualmente com o mime correto.
+    let bin='';const bytes=new Uint8Array(buf);
+    for(let i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+    _logoPdfCache='data:image/png;base64,'+btoa(bin);
+  }catch{_logoPdfCache='';}
+  return _logoPdfCache;
+}
+async function gerarPDFCompras(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const rows=_rowsComprasFalta(im);
   const frete=im.freteTotal||0;
@@ -2082,7 +2100,7 @@ function gerarPDFCompras(){
   const cats=[...new Set(rows.map(r=>r.cat))];
   const tabelas=cats.map(cat=>{
     const itens=rows.filter(r=>r.cat===cat);
-    return`<tr style="background:#fdf0f4"><td colspan="4" style="padding:8px 10px;font-weight:700;font-size:12px;color:#9b4c6e;letter-spacing:.5px;">${cat.toUpperCase()}</td></tr>`+
+    return`<tr style="background:#FAF3E4"><td colspan="4" style="padding:8px 10px;font-weight:700;font-size:12px;color:#132030;letter-spacing:.5px;">${cat.toUpperCase()}</td></tr>`+
     itens.map(r=>`<tr>
       <td style="padding:7px 10px;">${esc(r.label)}</td>
       <td style="text-align:center;">${r.falta}</td>
@@ -2092,7 +2110,7 @@ function gerarPDFCompras(){
   }).join('');
   const manutHtml=manutencoes.length?`
   <div style="margin-top:28px;">
-    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Manutenções / Reparos</div>
+    <div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Manutenções / Reparos</div>
     <table>
       <thead><tr><th>Descrição</th><th style="text-align:right;">Valor estimado</th></tr></thead>
       <tbody>`+
@@ -2103,29 +2121,29 @@ function gerarPDFCompras(){
   </div>`:'';
   const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const win=window.open('','_blank');
+  const logoUri=await _logoPdfDataUri();
   win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
-    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
-    .brand span{color:#a57ab5;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #C49A5E;}
+    .brand{display:flex;align-items:center;}
+    .brand img{height:64px;width:auto;}
     .meta{font-size:12px;color:#888;text-align:right;line-height:1.6;}
     table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12.5px;}
-    th{background:#2d1f2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    th{background:#132030;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
     tr:nth-child(even){background:#fafafa;}
-    td{padding:6px 10px;border-bottom:1px solid #f0e0e8;vertical-align:middle;}
-    .total-row{background:#fdf0f4!important;font-weight:700;}
-    .summary{background:#2d1f2e;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;}
+    td{padding:6px 10px;border-bottom:1px solid #EFE7D6;vertical-align:middle;}
+    .total-row{background:#FAF3E4!important;font-weight:700;}
+    .summary{background:#132030;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;}
     .summary-line{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}
     .summary-total{display:flex;justify-content:space-between;font-size:18px;font-weight:800;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.2);}
-    .summary-total span:last-child{color:#f4a8c0;}
+    .summary-total span:last-child{color:#C49A5E;}
     @media print{body{padding:16px;}@page{margin:1cm;}}
   </style></head><body>
   <div class="header">
-    <div>
-      <div class="brand">We<span>Care</span> Hosting</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">Orçamento de Setup — Onboarding</div>
+    <div class="brand">
+      ${logoUri?`<img src="${logoUri}" alt="WeCare Hosting">`:'<div style="font-size:22px;font-weight:800;color:#132030;">WeCare Hosting</div>'}
     </div>
     <div class="meta">
       <div><strong>${esc(im.nome)}</strong></div>
@@ -2134,6 +2152,7 @@ function gerarPDFCompras(){
       <div>${fmtDate(hoje())}</div>
     </div>
   </div>
+  <div style="font-size:11px;color:#888;margin:-16px 0 20px;">Orçamento de Setup — Onboarding</div>
   ${rows.length===0&&!manutencoes.length?'<p style="color:#888;text-align:center;padding:40px;">Nenhum item para comprar e nenhuma manutenção pendente.</p>':`
   ${rows.length?`<table>
     <thead><tr><th>Item</th><th style="text-align:center;">Qtd</th><th style="text-align:right;">Preço unit.</th><th style="text-align:right;">Total</th></tr></thead>
@@ -2142,7 +2161,7 @@ function gerarPDFCompras(){
     </tbody>
   </table>`:''}
   ${itensExtras.length?`<div style="margin-top:28px;">
-    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Itens Extras (solicitados pelo proprietário)</div>
+    <div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Itens Extras (solicitados pelo proprietário)</div>
     <table>
       <thead><tr><th>Item</th><th style="text-align:center;">Qtd</th><th style="text-align:right;">R$/Un</th><th style="text-align:right;">Total</th></tr></thead>
       <tbody>`+
@@ -2152,7 +2171,7 @@ function gerarPDFCompras(){
     </table>
   </div>`:''}
   ${servicosOpcionaisAtivosCompras.length?`<div style="margin-top:28px;">
-    <div style="font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #c7587a;">Serviços Opcionais</div>
+    <div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Serviços Opcionais</div>
     <table>
       <thead><tr><th>Serviço</th><th style="text-align:right;">Valor</th></tr></thead>
       <tbody>`+
@@ -2404,7 +2423,7 @@ function renderAbaCustos(im){
   <button class="btn btn-sm" style="margin-top:8px;" onclick="gerarPDFOrcamento()"><i class="fa-solid fa-file-pdf"></i> Gerar PDF do Orçamento</button>
   </div>`;
 }
-function gerarPDFOrcamento(){
+async function gerarPDFOrcamento(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const rows=_rowsComprasFalta(im);
   const totalC=rows.reduce((s,r)=>s+r.total,0);
@@ -2431,32 +2450,32 @@ function gerarPDFOrcamento(){
   const total=sub+marg-desc;
   const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const win=window.open('','_blank');
+  const logoUri=await _logoPdfDataUri();
   win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #c7587a;}
-    .brand{font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;}
-    .brand span{color:#a57ab5;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #C49A5E;}
+    .brand{display:flex;align-items:center;}
+    .brand img{height:64px;width:auto;}
     .meta{font-size:12px;color:#888;text-align:right;line-height:1.6;}
-    h2{font-size:13px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;}
+    h2{font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;}
     table{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:12.5px;}
-    th{background:#2d1f2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    th{background:#132030;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
     tr:nth-child(even){background:#fafafa;}
-    td{border-bottom:1px solid #f0e0e8;vertical-align:middle;}
+    td{border-bottom:1px solid #EFE7D6;vertical-align:middle;}
     .section-divider{height:16px;}
-    .summary{background:#2d1f2e;color:#fff;border-radius:12px;padding:20px 24px;margin-top:20px;}
+    .summary{background:#132030;color:#fff;border-radius:12px;padding:20px 24px;margin-top:20px;}
     .summary-line{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;color:rgba(255,255,255,.8);}
     .summary-sub{display:flex;justify-content:space-between;font-size:13px;font-weight:600;padding:8px 0;border-top:1px solid rgba(255,255,255,.15);margin-top:4px;}
     .summary-total{display:flex;justify-content:space-between;font-size:20px;font-weight:800;padding-top:10px;margin-top:6px;border-top:1px solid rgba(255,255,255,.3);}
-    .summary-total span:last-child{color:#f4a8c0;}
-    .pagamento{background:#fdf0f4;border-radius:8px;padding:12px 16px;margin-top:16px;font-size:12px;color:#9b4c6e;}
+    .summary-total span:last-child{color:#C49A5E;}
+    .pagamento{background:#FAF3E4;border-radius:8px;padding:12px 16px;margin-top:16px;font-size:12px;color:#132030;}
     @media print{body{padding:16px;}@page{margin:1cm;}}
   </style></head><body>
   <div class="header">
-    <div>
-      <div class="brand">We<span>Care</span> Hosting</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">Orçamento de Onboarding</div>
+    <div class="brand">
+      ${logoUri?`<img src="${logoUri}" alt="WeCare Hosting">`:'<div style="font-size:22px;font-weight:800;color:#132030;">WeCare Hosting</div>'}
     </div>
     <div class="meta">
       <div style="font-weight:700;color:#333;">${esc(im.nome)}</div>
@@ -2465,6 +2484,7 @@ function gerarPDFOrcamento(){
       <div>${im.quartos||1} quartos · ${banhTotal} banheiros &nbsp;|&nbsp; ${fmtDate(hoje())}</div>
     </div>
   </div>
+  <div style="font-size:11px;color:#888;margin:-16px 0 20px;">Orçamento de Onboarding</div>
 
   <h2>Lista de Compras</h2>
   ${rows.length?`<table>
@@ -2583,11 +2603,12 @@ ${respostasTxt||'(sem respostas ainda)'}`;
     }else throw new Error(j.error||'Erro');
   }catch(e){showToast('Erro: '+e.message,'peach');}
 }
-function _pdfHeaderHtml(im,subtitulo){
-  return`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #c7587a;">
+async function _pdfHeaderHtml(im,subtitulo){
+  const logoUri=await _logoPdfDataUri();
+  return`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #C49A5E;">
     <div>
-      <div style="font-size:22px;font-weight:800;color:#c7587a;letter-spacing:-0.5px;">We<span style="color:#a57ab5;">Care</span> Hosting</div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">${esc(subtitulo)}</div>
+      ${logoUri?`<img src="${logoUri}" alt="WeCare Hosting" style="height:56px;width:auto;display:block;">`:'<div style="font-size:22px;font-weight:800;color:#132030;">WeCare Hosting</div>'}
+      <div style="font-size:11px;color:#888;margin-top:6px;">${esc(subtitulo)}</div>
     </div>
     <div style="font-size:12px;color:#888;text-align:right;line-height:1.8;">
       <div style="font-weight:700;font-size:14px;color:#333;">${esc(im.nome)}</div>
@@ -2599,17 +2620,17 @@ function _pdfHeaderHtml(im,subtitulo){
 }
 function _pdfCampoHtml(label,val,destaque=false){
   const vazio=!val||!String(val).trim();
-  return`<div style="padding:7px 0;border-bottom:1px solid #f0e8f4;">
-    <div style="font-size:10px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${label}</div>
-    <div style="font-size:13px;color:${vazio?'#bbb':(destaque?'#c7587a':'#333')};${vazio?'font-style:italic;':''}">${vazio?'—':esc(String(val))}</div>
+  return`<div style="padding:7px 0;border-bottom:1px solid #EFE7D6;">
+    <div style="font-size:10px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${label}</div>
+    <div style="font-size:13px;color:${vazio?'#bbb':(destaque?'#B8863C':'#333')};${vazio?'font-style:italic;':''}">${vazio?'—':esc(String(val))}</div>
   </div>`;
 }
 function _pdfSecaoHtml(icone,titulo,conteudo){
-  return`<div style="display:flex;align-items:center;gap:8px;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
+  return`<div style="display:flex;align-items:center;gap:8px;background:#132030;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
     <span>${icone}</span><span style="font-size:13px;font-weight:700;">${titulo}</span>
-  </div><div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">${conteudo}</div>`;
+  </div><div style="border:1px solid #EFE7D6;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">${conteudo}</div>`;
 }
-function gerarPDFFormulario(){
+async function gerarPDFFormulario(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const respostas={...(im.formRespostas||{}),...(im.formRascunho||{})};
   const secoes=window.FORM_SECOES||[];
@@ -2621,19 +2642,19 @@ function gerarPDFFormulario(){
     const pergsHtml=(sec.perguntas||[]).map(p=>{
       const r=respostas[p.id];
       const vazio=!r||!String(r).trim();
-      return`<div style="padding:7px 0;border-bottom:1px solid #f0e8f4;">
-        <div style="font-size:10px;font-weight:700;color:#9b4c6e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${esc(p.label)}</div>
+      return`<div style="padding:7px 0;border-bottom:1px solid #EFE7D6;">
+        <div style="font-size:10px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${esc(p.label)}</div>
         <div style="font-size:13px;color:${vazio?'#bbb':'#333'};${vazio?'font-style:italic;':''}">${vazio?'Não respondido':esc(String(r))}</div>
       </div>`;
     }).join('');
     const total=(sec.perguntas||[]).length;
     const conf=(sec.perguntas||[]).filter(p=>respostas[p.id]&&String(respostas[p.id]).trim()).length;
     return`<div style="margin-bottom:0;break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#2d1f2e;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#132030;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;margin-top:20px;">
         <span style="font-size:13px;font-weight:700;">${esc(sec.secao)}</span>
         <span style="font-size:11px;opacity:.75;">${conf}/${total}</span>
       </div>
-      <div style="border:1px solid #e8ddf0;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">${pergsHtml}</div>
+      <div style="border:1px solid #EFE7D6;border-top:none;border-radius:0 0 8px 8px;padding:2px 14px 8px;">${pergsHtml}</div>
     </div>`;
   }).join('');
 
@@ -2644,14 +2665,14 @@ function gerarPDFFormulario(){
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
     @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
   </style></head><body>
-  ${_pdfHeaderHtml(im,'Respostas do Formulário do Proprietário')}
-  <div style="height:8px;background:#f0e0e8;border-radius:4px;margin-bottom:4px;"><div style="height:8px;background:linear-gradient(90deg,#c7587a,#a57ab5);border-radius:4px;width:${pct}%"></div></div>
-  <div style="font-size:11px;color:#9b8fa8;margin-bottom:16px;">${respondidos} de ${totalPergs} campos do formulário preenchidos (${pct}%)</div>
+  ${await _pdfHeaderHtml(im,'Respostas do Formulário do Proprietário')}
+  <div style="height:8px;background:#EFE7D6;border-radius:4px;margin-bottom:4px;"><div style="height:8px;background:#C49A5E;border-radius:4px;width:${pct}%"></div></div>
+  <div style="font-size:11px;color:#888;margin-bottom:16px;">${respondidos} de ${totalPergs} campos do formulário preenchidos (${pct}%)</div>
   ${secoesHtml}
   </body></html>`);
   win.document.close();win.print();
 }
-function gerarPDFOutrasInformacoes(){
+async function gerarPDFOutrasInformacoes(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const campo=_pdfCampoHtml, sec=_pdfSecaoHtml;
 
@@ -2730,7 +2751,7 @@ function gerarPDFOutrasInformacoes(){
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
     @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
   </style></head><body>
-  ${_pdfHeaderHtml(im,'Ficha de Onboarding — Outras Informações')}
+  ${await _pdfHeaderHtml(im,'Ficha de Onboarding — Outras Informações')}
   ${fichaHtml}
   </body></html>`);
   win.document.close();win.print();

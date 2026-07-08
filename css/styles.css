@@ -666,7 +666,7 @@ label, .form-label { display: block; font-size: 12px; font-weight: 600; color: v
 #login-overlay {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, #160A2A 0%, #2B1245 50%, #190B38 100%);
+  background: var(--brand-grad);
   z-index: 9000;
   display: flex;
   align-items: center;
