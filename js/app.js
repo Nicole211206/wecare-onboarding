@@ -2124,7 +2124,7 @@ async function gerarPDFCompras(){
   const logoUri=await _logoPdfDataUri();
   win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
     .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #C49A5E;}
     .brand{display:flex;align-items:center;}
@@ -2453,7 +2453,7 @@ async function gerarPDFOrcamento(){
   const logoUri=await _logoPdfDataUri();
   win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(im.nome)}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
     .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #C49A5E;}
     .brand{display:flex;align-items:center;}
@@ -2661,7 +2661,7 @@ async function gerarPDFFormulario(){
   const win=window.open('','_blank');
   win.document.write(`<html><head><meta charset="utf-8"><title>Formulário — ${esc(im.nome)}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
     @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
   </style></head><body>
@@ -2747,7 +2747,7 @@ async function gerarPDFOutrasInformacoes(){
   const win=window.open('','_blank');
   win.document.write(`<html><head><meta charset="utf-8"><title>Outras Informações — ${esc(im.nome)}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
     @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
   </style></head><body>
