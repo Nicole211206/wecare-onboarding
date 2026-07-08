@@ -11,6 +11,7 @@
 //   POST /form-save?id=X&t=TOKEN        → salva respostas do formulário
 //   GET  /vistoria-load?id=X&vid=V&t=T  → carrega uma vistoria específica (token escopado, sem auth mestre)
 //   POST /vistoria-save?id=X&vid=V&t=T  → salva/envia uma vistoria específica
+//   POST /vistoria-midia?id=X&vid=V&t=T → anexa frames (foto/vídeo) de um cômodo à vistoria
 //   POST /extrair-formulario            → IA extrai dados de transcrição
 //   GET  /imovel-dados?id=X&token=T     → leitura de imóvel para o Jarvis (metadados das fotos, sem base64)
 //   GET  /foto?id=X&index=N&token=T     → serve foto como binário (image/jpeg) diretamente do KV
@@ -485,7 +486,22 @@ Regras:
       if (!v)              return json({ ok: false, error: 'Vistoria não encontrada' }, 404);
       if (v.token !== vt)  return json({ ok: false, error: 'Token inválido' },          403);
 
-      v.dados        = body.dados ?? {};
+      // Preserva midiaFrames por cômodo — são enviados à parte via /vistoria-midia (upload
+      // imediato ao adicionar um vídeo/foto), não pelo autosave. Sem isso, o próximo
+      // autosave (a cada 30s) sobrescreveria v.dados inteiro e apagaria a mídia já salva,
+      // já que o cliente nunca inclui midiaFrames no payload do autosave de propósito
+      // (evita re-transmitir os frames inteiros a cada 30s).
+      const dadosAntigos = v.dados || {};
+      const dadosNovos   = body.dados ?? {};
+      if (Array.isArray(dadosAntigos.comodos) && Array.isArray(dadosNovos.comodos)) {
+        dadosNovos.comodos.forEach((c, idx) => {
+          const antigo = dadosAntigos.comodos[idx];
+          if (antigo && Array.isArray(antigo.midiaFrames) && !(c && Array.isArray(c.midiaFrames))) {
+            c.midiaFrames = antigo.midiaFrames;
+          }
+        });
+      }
+      v.dados        = dadosNovos;
       v.atualizadoEm = new Date().toISOString();
 
       // Cria as manutenções pendentes só na primeira vez que a vistoria é marcada como enviada
@@ -509,6 +525,54 @@ Regras:
       state.lastSaved = Date.now();
       await putState(env, state);
       return json({ ok: true });
+    }
+
+    // ── POST /vistoria-midia?id=X&vid=V&t=T ──────────────────────────────────
+    // Recebe frames (JPEG base64, já extraídos do vídeo/foto no navegador — ver
+    // vistoria.html _extrairFramesVideo) e anexa ao cômodo, fora do ciclo de autosave
+    // do /vistoria-save. Guarda no mesmo formato base64 cru (sem prefixo data:) já
+    // usado pelos blocos de imagem da Anthropic em /analisar-drive, pra poder alimentar
+    // uma análise por IA depois sem reformatar nada.
+    if (request.method === 'POST' && path === '/vistoria-midia') {
+      const imovelId   = url.searchParams.get('id')  || '';
+      const vistoriaId = url.searchParams.get('vid') || '';
+      const vt         = url.searchParams.get('t')   || '';
+      if (!imovelId || !vistoriaId || !vt) return json({ ok: false, error: 'Link incompleto' }, 400);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+      const comodoIdx = Number(body.comodoIdx);
+      const frames = Array.isArray(body.frames) ? body.frames.filter(f => typeof f === 'string').slice(0, 4) : [];
+      if (!Number.isInteger(comodoIdx) || comodoIdx < 0 || !frames.length) {
+        return json({ ok: false, error: 'Dados inválidos' }, 400);
+      }
+
+      const state = await getState(env);
+      const imoveis = Array.isArray(state.wc_imoveis) ? state.wc_imoveis : [];
+      const im = imoveis.find(i => String(i.id) === imovelId || String(i.uuid) === imovelId);
+      if (!im) return json({ ok: false, error: 'Imóvel não encontrado' }, 404);
+
+      const v = (Array.isArray(im.vistorias) ? im.vistorias : []).find(x => x.id === vistoriaId);
+      if (!v)              return json({ ok: false, error: 'Vistoria não encontrada' }, 404);
+      if (v.token !== vt)  return json({ ok: false, error: 'Token inválido' },          403);
+      if (v.status === 'enviado') return json({ ok: false, error: 'Vistoria já enviada' }, 409);
+
+      if (!v.dados) v.dados = {};
+      if (!Array.isArray(v.dados.comodos)) v.dados.comodos = [];
+      if (!v.dados.comodos[comodoIdx]) v.dados.comodos[comodoIdx] = {};
+      if (!Array.isArray(v.dados.comodos[comodoIdx].midiaFrames)) v.dados.comodos[comodoIdx].midiaFrames = [];
+
+      // Trava de segurança: wc_state inteiro (todos os imóveis) mora numa única chave KV
+      // com teto de 25MB — sem limite por vistoria, um único vistoriador poderia estourar
+      // o sistema inteiro. 60 frames ~ poucos MB, dá folga confortável por vistoria.
+      const totalAtual = v.dados.comodos.reduce((s, c) => s + ((c && Array.isArray(c.midiaFrames)) ? c.midiaFrames.length : 0), 0);
+      const espaco = Math.max(0, 60 - totalAtual);
+      const aAdicionar = frames.slice(0, espaco);
+      v.dados.comodos[comodoIdx].midiaFrames.push(...aAdicionar);
+
+      state.lastSaved = Date.now();
+      await putState(env, state);
+      return json({ ok: true, adicionados: aAdicionar.length, total: v.dados.comodos[comodoIdx].midiaFrames.length, limiteAtingido: aAdicionar.length < frames.length });
     }
 
     // ── GET /imovel-dados (leitura para o Jarvis) ─────────────────────────────

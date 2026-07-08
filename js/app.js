@@ -560,7 +560,7 @@ function abrirComoUsar(){
 
 // ═══════════════════ NOVO IMÓVEL ═══════════════════
 function abrirNovoImovel(){
-  ['ni-nome','ni-endereco','ni-prop-nome','ni-prop-tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ni-nome','ni-endereco','ni-prop-nome','ni-prop-tel','ni-prop-email'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ni-comissao').value='20';
   document.getElementById('ni-comissao-base').value='liquida';
   document.getElementById('ni-quartos').value='1';
@@ -578,6 +578,7 @@ function salvarNovoImovel(){
     endereco:document.getElementById('ni-endereco').value.trim(),
     proprietarioNome:document.getElementById('ni-prop-nome').value.trim(),
     proprietarioTel:document.getElementById('ni-prop-tel').value.trim(),
+    proprietarioEmail:document.getElementById('ni-prop-email').value.trim(),
     comissaoWecare:+document.getElementById('ni-comissao').value||20,
     comissaoBase:document.getElementById('ni-comissao-base').value,
     quartos:+document.getElementById('ni-quartos').value||1,
@@ -763,7 +764,7 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
-    im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel');
+    im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
@@ -889,6 +890,7 @@ function renderAbaDados(im){
   <div class="form-row">
     <div class="form-group"><label>Nome</label><input id="d-prop-nome" class="input" value="${esc(im.proprietarioNome||'')}"></div>
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
+    <div class="form-group"><label>E-mail</label><input id="d-prop-email" type="email" class="input" value="${esc(im.proprietarioEmail||'')}" placeholder="proprietario@email.com"></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label>Comissão WeCare (%)</label>${numInput({id:'d-comissao',value:im.comissaoWecare||20,min:0,max:100})}</div>
@@ -3012,9 +3014,11 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
   const aptoLabel={sim:'✓ Apto para operação',nao:'✗ Não apto — pendências'}[d.aptoPara]||'—';
   const comodosHtml=(d.comodos||[]).map(c=>{
     const extras=Object.entries(c.camposExtras||{}).filter(([,val])=>val!==''&&val!==false&&val!=null);
+    const midias=Array.isArray(c.midiaFrames)?c.midiaFrames:[];
     return`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
       <strong>${esc(c.nome)}</strong>${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
       ${extras.length?`<div style="font-size:12.5px;color:var(--text-muted);">${extras.map(([k,val])=>`${esc(k)}: ${val===true?'✓':esc(String(val))}`).join(' · ')}</div>`:''}
+      ${midias.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midias.map(f=>`<img src="data:image/jpeg;base64,${f}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('data:image/jpeg;base64,${f}','_blank')">`).join('')}</div>`:''}
     </div>`;
   }).join('')||'<div class="text-muted" style="font-size:13px;">Sem detalhes de cômodos registrados.</div>';
   const geraisHtml=Object.entries(d.camposGerais||{}).filter(([,val])=>val!==''&&val!==false&&val!=null)

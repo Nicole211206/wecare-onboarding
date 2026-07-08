@@ -1146,6 +1146,10 @@ function showLinkError(msg) {
 
 // Preenche os campos da tela com um rascunho já salvo (autosave anterior ou reabertura
 // de um link já usado antes) — antes disso, um autosave existia mas nunca era recarregado.
+// idx -> quantidade de frames de mídia já salvos no servidor (de uma sessão anterior) —
+// o arquivo original nunca volta pro navegador, só sabemos que "já tem mídia daquele cômodo"
+const _midiaJaSalva = {};
+
 function _restaurarDados(dados) {
   if (!dados || !Object.keys(dados).length) return;
   if (dados.data) document.getElementById('field-data').value = dados.data;
@@ -1170,6 +1174,11 @@ function _restaurarDados(dados) {
       if (!el) return;
       if (campo.tipo === 'checkbox') el.checked = !!val; else el.value = val ?? '';
     });
+    if (Array.isArray(c.midiaFrames) && c.midiaFrames.length) {
+      _midiaJaSalva[idx] = c.midiaFrames.length;
+      const status = document.getElementById('midia-status-' + idx);
+      if (status) status.innerHTML = `<i class="fa-solid fa-check" style="color:var(--green)"></i> ${c.midiaFrames.length} imagem(ns) já salva(s) de antes`;
+    }
   });
 }
 
@@ -1292,6 +1301,7 @@ function buildComodos() {
               <input type="file" accept="video/*,image/*" style="display:none" onchange="addVideo(${idx}, event)">
             </label>
           </div>
+          <div id="midia-status-${idx}" style="font-size:11px;color:var(--gray-400);margin-top:6px;"></div>
         </div>
         <div class="form-row">
           <label>Irregularidades encontradas</label>
@@ -1326,6 +1336,73 @@ function addVideo(idx, event) {
   renderVideoGrid(idx);
   event.target.value = '';
   updateProgress();
+  _enviarMidiaComoFrames(idx, file);
+}
+
+// Extrai algumas imagens do vídeo (mesmo princípio já usado no painel principal pra
+// mandar frames pro Gemini — canvas capturando o <video> em alguns instantes) ou,
+// se for uma foto, só redimensiona/comprime. Nunca manda o vídeo bruto: a Anthropic
+// (e o Gemini, no outro fluxo já existente) só aceita imagem, não vídeo nativo — e o
+// arquivo bruto nem caberia no limite de 25MB do KV que guarda o sistema inteiro.
+async function _extrairFramesMidia(file) {
+  if (!file.type.startsWith('video/')) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const w = Math.min(img.width, 800);
+        canvas.width = w; canvas.height = Math.round(w * (img.height / img.width));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve([canvas.toDataURL('image/jpeg', 0.6).split(',')[1]]);
+      };
+      img.onerror = () => resolve([]);
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  return new Promise(resolve => {
+    const video = document.createElement('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const frames = [];
+    video.muted = true; video.preload = 'auto';
+    video.onloadedmetadata = () => {
+      const w = Math.min(video.videoWidth || 800, 800);
+      canvas.width = w; canvas.height = Math.round(w * ((video.videoHeight || w) / (video.videoWidth || w)));
+      const maxFrames = 2;
+      const times = [];
+      for (let t = 1; t < video.duration && times.length < maxFrames; t += Math.max(3, video.duration / (maxFrames + 1))) times.push(t);
+      if (!times.length) times.push(0);
+      let i = 0;
+      const next = () => { if (i >= times.length) { URL.revokeObjectURL(video.src); resolve(frames); return; } video.currentTime = times[i++]; };
+      video.onseeked = () => { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); frames.push(canvas.toDataURL('image/jpeg', 0.55).split(',')[1]); next(); };
+      video.onerror = () => resolve(frames);
+      next();
+    };
+    video.onerror = () => resolve(frames);
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+async function _enviarMidiaComoFrames(idx, file) {
+  const status = document.getElementById('midia-status-' + idx);
+  if (status) status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+  try {
+    const frames = await _extrairFramesMidia(file);
+    if (!frames.length) throw new Error('Não foi possível processar o arquivo.');
+    const r = await fetch(`${WC_WORKER_URL}/vistoria-midia?id=${encodeURIComponent(currentImovel.id)}&vid=${encodeURIComponent(VISTORIA_ID)}&t=${encodeURIComponent(VISTORIA_TOKEN)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comodoIdx: idx, frames }),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'Falha ao salvar');
+    _midiaJaSalva[idx] = j.total || ((_midiaJaSalva[idx] || 0) + frames.length);
+    updateProgress();
+    if (status) status.innerHTML = j.limiteAtingido
+      ? '<i class="fa-solid fa-triangle-exclamation" style="color:var(--amber)"></i> Limite de mídia da vistoria atingido'
+      : '<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo';
+  } catch (e) {
+    if (status) status.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Erro ao salvar — tente de novo';
+  }
 }
 
 function removeVideo(idx, vidIdx) {
@@ -1426,7 +1503,7 @@ function updateProgress() {
 
   // Cômodos — marcado como done se tiver pelo menos 1 vídeo OU irregularidade preenchida
   comodos.forEach((nome, idx) => {
-    const hasVideo = (videoFiles[idx] || []).length > 0;
+    const hasVideo = (videoFiles[idx] || []).length > 0 || (_midiaJaSalva[idx] || 0) > 0;
     const irreg = (document.getElementById('irreg-' + idx) || {}).value || '';
     const isDone = hasVideo || irreg.trim().length > 0;
     if (isDone) done++;
