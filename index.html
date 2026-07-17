@@ -437,6 +437,7 @@
           <option value="2-banheiro">2 por banheiro</option>
           <option value="3-banheiro">3 por banheiro</option>
           <option value="1-quarto">1 por quarto</option>
+          <option value="1-andar">1 por andar</option>
         </select></div>
       <div class="form-group"><label class="form-label">Tipo de Preço</label>
         <select class="form-select" id="it-tipo-preco" onchange="renderItTipoPreco()">
@@ -450,11 +451,18 @@
     </div>
     <div class="form-group"><label class="form-label">Link Mercado Livre</label>
       <input class="form-input" id="it-link" placeholder="https://www.mercadolivre.com.br/..."></div>
-    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Só aparece se enxoval = Comprado?</label>
+    <div class="form-group"><label class="form-label">Só aparece se enxoval = Comprado?</label>
       <select class="form-select" id="it-enxoval-dep">
         <option value="">Não (sempre aparece)</option>
         <option value="sim">Sim</option>
       </select></div>
+    <div class="form-group" style="margin-bottom:0;"><label class="form-label">Aparece em quais modalidades de enxoval? (deixe tudo desmarcado para item obrigatório, sempre aparece)</label>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:4px;">
+        <label class="checkbox-label"><input type="checkbox" id="it-modal-comprado"> Comprado</label>
+        <label class="checkbox-label"><input type="checkbox" id="it-modal-flashee"> Alugado — Flashee</label>
+        <label class="checkbox-label"><input type="checkbox" id="it-modal-intense"> Alugado — Intense</label>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="closeModal('modal-item')">Cancelar</button>
       <button class="btn btn-rose" onclick="salvarItem()">Salvar</button>

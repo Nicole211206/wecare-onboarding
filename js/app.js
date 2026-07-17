@@ -23,23 +23,38 @@ function _migrarFasesAntigas(){
   });
   if(mudou)saveAll();
 }
+// Migração: gastosSetup (aba Contrato) unificado em eventosExtras (aba Produção), marcados com gastoSetup:true
+function _migrarGastosSetup(){
+  let mudou=false;
+  imoveis.forEach(im=>{
+    if(im.gastosSetup&&im.gastosSetup.length){
+      if(!im.eventosExtras)im.eventosExtras=[];
+      im.gastosSetup.forEach(g=>{
+        im.eventosExtras.push({id:uid(),titulo:g.nome,data:'',hora:'',responsavel:'',custo:+g.valor||0,gastoSetup:true});
+      });
+      im.gastosSetup=[];
+      mudou=true;
+    }
+  });
+  if(mudou)saveAll();
+}
 
 // ═══════════════════ ITENS DE COMPRAS ═══════════════════
 let ITENS_COMPRAS=[
   // CAMA enxoval Buddemeyer
-  {cat:'Cama',nome:'Jogo de Cama Basic Percalle',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'3-colchao',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Edredom Premier Hotel',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Capa p/ Edredom Hotel 180 fios',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388'},
+  {cat:'Cama',nome:'Jogo de Cama Basic Percalle',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'3-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado']},
+  {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado']},
+  {cat:'Cama',nome:'Edredom Premier Hotel',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado','flashee']},
+  {cat:'Cama',nome:'Capa p/ Edredom Hotel 180 fios',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado','flashee']},
   {cat:'Cama',nome:'Protetor de Colchão',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388'},
   // CAMA fixos
-  {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388'},
+  {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
   {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',preco:285,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
   {cat:'Cama',nome:'Travesseiro Toque de Pluma',tipoPreco:'fixo',preco:99,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
   {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',preco:52,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388'},
   // BANHEIRO
-  {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',preco:64,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388'},
-  {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',preco:30,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388'},
+  {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',preco:64,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
+  {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',preco:30,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
   {cat:'Banheiro',nome:'Tapete Piso Luxor Hotel',tipoPreco:'fixo',preco:42,enxovalDep:false,qtdRule:'3-banheiro',link:'https://wa.me/5511995563388'},
   {cat:'Banheiro',nome:'Lixeira Inox com Pedal 3L',tipoPreco:'fixo',preco:38.99,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB25959263'},
   {cat:'Banheiro',nome:'Dispenser de Sabonete',tipoPreco:'fixo',preco:23.90,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB22437413'},
@@ -80,8 +95,9 @@ let ITENS_COMPRAS=[
   {cat:'Limpeza',nome:'Balde (kit 2)',tipoPreco:'fixo',preco:37.29,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/2-balde-plastico-extra-forte/p/MLB18765432'},
   {cat:'Limpeza',nome:'Vassoura + Pá',tipoPreco:'fixo',preco:78.89,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/kit-vassoura-pa-com-cabo/p/MLB21332109'},
   {cat:'Limpeza',nome:'Panos de Microfibra (kit 10)',tipoPreco:'fixo',preco:59,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/mfl-kit-10-panos-de-microfibra/p/MLB20987654'},
+  {cat:'Limpeza',nome:'Vassoura de Pelos',tipoPreco:'fixo',preco:50,enxovalDep:false,qtdRule:'1-unidade',modalidades:['flashee']},
   // OUTROS
-  {cat:'Outros',nome:'Detector de Fumaça',tipoPreco:'fixo',preco:59.90,enxovalDep:false,qtdRule:'1-unidade',link:'https://www.mercadolivre.com.br/detector-optico-de-fumaca/p/MLB22334567'},
+  {cat:'Outros',nome:'Detector de Fumaça e Monóxido de Carbono',tipoPreco:'fixo',preco:59.90,enxovalDep:false,qtdRule:'1-andar',link:'https://www.mercadolivre.com.br/detector-optico-de-fumaca/p/MLB22334567'},
 ];
 
 let PRECOS_ENXOVAL={
@@ -100,12 +116,33 @@ const CAMA_TIPO_ENXOVAL={
 };
 const CAMA_LEITOS={'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solteiro':1,'Sofá-cama Casal':1,'Beliche':2,'Bicama':2,'Viúva':1};
 
-const PRECOS_PRIMEIRA_LIMPEZA={
-  1:{dinairan:{custo:360,cobrado:396},flashee:{custo:350,cobrado:385},'Intense Clean':{custo:250,cobrado:275}},
-  2:{dinairan:{custo:430,cobrado:473},'Intense Clean':{custo:250,cobrado:275}},
-  3:{dinairan:{custo:500,cobrado:550},'Intense Clean':{custo:250,cobrado:275}},
-  4:{dinairan:{custo:580,cobrado:638},'Intense Clean':{custo:250,cobrado:275}},
-};
+// Lista livre (empresa, custo, cobrado por qtd. de quartos) — array com `id`, igual PRECOS_LIMPEZA_CHECKOUT,
+// pra permitir mais de uma faixa de preço pra mesma qtd. de quartos sem sobrescrever a anterior.
+let PRECOS_PRIMEIRA_LIMPEZA=[
+  {id:'pl1',quartos:1,empresa:'dinairan',custo:360,cobrado:396},
+  {id:'pl2',quartos:1,empresa:'flashee',custo:350,cobrado:385},
+  {id:'pl3',quartos:1,empresa:'Intense Clean',custo:250,cobrado:275},
+  {id:'pl4',quartos:2,empresa:'dinairan',custo:430,cobrado:473},
+  {id:'pl5',quartos:2,empresa:'Intense Clean',custo:250,cobrado:275},
+  {id:'pl6',quartos:3,empresa:'dinairan',custo:500,cobrado:550},
+  {id:'pl7',quartos:3,empresa:'Intense Clean',custo:250,cobrado:275},
+  {id:'pl8',quartos:4,empresa:'dinairan',custo:580,cobrado:638},
+  {id:'pl9',quartos:4,empresa:'Intense Clean',custo:250,cobrado:275},
+];
+// Migração one-time do formato antigo {quartos:{empresa:{custo,cobrado}}} pro array acima.
+function _migrarPrecosPrimeiraLimpeza(v){
+  if(Array.isArray(v))return v;
+  if(v&&typeof v==='object'){
+    const out=[];
+    Object.entries(v).forEach(([q,servs])=>{
+      Object.entries(servs||{}).forEach(([empresa,val])=>{
+        out.push({id:uid(),quartos:+q,empresa,custo:+val.custo||0,cobrado:+val.cobrado||0});
+      });
+    });
+    return out;
+  }
+  return null;
+}
 // Limpeza de check-out (entre hóspedes) — diferente da primeira limpeza/implementação.
 // Lista livre (empresa, especificação por hóspedes/metragem, custo, cobrado, região), não presa a "quartos".
 let PRECOS_LIMPEZA_CHECKOUT=[
@@ -229,7 +266,7 @@ function _getComodosImovel(im){
 // Cálculo de quantidades
 function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
 function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
-function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos){
+function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares){
   const rule=item.qtdRule||'1-unidade';const dashIdx=rule.indexOf('-');const n=rule.slice(0,dashIdx);const base=rule.slice(dashIdx+1);
   const q=parseInt(n)||1;
   if(base==='colchao')return q*totalColchoes(camas);
@@ -237,10 +274,21 @@ function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes
   if(base==='banheiro-completo')return q*(+banheirosCompletos||1);
   if(base==='banheiro')return q*(+banheiros||1);
   if(base==='quarto')return q*(+quartos||1);
+  if(base==='andar')return q*(+andares||1);
   if(base==='hospede')return q*(+hospedes||1);
   if(base==='lavabo')return q*(+lavabos||0);
   if(base==='cada2hospede')return q*Math.ceil((+hospedes||1)/2);
   return q;
+}
+// 'comprado' | 'flashee' | 'intense' — deriva a modalidade ativa de enxoval do imóvel
+function modalidadeEnxovalAtual(im){
+  const def=im.defEnxoval||{};
+  if((def.tipo||'comprado')!=='aluguel')return'comprado';
+  return(def.fornecedor||'').toLowerCase().includes('intense')?'intense':'flashee';
+}
+// item.modalidades ausente = obrigatório, sempre aparece. Presente = só aparece nas modalidades listadas.
+function itemValidoParaModalidade(item,modalidade){
+  return!item.modalidades||item.modalidades.includes(modalidade);
 }
 function getPrecoEnxovalUn(nomeItem,camas){
   const tabela=PRECOS_ENXOVAL[nomeItem]; if(!tabela)return 0;
@@ -328,13 +376,14 @@ function loadAll(){
   v=g('wc_membros');   if(Array.isArray(v))membros=v;
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
-  v=g('wc_limpeza');   if(v&&typeof v==='object')Object.assign(PRECOS_PRIMEIRA_LIMPEZA,v);
+  v=g('wc_limpeza');   {const migrado=_migrarPrecosPrimeiraLimpeza(v);if(migrado)PRECOS_PRIMEIRA_LIMPEZA=migrado;}
   v=g('wc_limpeza_checkout');if(Array.isArray(v)&&v.length)PRECOS_LIMPEZA_CHECKOUT=v;
   v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
   v=g('wc_vistoria_campos');if(Array.isArray(v))VISTORIA_CAMPOS=v;
   _migrarFasesAntigas();
+  _migrarGastosSetup();
 }
 
 let _autoSaveTimer=null;
@@ -582,6 +631,7 @@ function salvarNovoImovel(){
     comissaoWecare:+document.getElementById('ni-comissao').value||20,
     comissaoBase:document.getElementById('ni-comissao-base').value,
     quartos:+document.getElementById('ni-quartos').value||1,
+    andares:1,
     salas:+document.getElementById('ni-salas').value||1,
     cozinha:+document.getElementById('ni-cozinha').value||0,
     lavanderia:+document.getElementById('ni-lavanderia').value||0,
@@ -619,6 +669,7 @@ function salvarNovoImovel(){
     linkFotos:'', linkRelatorio:'', responsavelCriacao:'', tarefaClaireId:null,
     prazoAtivacaoHoras:24, dataEnvioParaCriacao:null,
     valorMinNoite:0, valorBaseNoite:0, taxaHospedeExtra:0, taxaHospedeExtraAcimaDe:0, taxaLimpeza:0, observacoes:'',
+    valorCaucao:0, politicaCancelamento:'',
     comentarios:{}
   };
   imoveis.push(im);saveAll();closeModal('modal-imovel-novo');renderKanban();
@@ -766,7 +817,7 @@ function _coletarDadosAba(aba,im){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
-    im.quartos=gn('d-quartos')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
+    im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
@@ -787,6 +838,7 @@ function _coletarDadosAba(aba,im){
     im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
     im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
     im.taxaLimpeza=gn('ct-taxa-limpeza');
+    im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
     if(!im.ops)im.ops={fotos:{},limpeza:{},vistoria:{}};
     ['fotos','limpeza','vistoria'].forEach(op=>{
       if(!im.ops[op])im.ops[op]={};
@@ -807,7 +859,8 @@ function _coletarDadosAba(aba,im){
     im.ecohost=im.defOperacionais['ecohost']||false;
     im.fechaduraEletronica=im.defOperacionais['fechaduraEletronica']||false;
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
-    im.defEnxoval={tipo:g('def-enxoval-tipo'),fornecedor:g('def-enxoval-forn'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
+    const _enxTipo=g('def-enxoval-tipo');
+    im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
   }
   if(aba==='operacional'){
@@ -875,6 +928,7 @@ function renderAbaDados(im){
   <div class="form-group"><label>Endereço</label><input id="d-endereco" class="input" value="${esc(im.endereco||'')}"></div>
   <div class="form-row">
     <div class="form-group"><label>Quartos</label>${numInput({id:'d-quartos',value:im.quartos||1,min:1})}</div>
+    <div class="form-group"><label>Andares</label>${numInput({id:'d-andares',value:im.andares||1,min:1})}</div>
     <div class="form-group"><label>Salas</label>${numInput({id:'d-salas',value:im.salas!=null?im.salas:1,min:0})}</div>
     <div class="form-group"><label>Banheiros completos</label>${numInput({id:'d-banheiros-completos',value:im.banheirosCompletos!=null?im.banheirosCompletos:(im.banheiros||1),min:0})}</div>
     <div class="form-group"><label>Lavabos</label>${numInput({id:'d-banheiros-lavabo',value:im.banheirosLavabo||0,min:0})}</div>
@@ -1167,11 +1221,11 @@ async function _rodarIAFotos(){
 // ═══════════════════ ABA CONTRATO ═══════════════════
 function renderAbaContrato(im){
   const ops=im.ops||{fotos:{},limpeza:{},vistoria:{}};
-  const gastosSetup=im.gastosSetup||[];
+  const gastosSetup=(im.eventosExtras||[]).filter(e=>e.gastoSetup);
   const custoFotos=+ops.fotos?.custo||0;
   const custoLimpeza=+ops.limpeza?.custo||0;
   const custoVistoria=+ops.vistoria?.custo||0;
-  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
+  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
   const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
   const valorSetupCobrado=im.valorSetupCobrado||0;
   const margemSetup=valorSetupCobrado-totalSetupBase;
@@ -1200,17 +1254,12 @@ function renderAbaContrato(im){
 
   ${gastosSetup.length?`<div style="margin-bottom:8px;">
     ${gastosSetup.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
-      <span style="flex:1;font-size:13px;">${esc(g.nome)}</span>
-      <span style="font-weight:600;font-size:13px;">${fmtMoeda(+g.valor||0)}</span>
-      <button class="btn btn-xs btn-outline" onclick="removerGastoSetup('${g.id}')"><i class="fa-solid fa-xmark"></i></button>
+      <span style="flex:1;font-size:13px;">${esc(g.titulo)}</span>
+      <span style="font-weight:600;font-size:13px;">${fmtMoeda(+g.custo||0)}</span>
+      <button class="btn btn-xs btn-outline" onclick="desmarcarGastoSetup('${g.id}')" title="Remover da conta de Setup"><i class="fa-solid fa-xmark"></i></button>
     </div>`).join('')}
   </div>`:''}
-
-  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-    <input id="ct-gasto-nome" class="input" style="flex:1;min-width:140px;" placeholder="Nome do gasto extra">
-    ${numInput({id:'ct-gasto-val',value:'',min:0,step:50,style:'width:auto;'})}
-    <button class="btn btn-outline btn-sm" onclick="addGastoSetup()"><i class="fa-solid fa-plus"></i> Adicionar gasto</button>
-  </div>
+  <div class="hint" style="margin-bottom:16px;">Gastos extras são cadastrados na aba <strong>Produção</strong> ("Outros Eventos"), marcando a caixa "Gasto de Setup?". Eles aparecem aqui automaticamente.</div>
 
   <div class="form-group"><label>Valor cobrado ao proprietário pelo Setup (R$)</label>${numInput({id:'ct-setup-cobrado',value:valorSetupCobrado,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
   <div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:20px;">
@@ -1241,6 +1290,27 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'ct-extra-acima',value:im.taxaHospedeExtraAcimaDe||0,min:0})}</div>
   </div>
   <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10})}</div>
+  <div class="form-row">
+    <div class="form-group"><label>Caução (R$)</label>${numInput({id:'ct-caucao',value:im.valorCaucao||0,min:0,step:10})}</div>
+    <div class="form-group"><label>Política de Cancelamento</label>
+      <select id="ct-politica-cancelamento" class="input">
+        <option value="">Selecione...</option>
+        <optgroup label="Estadias Curtas">
+          <option value="Flexível"${im.politicaCancelamento==='Flexível'?' selected':''}>Flexível — reembolso completo até 24h antes do check-in</option>
+          <option value="Moderada"${im.politicaCancelamento==='Moderada'?' selected':''}>Moderada — reembolso completo até 5 dias antes do check-in</option>
+          <option value="Limitada"${im.politicaCancelamento==='Limitada'?' selected':''}>Limitada — 100% até 14 dias; 50% entre 7-14 dias; não reembolsável depois</option>
+          <option value="Restrita"${im.politicaCancelamento==='Restrita'?' selected':''}>Restrita — 100% até 30 dias; 50% entre 7-30 dias; não reembolsável depois</option>
+        </optgroup>
+        <optgroup label="Estadias ≥28 noites">
+          <option value="Firme"${im.politicaCancelamento==='Firme'?' selected':''}>Firme — primeiro mês não reembolsável</option>
+          <option value="Rigorosa"${im.politicaCancelamento==='Rigorosa'?' selected':''}>Rigorosa — primeiro mês não reembolsável + 50% do restante se cancelado durante a estadia</option>
+        </optgroup>
+        <optgroup label="Add-ons opcionais">
+          <option value="Não reembolsável"${im.politicaCancelamento==='Não reembolsável'?' selected':''}>Não reembolsável — só incluir desconto (ex. 10%)</option>
+        </optgroup>
+      </select>
+    </div>
+  </div>
 
   <div class="form-section-title"><i class="fa-solid fa-credit-card"></i> Formas de Pagamento</div>
   <div class="form-group">
@@ -1254,7 +1324,7 @@ function _atualizarSubtotalSetup(){
   const l=+document.getElementById('ct-op-limpeza')?.value||0;
   const v=+document.getElementById('ct-op-vistoria')?.value||0;
   const im=getImovel(_imovelAtivoId);
-  const extras=(im?.gastosSetup||[]).reduce((s,g)=>s+(+g.valor||0),0);
+  const extras=(im?.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
   const total=f+l+v+extras;
   const cobrado=+document.getElementById('ct-setup-cobrado')?.value||0;
   const margem=cobrado-total;
@@ -1271,19 +1341,10 @@ function _atualizarSubtotalSetup(){
   if(totalEl)totalEl.textContent=fmtMoeda(cobrado);
   if(im){im.valorSetupCobrado=cobrado;saveAll();}
 }
-function addGastoSetup(){
+function desmarcarGastoSetup(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const nome=(document.getElementById('ct-gasto-nome')?.value||'').trim();
-  const val=parseFloat(document.getElementById('ct-gasto-val')?.value||'0');
-  if(!nome){showToast('Informe o nome do gasto.','');return;}
-  if(!val||isNaN(val)){showToast('Informe o valor do gasto.','');return;}
-  if(!im.gastosSetup)im.gastosSetup=[];
-  im.gastosSetup.push({id:uid(),nome,valor:val});
-  saveAll();renderAba('contrato');
-}
-function removerGastoSetup(id){
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  im.gastosSetup=(im.gastosSetup||[]).filter(g=>g.id!==id);
+  const ev=(im.eventosExtras||[]).find(e=>e.id===id);if(!ev)return;
+  ev.gastoSetup=false;
   saveAll();renderAba('contrato');
 }
 function marcarContratoAssinadoManual(){
@@ -1313,12 +1374,19 @@ function renderAbaDefinicoes(im){
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-bed"></i> Enxoval</div>
   <div class="form-group">
     <label>Modalidade</label>
-    <select id="def-enxoval-tipo" class="input">
+    <select id="def-enxoval-tipo" class="input" onchange="_onEnxovalTipoChange(this)">
       <option value="comprado"${(im.defEnxoval?.tipo||'comprado')==='comprado'?' selected':''}>Comprado (Buddemeyer)</option>
-      <option value="aluguel"${im.defEnxoval?.tipo==='aluguel'?' selected':''}>Aluguel Mensal (Flashee)</option>
+      <option value="aluguel"${im.defEnxoval?.tipo==='aluguel'?' selected':''}>Alugado</option>
     </select>
   </div>
-  <div class="form-group"><label>Fornecedor</label><input id="def-enxoval-forn" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}"></div>
+  <div class="form-group">
+    <label>Fornecedor</label>
+    <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
+    <select id="def-enxoval-forn-select" class="input" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
+      <option value="Flashee"${im.defEnxoval?.fornecedor==='Flashee'?' selected':''}>Flashee</option>
+      <option value="Intense Clean"${im.defEnxoval?.fornecedor==='Intense Clean'?' selected':''}>Intense Clean</option>
+    </select>
+  </div>
   <div class="form-row">
     <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
     <div class="form-group"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
@@ -1330,6 +1398,13 @@ function renderAbaDefinicoes(im){
     <input id="def-prazo-ativacao" type="number" class="input" value="${im.prazoAtivacaoHoras||24}" min="1">
   </div>
   </div>`;
+}
+function _onEnxovalTipoChange(sel){
+  const aluguel=sel.value==='aluguel';
+  const txt=document.getElementById('def-enxoval-forn-texto');
+  const sel2=document.getElementById('def-enxoval-forn-select');
+  if(txt)txt.style.display=aluguel?'none':'';
+  if(sel2)sel2.style.display=aluguel?'':'none';
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -1620,7 +1695,7 @@ function importarRespostasParaRascunho(){
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
 function renderAbaCompras(im){
-  const camas=im.camas||[];const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);const quartos=im.quartos||1;const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;
+  const camas=im.camas||[];const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);const quartos=im.quartos||1;const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;const andares=im.andares||1;
   const compras=im.compras||{};
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
@@ -1628,8 +1703,10 @@ function renderAbaCompras(im){
   let totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
 
   // Gerar linhas — itens de enxoval expandidos por tamanho de cama
+  const modalidadeAtual=modalidadeEnxovalAtual(im);
   const rows=[];
   ITENS_COMPRAS.forEach((item,idx)=>{
+    if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
       // agrupar camas por tipo enxoval
       const porTipo={};
@@ -1656,7 +1733,7 @@ function renderAbaCompras(im){
         rows.push({subKey,item,label:`${item.nome} (${tipoEnx})`,qtdNec,qtdTem,falta,precoUn,total,comprado});
       });
     } else {
-      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
       const subKey=String(idx);
       const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
@@ -1971,6 +2048,7 @@ function adicionarEventoExtra(){
     hora:document.getElementById('evx-novo-hora')?.value||'',
     responsavel:(document.getElementById('evx-novo-resp')?.value||'').trim(),
     custo:+document.getElementById('evx-novo-custo')?.value||0,
+    gastoSetup:document.getElementById('evx-novo-setup')?.checked||false,
   });
   saveAll();renderAba('operacional');showToast('Evento adicionado!','sage');
 }
@@ -1978,6 +2056,12 @@ function _onEventoExtraChange(id,campo,valor){
   const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
   const ev=im.eventosExtras.find(e=>e.id===id);if(!ev)return;
   ev[campo]=campo==='custo'?(+valor||0):valor;
+  saveAll();
+}
+function _onEventoExtraGastoSetup(cb,id){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
+  const ev=im.eventosExtras.find(e=>e.id===id);if(!ev)return;
+  ev.gastoSetup=cb.checked;
   saveAll();
 }
 function apagarEventoExtra(id){
@@ -2041,9 +2125,11 @@ function _rowsComprasFalta(im){
   const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
   const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);
   const quartos=im.quartos||1;
-  const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;
+  const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;const andares=im.andares||1;
+  const modalidadeAtual=modalidadeEnxovalAtual(im);
   const rows=[];
   ITENS_COMPRAS.forEach((item,idx)=>{
+    if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
       const porTipo={};
       camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
@@ -2059,7 +2145,7 @@ function _rowsComprasFalta(im){
         if(falta>0){const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
       });
     } else {
-      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos);
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
       const subKey=String(idx);
       const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
@@ -2207,7 +2293,7 @@ function renderAbaEnxoval(im){
   const linhasBud=Object.entries(PRECOS_ENXOVAL).map(([nome,tabela])=>{
     const itemDef=ITENS_COMPRAS.find(i=>i.nome===nome);
     const qtdRule=itemDef?.qtdRule||'1-colchao';
-    const qtd=calcNecessario({qtdRule},camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
+    const qtd=calcNecessario({qtdRule},camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0,im.andares||1);
     const pUn=tabela[tipo]||Object.values(tabela)[0]||0;
     const total=pUn*qtd;totalBud+=total;
     return{nome,tipo,qtd,pUn,total};
@@ -2284,7 +2370,8 @@ function renderAbaEnxoval(im){
 function renderAbaOperacional(im){
   const quartos=im.quartos||1;
   const pfS=PRECOS_FOTOS[Math.min(quartos,4)]||PRECOS_FOTOS[4];
-  const plS=PRECOS_PRIMEIRA_LIMPEZA[Math.min(quartos,4)]||PRECOS_PRIMEIRA_LIMPEZA[4];
+  const plQ=Math.min(quartos,4);
+  const plS=PRECOS_PRIMEIRA_LIMPEZA.filter(p=>p.quartos===plQ).length?PRECOS_PRIMEIRA_LIMPEZA.filter(p=>p.quartos===plQ):PRECOS_PRIMEIRA_LIMPEZA.filter(p=>p.quartos===4);
   const ops=im.ops||{fotos:{},limpeza:{},vistoria:{}};
 
   const sCard=(titulo,icon,cor,id,op,hint='')=>`
@@ -2309,7 +2396,7 @@ function renderAbaOperacional(im){
   ${sCard('Sessão de Fotos','camera','lavender','fotos',ops.fotos,
     pfS?`💡 Sugestão (${quartos} quarto${quartos>1?'s':''}): R$ ${pfS.min}–R$ ${pfS.max} · Responsável: ${pfS.resp}`:'')}
   ${sCard('Primeira Limpeza','broom','peach','limpeza',ops.limpeza,
-    plS?.dinairan?`💡 Sugestão (${quartos}q): Dinairan custo R$ ${plS.dinairan.custo} / cobrado R$ ${plS.dinairan.cobrado}`:'')}
+    plS.length?`💡 Sugestão (${quartos}q): `+plS.map(p=>`${p.empresa} custo R$ ${p.custo} / cobrado R$ ${p.cobrado}`).join(' · '):'')}
   <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
     <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Vistoria</div>
     <div class="form-row">
@@ -2341,6 +2428,7 @@ function renderAbaOperacional(im){
       <th style="padding:6px 8px;">Hora</th>
       <th style="text-align:left;padding:6px 8px;">Responsável</th>
       <th style="text-align:right;padding:6px 8px;">Custo (R$)</th>
+      <th style="padding:6px 8px;">Gasto de Setup?</th>
       <th style="padding:6px 4px;width:32px;"></th>
     </tr></thead>
     <tbody>
@@ -2350,6 +2438,7 @@ function renderAbaOperacional(im){
       <td style="padding:4px 6px;"><input class="input" type="time" style="padding:3px 6px;" value="${ev.hora||''}" onchange="_onEventoExtraChange('${ev.id}','hora',this.value)"></td>
       <td style="padding:4px 6px;"><input class="input" style="padding:3px 6px;" value="${esc(ev.responsavel||'')}" onchange="_onEventoExtraChange('${ev.id}','responsavel',this.value)"></td>
       <td style="padding:4px 6px;text-align:right;"><input class="input" type="number" min="0" style="width:80px;text-align:right;padding:3px 6px;" value="${ev.custo||0}" onchange="_onEventoExtraChange('${ev.id}','custo',this.value)"></td>
+      <td style="padding:4px 6px;text-align:center;"><input type="checkbox" ${ev.gastoSetup?'checked':''} onchange="_onEventoExtraGastoSetup(this,'${ev.id}')"></td>
       <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="apagarEventoExtra('${ev.id}')"><i class="fa-solid fa-trash"></i></button></td>
     </tr>`).join('')}
     </tbody>
@@ -2360,6 +2449,7 @@ function renderAbaOperacional(im){
     <div><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Hora</label><input id="evx-novo-hora" type="time" class="input"></div>
     <div style="min-width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Responsável</label><input id="evx-novo-resp" class="input" style="width:100%;"></div>
     <div style="width:100px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Custo (R$)</label><input id="evx-novo-custo" type="number" min="0" class="input" value="0" style="width:100%;"></div>
+    <div style="display:flex;align-items:center;gap:4px;padding-bottom:8px;"><label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px;"><input id="evx-novo-setup" type="checkbox"> Gasto de Setup?</label></div>
     <button class="btn btn-sm btn-sage" onclick="adicionarEventoExtra()"><i class="fa-solid fa-plus"></i> Adicionar</button>
   </div>
   </div>`;
@@ -2370,7 +2460,7 @@ function renderAbaCustos(im){
   let totalCompras=0;
   ITENS_COMPRAS.forEach((item,idx)=>{
     const camas=im.camas||[];
-    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0);
+    const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0,im.andares||1);
     const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
     const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
     totalCompras+=precoUn*qtdReal;
@@ -2439,9 +2529,9 @@ async function gerarPDFOrcamento(){
   const custoFotos=+im.ops?.fotos?.custo||0;
   const custoLimpeza=+im.ops?.limpeza?.custo||0;
   const custoVistoria=+im.ops?.vistoria?.custo||0;
-  const gastosSetup=im.gastosSetup||[];
-  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.valor||0),0);
-  const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.valor||0)}</td></tr>`).join('');
+  const gastosSetup=(im.eventosExtras||[]).filter(e=>e.gastoSetup);
+  const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
+  const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.titulo)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.custo||0)}</td></tr>`).join('');
   const servicosOpcionaisSelPdf=im.servicosOpcionaisCompras||{};
   const servicosOpcionaisAtivos=SERVICOS_OPCIONAIS_COMPRAS.filter(so=>servicosOpcionaisSelPdf[so.id]);
   const custosServicosOpcionais=servicosOpcionaisAtivos.reduce((s,so)=>s+so.valor,0);
@@ -3304,25 +3394,28 @@ function renderConfig(){
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
-  const baseOpts=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','hospede','cada2hospede','unidade'];
+  const baseOpts=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','andar','hospede','cada2hospede','unidade'];
   const baseLabels={
     'colchao':'por colchão','leito':'por leito (cama/beliche)',
     'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
-    'lavabo':'por lavabo','quarto':'por quarto',
+    'lavabo':'por lavabo','quarto':'por quarto','andar':'por andar',
     'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
     'unidade':'unidade fixa (1 por apê)'
   };
+  const modalOpts=[['comprado','Comprado'],['flashee','Flashee'],['intense','Intense']];
   ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
     <thead><tr style="border-bottom:2px solid var(--border);">
       <th style="text-align:left;padding:6px 4px;">Item</th>
       <th style="text-align:center;padding:6px 4px;width:64px;">Qtd</th>
       <th style="text-align:left;padding:6px 4px;">Base de cálculo</th>
+      <th style="text-align:left;padding:6px 4px;">Modalidades (vazio = sempre aparece)</th>
       <th style="padding:6px 4px;width:36px;"></th>
     </tr></thead>
     <tbody>${ITENS_COMPRAS.map((item,i)=>{
       const dash=item.qtdRule.indexOf('-');
       const n=item.qtdRule.slice(0,dash);
       const base=item.qtdRule.slice(dash+1);
+      const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br>${esc(item.nome)}</td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
@@ -3330,6 +3423,9 @@ function renderConfig(){
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
             ${baseOpts.map(b=>`<option value="${b}"${b===base?' selected':''}>${baseLabels[b]||b}</option>`).join('')}
           </select>
+        </td>
+        <td style="padding:5px 4px;white-space:nowrap;">
+          ${modalOpts.map(([v,lbl])=>`<label style="font-size:11px;margin-right:8px;"><input type="checkbox" id="ci-modal-${v}-${i}"${modalidades.includes(v)?' checked':''}> ${lbl}</label>`).join('')}
         </td>
         <td style="padding:5px 4px;white-space:nowrap;">
           <button class="btn btn-xs btn-sage" onclick="salvarRegra(${i})" title="Salvar esta linha"><i class="fa-solid fa-check"></i></button>
@@ -3393,18 +3489,17 @@ function renderConfig(){
   // ── Tabela de Primeira Limpeza e Fotos ──
   const po=document.getElementById('config-precos-ops');
   if(po){
-    const limpRows=Object.entries(PRECOS_PRIMEIRA_LIMPEZA).map(([q,servs])=>
-      Object.entries(servs).map(([srv,v])=>
+    const limpRows=PRECOS_PRIMEIRA_LIMPEZA.map(r=>
         `<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:4px;">${q} quarto(s)</td>
-          <td style="padding:4px;">${esc(srv)}</td>
-          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${CSS.escape(srv)}-c" type="number" min="0" class="input" value="${v.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
-          <td style="padding:4px;text-align:right;"><input id="limp-${q}-${CSS.escape(srv)}-r" type="number" min="0" class="input" value="${v.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><input id="limp-${r.id}-q" type="number" min="1" class="input" value="${r.quartos}" style="width:56px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;"><input id="limp-${r.id}-empresa" class="input" value="${esc(r.empresa)}" style="width:100%;min-width:100px;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${r.id}-c" type="number" min="0" class="input" value="${r.custo}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
+          <td style="padding:4px;text-align:right;"><input id="limp-${r.id}-r" type="number" min="0" class="input" value="${r.cobrado}" style="width:68px;text-align:right;padding:3px 4px;font-size:12px;"></td>
           <td style="padding:4px;white-space:nowrap;">
-            <button class="btn btn-xs btn-sage" onclick="salvarPrecoLimpeza(${q},'${esc(srv)}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
-            <button class="btn btn-xs btn-danger" onclick="apagarPrecoLimpeza(${q},'${esc(srv)}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-xs btn-sage" onclick="salvarPrecoLimpeza('${r.id}')" title="Salvar"><i class="fa-solid fa-check"></i></button>
+            <button class="btn btn-xs btn-danger" onclick="apagarPrecoLimpeza('${r.id}')" title="Apagar" style="margin-left:3px;"><i class="fa-solid fa-trash"></i></button>
           </td>
-        </tr>`).join('')).join('');
+        </tr>`).join('');
     const fotoRows=Object.entries(PRECOS_FOTOS).map(([q,v])=>
       `<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px;">${q} quarto(s)</td>
@@ -3620,11 +3715,16 @@ function _removerCampoVistoria(i){
   saveAll();_renderConfigVistoriaCampos();
   showToast('Campo removido.','peach');
 }
+function _lerModalidadesConfig(i){
+  const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
+  return modalidades.length?modalidades:undefined;
+}
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
   const n=document.getElementById(`ci-n-${i}`)?.value||'1';
   const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
   item.qtdRule=`${n}-${base}`;
+  item.modalidades=_lerModalidadesConfig(i);
   saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
 }
 function salvarTodasRegras(){
@@ -3632,6 +3732,7 @@ function salvarTodasRegras(){
     const n=document.getElementById(`ci-n-${i}`)?.value||'1';
     const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
     ITENS_COMPRAS[i].qtdRule=`${n}-${base}`;
+    ITENS_COMPRAS[i].modalidades=_lerModalidadesConfig(i);
   });
   saveAll();showToast('Todas as regras salvas!','sage');
 }
@@ -3785,6 +3886,9 @@ function abrirModalItem(){
   document.getElementById('it-preco').value='';
   document.getElementById('it-link').value='';
   document.getElementById('it-enxoval-dep').value='';
+  document.getElementById('it-modal-comprado').checked=false;
+  document.getElementById('it-modal-flashee').checked=false;
+  document.getElementById('it-modal-intense').checked=false;
   renderItTipoPreco();
   document.getElementById('modal-item').classList.add('open');
   setTimeout(()=>document.getElementById('it-nome').focus(),100);
@@ -3803,7 +3907,11 @@ function salvarItem(){
   const preco=+document.getElementById('it-preco').value||0;
   const link=document.getElementById('it-link').value.trim();
   const enxovalDep=document.getElementById('it-enxoval-dep').value==='sim';
-  ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link});
+  const modalidades=[];
+  if(document.getElementById('it-modal-comprado').checked)modalidades.push('comprado');
+  if(document.getElementById('it-modal-flashee').checked)modalidades.push('flashee');
+  if(document.getElementById('it-modal-intense').checked)modalidades.push('intense');
+  ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link,modalidades:modalidades.length?modalidades:undefined});
   saveAll();closeModal('modal-item');renderConfig();showToast(`"${nome}" adicionado!`,'sage');
 }
 
@@ -3838,19 +3946,17 @@ function adicionarPrecoEnxoval(){
 }
 
 // ── Limpeza e Fotos ──
-function salvarPrecoLimpeza(q,srv){
-  const c=+document.getElementById(`limp-${q}-${CSS.escape(srv)}-c`)?.value||0;
-  const r=+document.getElementById(`limp-${q}-${CSS.escape(srv)}-r`)?.value||0;
-  if(!PRECOS_PRIMEIRA_LIMPEZA[q])PRECOS_PRIMEIRA_LIMPEZA[q]={};
-  PRECOS_PRIMEIRA_LIMPEZA[q][srv]={custo:c,cobrado:r};
+function salvarPrecoLimpeza(id){
+  const r=PRECOS_PRIMEIRA_LIMPEZA.find(x=>x.id===id);if(!r)return;
+  r.quartos=+document.getElementById(`limp-${id}-q`)?.value||1;
+  r.empresa=(document.getElementById(`limp-${id}-empresa`)?.value||'').trim();
+  r.custo=+document.getElementById(`limp-${id}-c`)?.value||0;
+  r.cobrado=+document.getElementById(`limp-${id}-r`)?.value||0;
   saveAll();showToast('Salvo!','sage');
 }
-function apagarPrecoLimpeza(q,srv){
-  if(!confirm(`Apagar "${srv}" da Primeira Limpeza (${q} quarto(s))?`))return;
-  if(PRECOS_PRIMEIRA_LIMPEZA[q]){
-    delete PRECOS_PRIMEIRA_LIMPEZA[q][srv];
-    if(!Object.keys(PRECOS_PRIMEIRA_LIMPEZA[q]).length)delete PRECOS_PRIMEIRA_LIMPEZA[q];
-  }
+function apagarPrecoLimpeza(id){
+  if(!confirm('Apagar esta linha da Primeira Limpeza?'))return;
+  PRECOS_PRIMEIRA_LIMPEZA=PRECOS_PRIMEIRA_LIMPEZA.filter(x=>x.id!==id);
   saveAll();renderConfig();showToast('Removido.','peach');
 }
 function adicionarPrecoLimpeza(prefixo){
@@ -3859,8 +3965,7 @@ function adicionarPrecoLimpeza(prefixo){
   const c=+document.getElementById(`${prefixo}-novo-c`)?.value||0;
   const r=+document.getElementById(`${prefixo}-novo-r`)?.value||0;
   if(!q||!empresa){showToast('Informe a quantidade de quartos e o nome da empresa.','peach');return;}
-  if(!PRECOS_PRIMEIRA_LIMPEZA[q])PRECOS_PRIMEIRA_LIMPEZA[q]={};
-  PRECOS_PRIMEIRA_LIMPEZA[q][empresa]={custo:c,cobrado:r};
+  PRECOS_PRIMEIRA_LIMPEZA.push({id:uid(),quartos:q,empresa,custo:c,cobrado:r});
   saveAll();renderConfig();showToast('Adicionado!','sage');
 }
 function salvarLinhaLimpezaCheckout(id){
