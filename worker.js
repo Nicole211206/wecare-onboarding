@@ -967,18 +967,20 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
 Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
 Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
 Estrutura esperada:
-{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","comissao_pct":0,"comissao_base":"","definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","proprietarioEmail":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","comissao_pct":0,"comissao_base":"","valor_setup_cobrado":0,"definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
 Regras:
 - Use 0, "" ou false para campos não encontrados. NÃO invente informações.
 - Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
 - endereco / q9: monte o endereço MAIS COMPLETO possível (rua, número, complemento/apto, bairro, cidade, estado, CEP) do imóvel indicado pelo nome informado no contexto. Se a pasta contiver documentos de um portfólio com VÁRIOS imóveis do mesmo proprietário, use APENAS o endereço que corresponda claramente a este imóvel específico — se não for possível identificar com segurança qual endereço é deste imóvel, deixe em branco em vez de arriscar um endereço de outra unidade.
+- proprietarioEmail: e-mail do proprietário ou de quem assinou o contrato em nome dele (procure em contratos, assinaturas, cabeçalhos de e-mail, cartão de visita).
 - q81: como hóspedes acessam (portaria, fechadura, etc.) + senha da porta + vaga
 - q83: nome e telefone do zelador/portaria
 - q86: rede e senha do Wi-Fi
 - short_stay_permitido: "sim" se a convenção do condomínio permite aluguel por temporada/short stay, "nao" se proibido, "" se não mencionado
 - comissao_pct / comissao_base: percentual de comissão da WeCare e sua base de cálculo, EXATAMENTE como estiver no contrato. comissao_base = "bruta" se o contrato disser "receita bruta" ou "faturamento bruto"; "liquida" se disser "receita líquida" (após taxas de plataforma/impostos). Leia com atenção — não assuma, use a palavra literal do contrato.
+- valor_setup_cobrado: valor em reais da taxa de setup/start-up cobrada do proprietário mencionada no contrato (ex: "taxa de start-up R$ 1.900" → 1900). Não confundir com a comissão recorrente.
 - definicoes: são serviços/produtos contratados da WeCare mencionados nos documentos (ex: "seguro EasyCover obrigatório" → seguroEasyCover:true; fechadura eletrônica instalada → fechaduraEletronica:true). NÃO são restrições.
-- restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão ou taxas — isso são produtos/condições comerciais, não restrições, e já têm campo próprio (definicoes).`;
+- restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão, taxa de setup ou pagadoria — isso são produtos/condições comerciais, não restrições, e já têm campo próprio.`;
 
       const userContent = [];
       if (textoContexto.trim()) {
@@ -1025,8 +1027,7 @@ Regras:
       // Exceção: quartos/salas/banheirosCompletos nascem com valor padrão 1 (não vazio),
       // então na primeira análise (antes de qualquer confirmação manual) eles também são sobrescritos.
       const primeiraAnalise = !im.claudeAnalisadoEm;
-      const campos = ['proprietarioNome','proprietarioTel','endereco','observacoes','acesso','senhaPorta','vaga','zeladorNome','zeladorTel'];
-      const mapaDir = { proprietarioNome:'proprietarioNome', proprietarioTel:'proprietarioTel', endereco:'endereco', observacoes:'observacoes', acesso:'acesso', senha_porta:'senhaPorta', vaga:'vaga', zelador_nome:'zeladorNome', zelador_tel:'zeladorTel' };
+      const mapaDir = { proprietarioNome:'proprietarioNome', proprietarioTel:'proprietarioTel', proprietarioEmail:'proprietarioEmail', endereco:'endereco', observacoes:'observacoes', acesso:'acesso', senha_porta:'senhaPorta', vaga:'vaga', zelador_nome:'zeladorNome', zelador_tel:'zeladorTel' };
       for (const [rk, ik] of Object.entries(mapaDir)) {
         if (resultado[rk] && !im[ik]) im[ik] = resultado[rk];
       }
@@ -1056,6 +1057,9 @@ Regras:
       }
       if (hasVal(resultado.comissao_pct) && +resultado.comissao_pct > 0) {
         if (primeiraAnalise) im.comissaoWecare = +resultado.comissao_pct;
+      }
+      if (hasVal(resultado.valor_setup_cobrado) && +resultado.valor_setup_cobrado > 0 && !im.valorSetupCobrado) {
+        im.valorSetupCobrado = +resultado.valor_setup_cobrado;
       }
       // definições/extras (Seguro EasyCover, Kit Amenities, Internet Claro, EcoHost, Fechadura Eletrônica)
       const defs = resultado.definicoes || {};
