@@ -967,7 +967,7 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
 Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
 Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
 Estrutura esperada:
-{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","comissao_pct":0,"comissao_base":"","definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
 Regras:
 - Use 0, "" ou false para campos não encontrados. NÃO invente informações.
 - Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
@@ -976,6 +976,7 @@ Regras:
 - q83: nome e telefone do zelador/portaria
 - q86: rede e senha do Wi-Fi
 - short_stay_permitido: "sim" se a convenção do condomínio permite aluguel por temporada/short stay, "nao" se proibido, "" se não mencionado
+- comissao_pct / comissao_base: percentual de comissão da WeCare e sua base de cálculo, EXATAMENTE como estiver no contrato. comissao_base = "bruta" se o contrato disser "receita bruta" ou "faturamento bruto"; "liquida" se disser "receita líquida" (após taxas de plataforma/impostos). Leia com atenção — não assuma, use a palavra literal do contrato.
 - definicoes: são serviços/produtos contratados da WeCare mencionados nos documentos (ex: "seguro EasyCover obrigatório" → seguroEasyCover:true; fechadura eletrônica instalada → fechaduraEletronica:true). NÃO são restrições.
 - restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão ou taxas — isso são produtos/condições comerciais, não restrições, e já têm campo próprio (definicoes).`;
 
@@ -1048,6 +1049,14 @@ Regras:
       }
       if (resultado.short_stay_permitido && !im.shortStayPermitido) im.shortStayPermitido = resultado.short_stay_permitido;
       if (resultado.restricoes && !im.restricoes) im.restricoes = resultado.restricoes;
+      // comissão: comissaoWecare (default 20) e comissaoBase (default 'liquida') também nascem com
+      // valor não-vazio — mesma exceção da 1ª análise usada pra quartos/salas/banheiros.
+      if (resultado.comissao_base === 'bruta' || resultado.comissao_base === 'liquida') {
+        if (primeiraAnalise) im.comissaoBase = resultado.comissao_base;
+      }
+      if (hasVal(resultado.comissao_pct) && +resultado.comissao_pct > 0) {
+        if (primeiraAnalise) im.comissaoWecare = +resultado.comissao_pct;
+      }
       // definições/extras (Seguro EasyCover, Kit Amenities, Internet Claro, EcoHost, Fechadura Eletrônica)
       const defs = resultado.definicoes || {};
       const defCampos = ['seguroEasyCover','kitAmenities','internetClaro','ecohost','fechaduraEletronica'];
