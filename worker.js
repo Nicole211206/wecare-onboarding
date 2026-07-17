@@ -1057,6 +1057,7 @@ Regras:
 
       im.claudeAnalisadoEm  = new Date().toISOString();
       im.arquivosAnalisados = files.length;
+      state.lastSaved       = Date.now(); // garante que o pull no app detecte mudança
 
       await putState(env, state);
       return json({ ok: true, arquivos: files.length, resultado });
