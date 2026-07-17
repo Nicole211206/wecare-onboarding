@@ -38,6 +38,40 @@ function _migrarGastosSetup(){
   });
   if(mudou)saveAll();
 }
+// Migração: ITENS_COMPRAS é dado persistido (localStorage/KV) — uma vez salvo, o array do código
+// nunca mais é usado numa conta existente (loadAll sempre sobrescreve com o que já está salvo).
+// Por isso mudanças no catálogo (novos campos, itens novos, renomeações) precisam ser aplicadas aqui
+// em cima do array já carregado, SEM mexer na posição dos itens existentes — im.compras é indexado
+// pelo índice do array, então reordenar/remover um item no meio confundiria os dados já salvos.
+function _migrarCatalogoItens(){
+  let mudou=false;
+  const detector=ITENS_COMPRAS.find(i=>i.nome==='Detector de Fumaça');
+  if(detector){
+    detector.nome='Detector de Fumaça e Monóxido de Carbono';
+    detector.qtdRule='1-andar';
+    mudou=true;
+  }
+  const MODALIDADES_POR_ITEM={
+    'Jogo de Cama Basic Percalle':['comprado'],
+    'Cobertor Aspen II':['comprado'],
+    'Edredom Premier Hotel':['comprado','flashee'],
+    'Capa p/ Edredom Hotel 180 fios':['comprado','flashee'],
+    'Fronha Basic Percalle c/ Abas':['comprado'],
+    'Toalha de Banho Lory Hotel':['comprado'],
+    'Toalha de Rosto Lory Hotel':['comprado'],
+  };
+  ITENS_COMPRAS.forEach(item=>{
+    if(MODALIDADES_POR_ITEM[item.nome]&&!item.modalidades){
+      item.modalidades=MODALIDADES_POR_ITEM[item.nome];
+      mudou=true;
+    }
+  });
+  if(!ITENS_COMPRAS.some(i=>i.nome==='Vassoura de Pelos')){
+    ITENS_COMPRAS.push({cat:'Limpeza',nome:'Vassoura de Pelos',tipoPreco:'fixo',preco:50,enxovalDep:false,qtdRule:'1-unidade',modalidades:['flashee']});
+    mudou=true;
+  }
+  if(mudou)saveAll();
+}
 
 // ═══════════════════ ITENS DE COMPRAS ═══════════════════
 let ITENS_COMPRAS=[
@@ -384,6 +418,7 @@ function loadAll(){
   v=g('wc_vistoria_campos');if(Array.isArray(v))VISTORIA_CAMPOS=v;
   _migrarFasesAntigas();
   _migrarGastosSetup();
+  _migrarCatalogoItens();
 }
 
 let _autoSaveTimer=null;
@@ -707,6 +742,12 @@ function _atualizarHeaderDetalhe(im){
   }
 }
 function showTab(aba,btn){
+  // Descarrega qualquer edição pendente da aba anterior ANTES de trocar — sem isso, uma edição
+  // seguida de troca rápida de aba se perdia (o autosave debounced de 800ms rodava depois, já
+  // com _abaAtiva apontando pra aba nova, e colhia os campos errados).
+  if(_autoSaveTimer){clearTimeout(_autoSaveTimer);_autoSaveTimer=null;}
+  const imAtual=getImovel(_imovelAtivoId);
+  if(imAtual){_coletarDadosAba(_abaAtiva,imAtual);saveAll();}
   _abaAtiva=aba;
   document.querySelectorAll('#detalhe-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -1295,19 +1336,10 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Política de Cancelamento</label>
       <select id="ct-politica-cancelamento" class="input">
         <option value="">Selecione...</option>
-        <optgroup label="Estadias Curtas">
-          <option value="Flexível"${im.politicaCancelamento==='Flexível'?' selected':''}>Flexível — reembolso completo até 24h antes do check-in</option>
-          <option value="Moderada"${im.politicaCancelamento==='Moderada'?' selected':''}>Moderada — reembolso completo até 5 dias antes do check-in</option>
-          <option value="Limitada"${im.politicaCancelamento==='Limitada'?' selected':''}>Limitada — 100% até 14 dias; 50% entre 7-14 dias; não reembolsável depois</option>
-          <option value="Restrita"${im.politicaCancelamento==='Restrita'?' selected':''}>Restrita — 100% até 30 dias; 50% entre 7-30 dias; não reembolsável depois</option>
-        </optgroup>
-        <optgroup label="Estadias ≥28 noites">
-          <option value="Firme"${im.politicaCancelamento==='Firme'?' selected':''}>Firme — primeiro mês não reembolsável</option>
-          <option value="Rigorosa"${im.politicaCancelamento==='Rigorosa'?' selected':''}>Rigorosa — primeiro mês não reembolsável + 50% do restante se cancelado durante a estadia</option>
-        </optgroup>
-        <optgroup label="Add-ons opcionais">
-          <option value="Não reembolsável"${im.politicaCancelamento==='Não reembolsável'?' selected':''}>Não reembolsável — só incluir desconto (ex. 10%)</option>
-        </optgroup>
+        <option value="Flexível"${im.politicaCancelamento==='Flexível'?' selected':''}>Flexível — reembolso completo até 24h antes do check-in</option>
+        <option value="Moderada"${im.politicaCancelamento==='Moderada'?' selected':''}>Moderada — reembolso completo até 5 dias antes do check-in</option>
+        <option value="Limitada"${im.politicaCancelamento==='Limitada'?' selected':''}>Limitada — 100% até 14 dias; 50% entre 7-14 dias; não reembolsável depois</option>
+        <option value="Restrita"${im.politicaCancelamento==='Restrita'?' selected':''}>Restrita — 100% até 30 dias; 50% entre 7-30 dias; não reembolsável depois</option>
       </select>
     </div>
   </div>
@@ -2784,6 +2816,7 @@ async function gerarPDFOutrasInformacoes(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       ${campo('Nome',im.proprietarioNome)}
       ${campo('Telefone',im.proprietarioTel)}
+      ${campo('E-mail',im.proprietarioEmail)}
     </div>
   `)}
 
@@ -2805,6 +2838,8 @@ async function gerarPDFOutrasInformacoes(){
       ${campo('Diária base',im.valorBaseNoite?fmtMoeda(im.valorBaseNoite):'',true)}
       ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
       ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
+      ${campo('Caução',im.valorCaucao?fmtMoeda(im.valorCaucao):'',true)}
+      ${campo('Política de cancelamento',im.politicaCancelamento)}
       ${campo('Comissão WeCare',im.comissaoWecare?(im.comissaoWecare+'% '+(im.comissaoBase==='bruta'?'(bruta)':'(líquida)')):'',true)}
     </div>
   `)}

@@ -369,14 +369,15 @@ Regras:
         kpiPorMes[mes].mediaOnboardingDias = +(kpiPorMes[mes].somaDias / kpiPorMes[mes].count).toFixed(1);
         delete kpiPorMes[mes].somaDias;
       }
-      // Soma de "valor de setup cobrado" (previsto) vs "fotos+limpeza+vistoria" (gasto) por mês, só para imóveis marcados "colocar o Setup na Claire"
+      // Soma de "valor de setup cobrado" (previsto) vs "fotos+limpeza+vistoria+extras marcados como setup" (gasto) por mês, só para imóveis marcados "colocar o Setup na Claire"
       const setupPorMes = {};
       todosImoveis
         .filter(im => im.incluirSetupClaire === true && im.mesReferenciaKpi)
         .forEach(im => {
           const mes = im.mesReferenciaKpi;
           const previsto = +im.valorSetupCobrado || 0;
-          const gasto = (+im.ops?.fotos?.custo || 0) + (+im.ops?.limpeza?.custo || 0) + (+im.ops?.vistoria?.custo || 0);
+          const gastosExtras = Array.isArray(im.eventosExtras) ? im.eventosExtras.filter(e => e.gastoSetup).reduce((s, e) => s + (+e.custo || 0), 0) : 0;
+          const gasto = (+im.ops?.fotos?.custo || 0) + (+im.ops?.limpeza?.custo || 0) + (+im.ops?.vistoria?.custo || 0) + gastosExtras;
           if (!setupPorMes[mes]) setupPorMes[mes] = { previsto: 0, gasto: 0, count: 0 };
           setupPorMes[mes].previsto += previsto;
           setupPorMes[mes].gasto += gasto;
