@@ -967,16 +967,17 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
 Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
 Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
 Estrutura esperada:
-{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
 Regras:
-- Use 0 ou "" para campos não encontrados. NÃO invente informações.
+- Use 0, "" ou false para campos não encontrados. NÃO invente informações.
 - Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
-- q9: endereço completo do imóvel
+- endereco / q9: monte o endereço MAIS COMPLETO possível (rua, número, complemento/apto, bairro, cidade, estado, CEP) do imóvel indicado pelo nome informado no contexto. Se a pasta contiver documentos de um portfólio com VÁRIOS imóveis do mesmo proprietário, use APENAS o endereço que corresponda claramente a este imóvel específico — se não for possível identificar com segurança qual endereço é deste imóvel, deixe em branco em vez de arriscar um endereço de outra unidade.
 - q81: como hóspedes acessam (portaria, fechadura, etc.) + senha da porta + vaga
 - q83: nome e telefone do zelador/portaria
 - q86: rede e senha do Wi-Fi
 - short_stay_permitido: "sim" se a convenção do condomínio permite aluguel por temporada/short stay, "nao" se proibido, "" se não mencionado
-- restricoes: qualquer restrição relevante encontrada (proibição de animais, festas, cláusulas especiais, adendos ao contrato, etc.)`;
+- definicoes: são serviços/produtos contratados da WeCare mencionados nos documentos (ex: "seguro EasyCover obrigatório" → seguroEasyCover:true; fechadura eletrônica instalada → fechaduraEletronica:true). NÃO são restrições.
+- restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão ou taxas — isso são produtos/condições comerciais, não restrições, e já têm campo próprio (definicoes).`;
 
       const userContent = [];
       if (textoContexto.trim()) {
@@ -988,7 +989,7 @@ Regras:
       if (!userContent.length) {
         return json({ ok: false, error: 'Nenhum conteúdo analisável. Arquivos: ' + (filesSeen.length ? filesSeen.join(', ') : 'nenhum') + ' | Conta: ' + (aboutMe.user?.emailAddress||'?') + ' | Pasta: ' + JSON.stringify(folderMeta), filesFound: filesSeen }, 400);
       }
-      userContent.push({ type: 'text', text: 'Extraia os dados do imóvel e retorne o JSON.' });
+      userContent.push({ type: 'text', text: `Nome deste imóvel no sistema: "${im.nome || ''}". Extraia os dados deste imóvel específico e retorne o JSON.` });
 
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -1047,6 +1048,16 @@ Regras:
       }
       if (resultado.short_stay_permitido && !im.shortStayPermitido) im.shortStayPermitido = resultado.short_stay_permitido;
       if (resultado.restricoes && !im.restricoes) im.restricoes = resultado.restricoes;
+      // definições/extras (Seguro EasyCover, Kit Amenities, Internet Claro, EcoHost, Fechadura Eletrônica)
+      const defs = resultado.definicoes || {};
+      const defCampos = ['seguroEasyCover','kitAmenities','internetClaro','ecohost','fechaduraEletronica'];
+      if (!im.defOperacionais) im.defOperacionais = {};
+      for (const dk of defCampos) {
+        if (defs[dk] === true && !im[dk]) {
+          im[dk] = true;
+          im.defOperacionais[dk] = true;
+        }
+      }
       // formRascunho
       if (!im.formRascunho) im.formRascunho = {};
       const conf = im.formConfirmados || {};
