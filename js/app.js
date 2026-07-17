@@ -985,7 +985,9 @@ function renderAbaCaptacao(im){
     ?`<div class="alert-info" style="margin-top:8px;"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>🤖 Analisando...</div>`
     :im.claudeAnalisadoEm
       ?`<div class="alert-success" style="margin-top:8px;display:flex;align-items:center;gap:8px;"><span><i class="fa-solid fa-check-circle"></i> ✅ Analisado em <strong>${fmtDate(im.claudeAnalisadoEm)}</strong> · ${im.arquivosAnalisados||0} arquivo(s)</span><button class="btn btn-sm btn-outline" style="margin-left:auto;" onclick="triggerDriveAnalysis(getImovel('${im.id}'))">🔄 Reanalisar</button></div>`
-      :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
+      :temLink
+        ?`<div class="hint" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span><i class="fa-solid fa-info-circle"></i> Ainda não analisado.</span><button class="btn btn-sm btn-outline" onclick="triggerDriveAnalysis(getImovel('${im.id}'))"><i class="fa-solid fa-robot"></i> Analisar agora</button></div>`
+        :`<div class="hint" style="margin-top:8px;"><i class="fa-solid fa-info-circle"></i> Salve o link para iniciar análise automática com IA</div>`
   }
 
   ${isAdmin()?(()=>{

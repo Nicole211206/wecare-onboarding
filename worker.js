@@ -1020,14 +1020,22 @@ Regras:
       }
 
       // Aplicar resultado ao imóvel (só preenche campos vazios)
+      // Exceção: quartos/salas/banheirosCompletos nascem com valor padrão 1 (não vazio),
+      // então na primeira análise (antes de qualquer confirmação manual) eles também são sobrescritos.
+      const primeiraAnalise = !im.claudeAnalisadoEm;
       const campos = ['proprietarioNome','proprietarioTel','endereco','observacoes','acesso','senhaPorta','vaga','zeladorNome','zeladorTel'];
       const mapaDir = { proprietarioNome:'proprietarioNome', proprietarioTel:'proprietarioTel', endereco:'endereco', observacoes:'observacoes', acesso:'acesso', senha_porta:'senhaPorta', vaga:'vaga', zelador_nome:'zeladorNome', zelador_tel:'zeladorTel' };
       for (const [rk, ik] of Object.entries(mapaDir)) {
         if (resultado[rk] && !im[ik]) im[ik] = resultado[rk];
       }
       const numCampos = ['quartos','salas','banheirosCompletos','banheirosLavabo','cozinha','lavanderia','areaExterna','varanda'];
+      const numCamposComDefault = ['quartos','salas','banheirosCompletos'];
       for (const k of numCampos) {
-        if (hasVal(resultado[k]) && !im[k]) im[k] = +resultado[k];
+        if (!hasVal(resultado[k])) continue;
+        const comDefault = numCamposComDefault.includes(k);
+        // Campos com default 1: só sobrescreve na 1ª análise e se a IA de fato encontrou um valor (>0).
+        const podeSobrescrever = comDefault ? (primeiraAnalise && +resultado[k] > 0) : !im[k];
+        if (podeSobrescrever) im[k] = +resultado[k];
       }
       if (Array.isArray(resultado.camas) && resultado.camas.length && (!Array.isArray(im.camas) || !im.camas.length)) {
         im.camas = resultado.camas;
