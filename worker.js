@@ -967,7 +967,7 @@ Retorne APENAS o JSON, sem markdown, sem texto extra.`;
 Analise os documentos e imagens fornecidos (pasta do Google Drive do imóvel) e extraia as informações do imóvel.
 Responda APENAS com um objeto JSON válido, sem markdown, sem texto antes ou depois.
 Estrutura esperada:
-{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","proprietarioEmail":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","comissao_pct":0,"comissao_base":"","valor_setup_cobrado":0,"definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
+{"quartos":0,"salas":0,"banheirosCompletos":0,"banheirosLavabo":0,"cozinha":0,"lavanderia":0,"areaExterna":0,"varanda":0,"camas":[{"tipo":"Queen","qtd":1}],"proprietarioNome":"","proprietarioTel":"","proprietarioEmail":"","endereco":"","wifi_rede":"","wifi_senha":"","acesso":"","senha_porta":"","vaga":"","zelador_nome":"","zelador_tel":"","observacoes":"","short_stay_permitido":"","restricoes":"","comissao_pct":0,"comissao_base":"","valor_setup_cobrado":0,"fonte_valor_setup_cobrado":"","definicoes":{"seguroEasyCover":false,"kitAmenities":false,"internetClaro":false,"ecohost":false,"fechaduraEletronica":false},"formRascunho":{"q9":"","q81":"","q83":"","q86":""}}
 Regras:
 - Use 0, "" ou false para campos não encontrados. NÃO invente informações.
 - Tipos de cama aceitos: Solteiro, Casal, Queen, King, Beliche, Sofá-cama Solteiro, Sofá-cama Casal.
@@ -978,7 +978,8 @@ Regras:
 - q86: rede e senha do Wi-Fi
 - short_stay_permitido: "sim" se a convenção do condomínio permite aluguel por temporada/short stay, "nao" se proibido, "" se não mencionado
 - comissao_pct / comissao_base: percentual de comissão da WeCare e sua base de cálculo, EXATAMENTE como estiver no contrato. comissao_base = "bruta" se o contrato disser "receita bruta" ou "faturamento bruto"; "liquida" se disser "receita líquida" (após taxas de plataforma/impostos). Leia com atenção — não assuma, use a palavra literal do contrato.
-- valor_setup_cobrado: valor em reais da taxa de setup/start-up cobrada do proprietário mencionada no contrato (ex: "taxa de start-up R$ 1.900" → 1900). Não confundir com a comissão recorrente.
+- valor_setup_cobrado: valor em reais da taxa de setup/start-up cobrada do proprietário, LIDO LITERALMENTE do contrato (é um valor único de implantação, não a comissão recorrente mensal). Confira o número com atenção antes de responder — não arredonde nem aproxime. Se houver mais de um documento com valores diferentes (ex: minuta vs. contrato assinado), use o do contrato assinado/mais recente.
+- fonte_valor_setup_cobrado: copie e cole a frase EXATA (verbatim) do documento onde você leu o valor de valor_setup_cobrado, incluindo o nome do arquivo se identificável.
 - definicoes: são serviços/produtos contratados da WeCare mencionados nos documentos (ex: "seguro EasyCover obrigatório" → seguroEasyCover:true; fechadura eletrônica instalada → fechaduraEletronica:true). NÃO são restrições.
 - restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão, taxa de setup ou pagadoria — isso são produtos/condições comerciais, não restrições, e já têm campo próprio.`;
 
