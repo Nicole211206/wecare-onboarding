@@ -1089,7 +1089,8 @@ function renderAbaCaptacao(im){
     const custoFotosKpi=+im.ops?.fotos?.custo||0;
     const custoLimpezaKpi=+im.ops?.limpeza?.custo||0;
     const custoVistoriaKpi=+im.ops?.vistoria?.custo||0;
-    const gastoSetupKpi=custoFotosKpi+custoLimpezaKpi+custoVistoriaKpi;
+    const custosExtrasKpi=(im.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
+    const gastoSetupKpi=custoFotosKpi+custoLimpezaKpi+custoVistoriaKpi+custosExtrasKpi;
     const valorSetupCobradoKpi=im.valorSetupCobrado||0;
     return`
   <details style="margin-top:16px;">
@@ -1104,7 +1105,7 @@ function renderAbaCaptacao(im){
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-top:8px;">
         <input type="checkbox" id="cap-kpi-setup" ${im.incluirSetupClaire?'checked':''}> Colocar o Setup na Claire? <span class="text-muted" style="font-weight:400;">(Redução de Custos)</span>
       </label>
-      <div class="hint" style="margin:2px 0 8px;">Manda pra Claire: valor cobrado do Setup (${fmtMoeda(valorSetupCobradoKpi)}) como previsto, e Fotos+Limpeza+Vistoria (${fmtMoeda(gastoSetupKpi)}) como gasto. Preencha esses valores na aba Contrato antes de marcar.</div>
+      <div class="hint" style="margin:2px 0 8px;">Manda pra Claire: valor cobrado do Setup (${fmtMoeda(valorSetupCobradoKpi)}) como previsto, e Fotos+Limpeza+Vistoria+Extras de Setup (${fmtMoeda(gastoSetupKpi)}) como gasto. Preencha esses valores na aba Contrato antes de marcar.</div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;">
         Mês de referência (vale pros dois acima):
         <input type="month" id="cap-kpi-mes" class="input" style="width:150px;padding:4px 8px;font-size:12.5px;" value="${esc(im.mesReferenciaKpi||'')}">
