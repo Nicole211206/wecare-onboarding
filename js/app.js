@@ -72,6 +72,11 @@ function _migrarCatalogoItens(){
     ITENS_COMPRAS.push({cat:'Limpeza',nome:'Vassoura de Pelos',tipoPreco:'fixo',preco:50,enxovalDep:false,qtdRule:'1-unidade',modalidades:['flashee']});
     mudou=true;
   }
+  const protetorColchao=ITENS_COMPRAS.find(i=>i.nome==='Protetor de Colchão');
+  if(protetorColchao&&!protetorColchao.semSofaCama){
+    protetorColchao.semSofaCama=true;
+    mudou=true;
+  }
   if(mudou)saveAll();
 }
 
@@ -82,7 +87,7 @@ let ITENS_COMPRAS=[
   {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado']},
   {cat:'Cama',nome:'Edredom Premier Hotel',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado','flashee']},
   {cat:'Cama',nome:'Capa p/ Edredom Hotel 180 fios',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado','flashee']},
-  {cat:'Cama',nome:'Protetor de Colchão',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388'},
+  {cat:'Cama',nome:'Protetor de Colchão',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388',semSofaCama:true},
   // CAMA fixos
   {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
   {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',preco:285,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
@@ -529,9 +534,12 @@ function aplicarPermissoes(){
 
 // ═══════════════════ KANBAN ═══════════════════
 function renderKanban(){
-  const ativos=imoveis.filter(im=>im.status!=='perdido'&&im.status!=='ativo');
-  const ativos2=imoveis.filter(im=>im.status==='ativo');
+  const busca=(document.getElementById('kanban-busca')?.value||'').trim().toLowerCase();
+  const filtrarBusca=arr=>busca?arr.filter(im=>(im.nome||'').toLowerCase().includes(busca)):arr;
+  const ativos=filtrarBusca(imoveis.filter(im=>im.status!=='perdido'&&im.status!=='ativo'));
+  const ativos2=filtrarBusca(imoveis.filter(im=>im.status==='ativo'));
   const perdidos=imoveis.filter(im=>im.status==='perdido');
+  const vazioMsg=busca?'Nenhum resultado':'Nenhum imóvel';
   const wrap=document.getElementById('kanban-wrap');
   wrap.innerHTML=FASES.map(fase=>{
     const cards=ativos.filter(im=>im.status===fase);
@@ -541,7 +549,7 @@ function renderKanban(){
         <span class="kanban-col-count">${cards.length}</span>
       </div>
       <div class="kanban-cards">
-        ${cards.map(im=>renderCard(im)).join('')||'<div class="empty-state" style="padding:16px 8px;font-size:11px;">Nenhum imóvel</div>'}
+        ${cards.map(im=>renderCard(im)).join('')||`<div class="empty-state" style="padding:16px 8px;font-size:11px;">${vazioMsg}</div>`}
       </div>
     </div>`;
   }).join('')+
@@ -550,7 +558,7 @@ function renderKanban(){
       <span class="kanban-col-title" style="color:var(--sage)">✅ Ativo</span>
       <span class="kanban-col-count">${ativos2.length}</span>
     </div>
-    <div class="kanban-cards">${ativos2.map(im=>renderCard(im)).join('')||'<div class="empty-state" style="padding:16px 8px;font-size:11px;">Nenhum imóvel</div>'}</div>
+    <div class="kanban-cards">${ativos2.map(im=>renderCard(im)).join('')||`<div class="empty-state" style="padding:16px 8px;font-size:11px;">${vazioMsg}</div>`}</div>
   </div>`;
 
   // Perdidos
@@ -1763,9 +1771,10 @@ function renderAbaCompras(im){
         const [n,base]=(item.qtdRule||'1-colchao').split('-');
         const q=parseInt(n)||1;
         let qtdNec=0;
+        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
         // beliche conta como 2 colchões/leitos
-        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -2180,8 +2189,9 @@ function _rowsComprasFalta(im){
       Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
         const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
         let qtdNec=0;
-        if(base==='colchao')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasTipo.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
+        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
