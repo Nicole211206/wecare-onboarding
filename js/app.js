@@ -1768,10 +1768,11 @@ function renderAbaCompras(im){
         porTipo[t].push(c);
       });
       Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
+        if(item.semSofaCama&&!camasParaItem.length)return; // grupo só tem sofá-cama, item não se aplica
         const [n,base]=(item.qtdRule||'1-colchao').split('-');
         const q=parseInt(n)||1;
         let qtdNec=0;
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
         // beliche conta como 2 colchões/leitos
         if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
         else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
