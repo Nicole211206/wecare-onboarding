@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="css/styles.css?v=5">
+  <link rel="stylesheet" href="css/styles.css?v=6">
   <script>
     window.WC_SYNC = {
       url:   'https://wecare-onboarding.nicole-0e7.workers.dev',
@@ -62,6 +62,9 @@
     </button>
     <button class="nav-item" onclick="showPanel('fornecedores',this)">
       <i class="fa-solid fa-address-book"></i> Fornecedores
+    </button>
+    <button class="nav-item" onclick="showPanel('informacoes',this)">
+      <i class="fa-solid fa-circle-info"></i> Informações
     </button>
     <button class="nav-item" onclick="showPanel('vistoria',this)">
       <i class="fa-solid fa-clipboard-list"></i> Vistoria
@@ -185,6 +188,11 @@
     <!-- ── FORNECEDORES ── -->
     <div class="panel" id="panel-fornecedores">
       <div id="fornecedores-wrap"></div>
+    </div>
+
+    <!-- ── INFORMAÇÕES ── -->
+    <div class="panel" id="panel-informacoes">
+      <div id="informacoes-wrap"></div>
     </div>
 
     <!-- ── VISTORIA ── -->
@@ -388,6 +396,44 @@
   </div>
 </div>
 
+<!-- Modal: Manual de Fornecedores -->
+<div class="modal-overlay" id="modal-manual-fornecedores">
+  <div class="modal modal-lg">
+    <div style="display:flex;align-items:center;gap:8px;padding:20px 24px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;">Manual — Como abordar prestadores</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-manual-fornecedores')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:20px 24px;">
+      <div class="form-group">
+        <label class="form-label">Como abordar, quais informações passar e quais receber</label>
+        <textarea class="form-textarea" id="manual-forn-texto" style="min-height:320px;" placeholder="Ex: ao contatar um novo prestador, apresentar a WeCare, explicar volume de imóveis, perguntar disponibilidade, valores, forma de pagamento..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn" onclick="closeModal('modal-manual-fornecedores')">Cancelar</button>
+        <button class="btn btn-rose" onclick="salvarManualFornecedores()">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Template de Mensagem -->
+<div class="modal-overlay" id="modal-template-msg">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;" id="modal-template-msg-title">Novo Template</div>
+      <button class="modal-close" style="margin-left:auto;" onclick="closeModal('modal-template-msg')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="form-group"><label class="form-label">Nome *</label>
+      <input class="form-input" id="tpl-nome" placeholder="Ex: Boas-vindas ao proprietário"></div>
+    <div class="form-group"><label class="form-label">Texto *</label>
+      <textarea class="form-textarea" id="tpl-texto" style="min-height:180px;" placeholder="Digite o texto do template..."></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeModal('modal-template-msg')">Cancelar</button>
+      <button class="btn btn-rose" onclick="salvarTemplateMsg()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Membro -->
 <div class="modal-overlay" id="modal-membro">
   <div class="modal">
@@ -514,6 +560,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=37"></script>
+<script src="js/app.js?v=38"></script>
 </body>
 </html>

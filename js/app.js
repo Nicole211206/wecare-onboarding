@@ -2,6 +2,8 @@
 let imoveis=[], membros=[], usuarios=[], prestadores=[];
 let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
+let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
+let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -245,7 +247,7 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
@@ -255,6 +257,7 @@ function showPanel(id,btn){
   if(id==='calendario')renderCalendario();
   if(id==='config')renderConfig();
   if(id==='usuarios')renderUsuarios();
+  if(id==='informacoes')renderInformacoes();
 }
 
 // ─── Componente numérico com +/- ───
@@ -384,7 +387,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -398,6 +401,10 @@ function saveAll(){
   localStorage.setItem('wc_prestadores',JSON.stringify(prestadores));
   localStorage.setItem('wc_def_operacionais',JSON.stringify(DEF_OPERACIONAIS));
   localStorage.setItem('wc_vistoria_campos',JSON.stringify(VISTORIA_CAMPOS));
+  localStorage.setItem('wc_templates_msg',JSON.stringify(templatesMsg));
+  localStorage.setItem('wc_processo_texto',JSON.stringify(processoTexto));
+  localStorage.setItem('wc_anotacoes_texto',JSON.stringify(anotacoesTexto));
+  localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -416,6 +423,10 @@ function loadAll(){
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
   v=g('wc_vistoria_campos');if(Array.isArray(v))VISTORIA_CAMPOS=v;
+  v=g('wc_templates_msg');if(Array.isArray(v))templatesMsg=v;
+  v=g('wc_processo_texto');if(typeof v==='string')processoTexto=v;
+  v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
+  v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -3373,7 +3384,10 @@ function renderFornecedores(){
       <div class="section-title" style="margin-bottom:4px;">Fornecedores</div>
       <div class="text-muted">Banco de prestadores de serviço WeCare (${prestadores.length} cadastrados)</div>
     </div>
-    <button class="btn btn-rose btn-sm" onclick="abrirNovoPrestador()"><i class="fa-solid fa-plus"></i> Novo Fornecedor</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" onclick="abrirManualFornecedores()"><i class="fa-solid fa-book"></i> Manual</button>
+      <button class="btn btn-rose btn-sm" onclick="abrirNovoPrestador()"><i class="fa-solid fa-plus"></i> Novo Fornecedor</button>
+    </div>
   </div>
   <div class="card">
     <div class="card-header">
@@ -3411,6 +3425,130 @@ function renderFornecedores(){
       </div>`}
     </div>
   </div>`;
+}
+function abrirManualFornecedores(){
+  document.getElementById('manual-forn-texto').value=manualFornecedores;
+  document.getElementById('modal-manual-fornecedores').classList.add('open');
+}
+function salvarManualFornecedores(){
+  manualFornecedores=document.getElementById('manual-forn-texto').value;
+  saveAll();
+  closeModal('modal-manual-fornecedores');
+  showToast('Manual salvo.');
+}
+
+// ═══════════════════ INFORMAÇÕES ═══════════════════
+function renderInformacoes(){
+  const wrap=document.getElementById('informacoes-wrap');
+  if(!wrap)return;
+  wrap.innerHTML=`
+  <div class="tabs-bar" style="padding:0;margin-bottom:16px;">
+    <button class="tab-btn${_infoTabAtiva==='mensagens'?' active':''}" onclick="showInfoTab('mensagens',this)"><i class="fa-solid fa-comment"></i> Mensagens</button>
+    <button class="tab-btn${_infoTabAtiva==='processo'?' active':''}" onclick="showInfoTab('processo',this)"><i class="fa-solid fa-diagram-project"></i> Processo</button>
+    <button class="tab-btn${_infoTabAtiva==='anotacoes'?' active':''}" onclick="showInfoTab('anotacoes',this)"><i class="fa-solid fa-note-sticky"></i> Anotações</button>
+  </div>
+  <div id="info-tab-content"></div>`;
+  renderInfoTabContent();
+}
+function showInfoTab(tab,btn){
+  _infoTabAtiva=tab;
+  document.querySelectorAll('#informacoes-wrap .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  renderInfoTabContent();
+}
+function renderInfoTabContent(){
+  const c=document.getElementById('info-tab-content');
+  if(!c)return;
+  if(_infoTabAtiva==='mensagens')c.innerHTML=renderInfoMensagensHTML();
+  else if(_infoTabAtiva==='processo')c.innerHTML=editorRicoHTML('processo',processoTexto);
+  else if(_infoTabAtiva==='anotacoes')c.innerHTML=editorRicoHTML('anotacoes',anotacoesTexto);
+}
+
+// ── Mensagens (templates) ──
+function renderInfoMensagensHTML(){
+  return `
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+    <button class="btn btn-rose btn-sm" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Novo Template</button>
+  </div>
+  ${templatesMsg.length?templatesMsg.map((t,i)=>`
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-header">
+        <span class="card-title">${esc(t.nome)}</span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn btn-xs" onclick="copiarTemplateMsg(${i})" title="Copiar texto"><i class="fa-solid fa-copy"></i></button>
+          <button class="btn btn-xs btn-outline" onclick="editarTemplateMsg(${i})"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-xs btn-danger" onclick="apagarTemplateMsg(${i})"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <div class="card-body" style="white-space:pre-wrap;font-size:13px;color:var(--text-2);">${esc(t.texto)}</div>
+    </div>
+  `).join(''):`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
+    Nenhum template cadastrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Adicionar primeiro template</button>
+  </div>`}`;
+}
+function abrirNovoTemplateMsg(){
+  _editTemplateMsgIdx=null;
+  document.getElementById('modal-template-msg-title').textContent='Novo Template';
+  document.getElementById('tpl-nome').value='';
+  document.getElementById('tpl-texto').value='';
+  document.getElementById('modal-template-msg').classList.add('open');
+}
+function editarTemplateMsg(idx){
+  _editTemplateMsgIdx=idx;
+  const t=templatesMsg[idx];
+  document.getElementById('modal-template-msg-title').textContent='Editar Template';
+  document.getElementById('tpl-nome').value=t.nome;
+  document.getElementById('tpl-texto').value=t.texto;
+  document.getElementById('modal-template-msg').classList.add('open');
+}
+function salvarTemplateMsg(){
+  const nome=document.getElementById('tpl-nome').value.trim();
+  const texto=document.getElementById('tpl-texto').value.trim();
+  if(!nome||!texto){showToast('Preencha nome e texto do template.','erro');return;}
+  if(_editTemplateMsgIdx!=null)templatesMsg[_editTemplateMsgIdx]={nome,texto};
+  else templatesMsg.push({nome,texto});
+  saveAll();
+  closeModal('modal-template-msg');
+  renderInfoTabContent();
+  showToast('Template salvo.');
+}
+function apagarTemplateMsg(idx){
+  if(!confirm('Apagar este template?'))return;
+  templatesMsg.splice(idx,1);
+  saveAll();
+  renderInfoTabContent();
+}
+function copiarTemplateMsg(idx){
+  navigator.clipboard.writeText(templatesMsg[idx].texto).then(()=>showToast('Texto copiado.'));
+}
+
+// ── Editor de texto rico (Processo / Anotações) ──
+function editorRicoHTML(campo,valorHtml){
+  return `
+  <div class="card">
+    <div class="rich-editor-toolbar">
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','bold')" title="Negrito"><i class="fa-solid fa-bold"></i></button>
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','italic')" title="Itálico"><i class="fa-solid fa-italic"></i></button>
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','H3')" title="Título"><i class="fa-solid fa-heading"></i></button>
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertUnorderedList')" title="Lista"><i class="fa-solid fa-list-ul"></i></button>
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertOrderedList')" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
+      <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','P')" title="Parágrafo normal">¶</button>
+    </div>
+    <div class="rich-editor-body" id="rich-${campo}" contenteditable="true" oninput="richSalvar('${campo}')">${valorHtml||''}</div>
+  </div>`;
+}
+function richExec(campo,cmd,val){
+  document.getElementById('rich-'+campo).focus();
+  document.execCommand(cmd,false,val||null);
+  richSalvar(campo);
+}
+let _richSalvarTimer=null;
+function richSalvar(campo){
+  const html=document.getElementById('rich-'+campo).innerHTML;
+  if(campo==='processo')processoTexto=html;
+  else if(campo==='anotacoes')anotacoesTexto=html;
+  clearTimeout(_richSalvarTimer);
+  _richSalvarTimer=setTimeout(saveAll,600);
 }
 
 // ═══════════════════ CONFIG ═══════════════════
