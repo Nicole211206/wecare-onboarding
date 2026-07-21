@@ -2883,8 +2883,10 @@ async function gerarPDFOutrasInformacoes(){
       ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
       ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
       ${campo('Caução',im.valorCaucao?fmtMoeda(im.valorCaucao):'',true)}
+      ${campo('Mínimo de noites',im.minimoNoites)}
       ${campo('Política de cancelamento',im.politicaCancelamento)}
       ${campo('Comissão WeCare',im.comissaoWecare?(im.comissaoWecare+'% '+(im.comissaoBase==='bruta'?'(bruta)':'(líquida)')):'',true)}
+      ${campo('Expectativa de faturamento mensal',im.expectativaFaturamentoMensal?fmtMoeda(im.expectativaFaturamentoMensal):'',true)}
     </div>
   `)}
 
