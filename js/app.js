@@ -79,6 +79,11 @@ function _migrarCatalogoItens(){
     protetorColchao.semSofaCama=true;
     mudou=true;
   }
+  const ESTOQUE_ENXOVAL_ITENS=['Fronha Basic Percalle c/ Abas','Travesseiro Sanomed','Travesseiro Toque de Pluma','Protetor de Travesseiro','Toalha de Banho Lory Hotel','Toalha de Rosto Lory Hotel','Tapete Piso Luxor Hotel'];
+  ESTOQUE_ENXOVAL_ITENS.forEach(nome=>{
+    const item=ITENS_COMPRAS.find(i=>i.nome===nome);
+    if(item&&!item.estoqueEnxoval){item.estoqueEnxoval=true;mudou=true;}
+  });
   if(mudou)saveAll();
 }
 
@@ -91,14 +96,14 @@ let ITENS_COMPRAS=[
   {cat:'Cama',nome:'Capa p/ Edredom Hotel 180 fios',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'2-colchao',link:'https://wa.me/5511995563388',modalidades:['comprado','flashee']},
   {cat:'Cama',nome:'Protetor de Colchão',tipoPreco:'enxoval',enxovalDep:true,qtdRule:'1-colchao',link:'https://wa.me/5511995563388',semSofaCama:true},
   // CAMA fixos
-  {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
-  {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',preco:285,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Travesseiro Toque de Pluma',tipoPreco:'fixo',preco:99,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388'},
-  {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',preco:52,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388'},
+  {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',preco:43,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388',modalidades:['comprado'],estoqueEnxoval:true},
+  {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',preco:285,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388',estoqueEnxoval:true},
+  {cat:'Cama',nome:'Travesseiro Toque de Pluma',tipoPreco:'fixo',preco:99,enxovalDep:true,qtdRule:'1-leito',link:'https://wa.me/5511995563388',estoqueEnxoval:true},
+  {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',preco:52,enxovalDep:true,qtdRule:'2-leito',link:'https://wa.me/5511995563388',estoqueEnxoval:true},
   // BANHEIRO
-  {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',preco:64,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
-  {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',preco:30,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado']},
-  {cat:'Banheiro',nome:'Tapete Piso Luxor Hotel',tipoPreco:'fixo',preco:42,enxovalDep:false,qtdRule:'3-banheiro',link:'https://wa.me/5511995563388'},
+  {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',preco:64,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado'],estoqueEnxoval:true},
+  {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',preco:30,enxovalDep:true,qtdRule:'3-leito',link:'https://wa.me/5511995563388',modalidades:['comprado'],estoqueEnxoval:true},
+  {cat:'Banheiro',nome:'Tapete Piso Luxor Hotel',tipoPreco:'fixo',preco:42,enxovalDep:false,qtdRule:'3-banheiro',link:'https://wa.me/5511995563388',estoqueEnxoval:true},
   {cat:'Banheiro',nome:'Lixeira Inox com Pedal 3L',tipoPreco:'fixo',preco:38.99,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB25959263'},
   {cat:'Banheiro',nome:'Dispenser de Sabonete',tipoPreco:'fixo',preco:23.90,enxovalDep:false,qtdRule:'1-banheiro',link:'https://www.mercadolivre.com.br/p/MLB22437413'},
   {cat:'Banheiro',nome:'Secador de Cabelo',tipoPreco:'fixo',preco:102,enxovalDep:false,qtdRule:'1-banheiro-completo',link:'https://www.mercadolivre.com.br/secador-de-cabelos-mondial/p/MLB22448898'},
@@ -3892,21 +3897,23 @@ async function gerarPDFOrcamentoAvulso(id){
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
-  const itens=Object.keys(PRECOS_ENXOVAL);
+  const itensPorTamanho=Object.keys(PRECOS_ENXOVAL);
   const sizes=['Solteiro','Casal','Queen','King'];
+  const itensUnicos=ITENS_COMPRAS.filter(i=>i.estoqueEnxoval);
   wrap.innerHTML=`
   <div style="margin-bottom:16px;">
     <div class="section-title" style="margin-bottom:4px;">Controle de Estoque — Enxoval</div>
-    <div class="text-muted">Quantidade que a WeCare tem hoje de cada item, por tamanho (atualização manual)</div>
+    <div class="text-muted">Quantidade que a WeCare tem hoje de cada item (atualização manual)</div>
   </div>
-  <div class="card">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-bed" style="color:var(--lavender)"></i> Itens por tamanho de cama</span></div>
     <div class="card-body" style="overflow-x:auto;padding:12px;">
-      ${itens.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+      ${itensPorTamanho.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);">
           <th style="text-align:left;padding:6px 4px;">Item</th>
           ${sizes.map(s=>`<th style="text-align:center;padding:6px 4px;width:90px;">${s}</th>`).join('')}
         </tr></thead>
-        <tbody>${itens.map(nome=>`<tr style="border-bottom:1px solid var(--border);">
+        <tbody>${itensPorTamanho.map(nome=>`<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px;font-weight:600;">${esc(nome)}</td>
           ${sizes.map(s=>{
             const chave=nome+'__'+s;
@@ -3914,7 +3921,22 @@ function renderEstoque(){
             return`<td style="padding:4px;text-align:center;"><input type="number" min="0" class="input" style="width:70px;text-align:center;padding:4px;margin:0 auto;" value="${val}" onchange="salvarEstoqueItem('${esc(chave)}',this.value)"></td>`;
           }).join('')}
         </tr>`).join('')}</tbody>
-      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum item de enxoval cadastrado ainda (configure em Configurações → Preços Enxoval por Tamanho).</div>`}
+      </table>`:`<div class="text-muted" style="font-size:13px;">Nenhum item cadastrado.</div>`}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-box" style="color:var(--sage)"></i> Itens únicos (travesseiro, toalha, tapete, etc.)</span></div>
+    <div class="card-body" style="overflow-x:auto;padding:12px;">
+      ${itensUnicos.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item</th><th style="text-align:center;padding:6px 4px;width:100px;">Em estoque</th></tr></thead>
+        <tbody>${itensUnicos.map(item=>{
+          const val=ESTOQUE_ENXOVAL[item.nome]||0;
+          return`<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:6px 4px;font-weight:600;">${esc(item.nome)}</td>
+            <td style="padding:4px;text-align:center;"><input type="number" min="0" class="input" style="width:80px;text-align:center;padding:4px;margin:0 auto;" value="${val}" onchange="salvarEstoqueItem('${esc(item.nome)}',this.value)"></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:`<div class="text-muted" style="font-size:13px;">Nenhum item cadastrado.</div>`}
     </div>
   </div>`;
 }
