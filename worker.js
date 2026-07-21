@@ -241,12 +241,17 @@ export default {
           merged[k] = sv;
         }
       }
-      // Listas curtas e curadas manualmente (config) — qualquer encolhida é suspeita, nunca aceitar
+      // Listas curtas e curadas manualmente (config) — só rejeita encolhida catastrófica
+      // (dispositivo desatualizado zerando a lista), mesma regra do listKeys acima. Antes
+      // qualquer encolhida era rejeitada, o que impedia até um apagar de 1 item só de
+      // colar (ex: remover 1 campo de vistoria nunca "pegava" de verdade na sincronização).
       const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout', 'wc_vistoria_campos', 'wc_templates_msg'];
       for (const k of listKeysEstritas) {
         const sv = Array.isArray(current[k]) ? current[k] : [];
         const iv = Array.isArray(body[k])    ? body[k]    : [];
-        if (iv.length < sv.length) merged[k] = sv;
+        if ((iv.length === 0 && sv.length > 0) || (sv.length >= 8 && iv.length <= 2)) {
+          merged[k] = sv;
+        }
       }
 
       // Recupera itensExtras/eventosExtras apagados por um save com wc_imoveis desatualizado
