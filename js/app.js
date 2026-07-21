@@ -895,6 +895,7 @@ function _coletarDadosAba(aba,im){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
+    im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
     im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
@@ -1030,6 +1031,7 @@ function renderAbaDados(im){
       <option value="liquida"${im.comissaoBase==='liquida'?' selected':''}>Líquida (após plataforma)</option>
       <option value="bruta"${im.comissaoBase==='bruta'?' selected':''}>Bruta</option>
     </select></div>
+    <div class="form-group"><label>Expectativa de Faturamento Mensal (R$)</label>${numInput({id:'d-faturamento-esperado',value:im.expectativaFaturamentoMensal||0,min:0,step:100})}</div>
   </div>
 
   <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
