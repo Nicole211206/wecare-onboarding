@@ -3633,6 +3633,7 @@ function renderOrcamentos(){
             <td style="padding:8px;">${secoesAtivas.map(s=>`<span class="tag tag-lav" style="margin-right:4px;">${s}</span>`).join('')||'—'}</td>
             <td style="padding:8px;text-align:right;font-weight:700;">${fmtMoeda(tot)}</td>
             <td style="padding:8px;white-space:nowrap;">
+              <button class="btn btn-xs btn-outline" onclick="verResumoOrcamento('${esc(o.id)}')" title="Ver resumo"><i class="fa-solid fa-eye"></i></button>
               <button class="btn btn-xs btn-outline" onclick="abrirEditarOrcamento('${esc(o.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
               <button class="btn btn-xs" onclick="duplicarOrcamento('${esc(o.id)}')" title="Duplicar"><i class="fa-solid fa-copy"></i></button>
               <button class="btn btn-xs btn-sage" onclick="gerarPDFOrcamentoAvulso('${esc(o.id)}')" title="Gerar PDF"><i class="fa-solid fa-file-pdf"></i></button>
@@ -3659,6 +3660,8 @@ function abrirNovoOrcamento(){
   document.getElementById('orc-obs').value='';
   ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{document.getElementById('orc-sec-'+s).checked=false;});
   document.getElementById('orc-fornecedor').value='comprado';
+  document.getElementById('orc-banheiros').value=0;
+  document.getElementById('orc-hospedes').value=0;
   document.getElementById('camas-list-orc').innerHTML='';
   document.getElementById('orc-fotos-valor').value=0;document.getElementById('orc-fotos-obs').value='';
   document.getElementById('orc-limpeza-valor').value=0;document.getElementById('orc-limpeza-obs').value='';
@@ -3677,6 +3680,8 @@ function abrirEditarOrcamento(id){
   document.getElementById('orc-obs').value=o.observacoes||'';
   ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{document.getElementById('orc-sec-'+s).checked=!!(o.secoes||{})[s];});
   document.getElementById('orc-fornecedor').value=o.fornecedorEnxoval||'comprado';
+  document.getElementById('orc-banheiros').value=o.banheiros||0;
+  document.getElementById('orc-hospedes').value=o.hospedes||0;
   document.getElementById('camas-list-orc').innerHTML=_htmlCamasOrc(o.camas||[]);
   document.getElementById('orc-fotos-valor').value=o.fotosValor||0;document.getElementById('orc-fotos-obs').value=o.fotosObs||'';
   document.getElementById('orc-limpeza-valor').value=o.limpezaValor||0;document.getElementById('orc-limpeza-obs').value=o.limpezaObs||'';
@@ -3765,6 +3770,8 @@ function _coletarOrcamentoForm(){
     observacoes:g('orc-obs')?.value||'',
     secoes,
     fornecedorEnxoval:g('orc-fornecedor')?.value||'comprado',
+    banheiros:+g('orc-banheiros')?.value||0,
+    hospedes:+g('orc-hospedes')?.value||0,
     camas:_coletarCamasOrc(),
     itensSoltos:JSON.parse(JSON.stringify(_orcItensSoltosTemp)),
     fotosValor:+g('orc-fotos-valor')?.value||0,fotosObs:g('orc-fotos-obs')?.value||'',
@@ -3787,6 +3794,32 @@ function _atualizarTotalOrcamentoUI(){
     if(dados.secoes.vistoria)partes.push(`Vistoria: ${fmtMoeda(totais.totalVistoria)}`);
     detEl.textContent=partes.join(' · ');
   }
+  const resumoEl=document.getElementById('orc-resumo-live');
+  if(resumoEl)resumoEl.innerHTML=_resumoOrcamentoHtml(dados,totais);
+}
+function _resumoOrcamentoHtml(orc,totais){
+  const linha=(label,qtd,valorUnit,total)=>`<tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:3px 6px;font-size:12px;">${esc(label)}</td>
+    <td style="padding:3px 6px;font-size:12px;text-align:center;">${qtd}</td>
+    <td style="padding:3px 6px;font-size:12px;text-align:right;">${fmtMoeda(valorUnit)}</td>
+    <td style="padding:3px 6px;font-size:12px;text-align:right;font-weight:600;">${fmtMoeda(total)}</td>
+  </tr>`;
+  const tabela=(titulo,linhas)=>`<div style="font-weight:700;font-size:12px;margin:8px 0 4px;">${titulo}</div>
+    <table style="width:100%;border-collapse:collapse;">${linhas}</table>`;
+  let html='';
+  const secoes=orc.secoes||{};
+  if(secoes.enxoval&&totais.enxovalRows.length)html+=tabela('Enxoval',totais.enxovalRows.map(r=>linha(r.label,r.qtd,r.valorUnit,r.total)).join(''));
+  if(secoes.itens&&totais.itensRows.length)html+=tabela('Itens',totais.itensRows.map(r=>linha(r.nome+(r.categoria?` (${r.categoria})`:''),r.qtd,r.valorUnit,(+r.qtd||0)*(+r.valorUnit||0))).join(''));
+  if(!html)return'<div class="text-muted" style="font-size:12px;">Marque uma seção e preencha os dados pra ver o detalhamento aqui.</div>';
+  return html;
+}
+function verResumoOrcamento(id){
+  const o=orcamentos.find(x=>x.id===id);if(!o)return;
+  const totais=_calcOrcamentoTotais(o);
+  document.getElementById('generico-titulo').textContent='Resumo — '+(o.nomeCliente||'Orçamento');
+  document.getElementById('generico-body').innerHTML=_resumoOrcamentoHtml(o,totais)+
+    `<div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);text-align:right;font-weight:800;font-size:15px;">Total: ${fmtMoeda(totais.totalGeral)}</div>`;
+  document.getElementById('modal-generico').classList.add('open');
 }
 function salvarOrcamento(){
   const dados=_coletarOrcamentoForm();
@@ -3823,9 +3856,22 @@ function _calcEnxovalOrcamento(camas,fornecedor){
   });
   return rows;
 }
+function _calcItensFixosEnxovalOrcamento(camas,banheiros,hospedes,fornecedor){
+  const rows=[];
+  ITENS_COMPRAS.forEach(item=>{
+    if(item.tipoPreco!=='fixo'||!item.estoqueEnxoval)return;
+    if(!itemValidoParaModalidade(item,fornecedor))return;
+    // reaproveita calcNecessario (mesma função usada na aba Compras de um imóvel) — cobre
+    // todas as bases de qtdRule (colchao/leito/banheiro/hospede/etc.), não só as duas mais comuns
+    const qtd=calcNecessario(item,camas,banheiros,1,banheiros,hospedes,0,1);
+    if(!qtd)return;
+    rows.push({label:item.nome,cat:item.cat,qtd,valorUnit:item.preco||0,total:qtd*(item.preco||0)});
+  });
+  return rows;
+}
 function _calcOrcamentoTotais(orc){
   const secoes=orc.secoes||{};
-  const enxovalRows=secoes.enxoval?_calcEnxovalOrcamento(orc.camas,orc.fornecedorEnxoval):[];
+  const enxovalRows=secoes.enxoval?[..._calcEnxovalOrcamento(orc.camas,orc.fornecedorEnxoval),..._calcItensFixosEnxovalOrcamento(orc.camas,orc.banheiros,orc.hospedes,orc.fornecedorEnxoval)]:[];
   const totalEnxoval=enxovalRows.reduce((s,r)=>s+r.total,0);
   const itensRows=secoes.itens?(orc.itensSoltos||[]):[];
   const totalItens=itensRows.reduce((s,r)=>s+((+r.qtd||0)*(+r.valorUnit||0)),0);
