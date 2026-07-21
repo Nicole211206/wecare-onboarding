@@ -750,15 +750,33 @@ function _atualizarHeaderDetalhe(im){
   document.getElementById('detalhe-fase-tag').innerHTML=`<span class="tag tag-${cor}">${label}</span>`;
   const idx=FASES.indexOf(im.status);
   const btnAv=document.getElementById('detalhe-avancar-btn');
+  const btnVolt=document.getElementById('detalhe-voltar-btn');
   const btnPerd=document.getElementById('detalhe-perdido-btn');
-  if(im.status==='ativo'){btnAv.style.display='none';btnPerd.style.display='none';}
-  else if(idx>=0&&idx<FASES.length-1){
+  if(im.status==='ativo'){
+    btnAv.style.display='none';btnPerd.style.display='none';
+    btnVolt.style.display='';btnVolt.innerHTML=`<i class="fa-solid fa-arrow-left"></i> ${FASE_LABEL[FASES[FASES.length-1]]}`;
+  } else if(idx>=0&&idx<FASES.length-1){
     btnAv.style.display='';btnAv.innerHTML=`<i class="fa-solid fa-arrow-right"></i> ${FASE_LABEL[FASES[idx+1]]}`;
     btnPerd.style.display='';
+    btnVolt.style.display=idx>0?'':'none';
+    if(idx>0)btnVolt.innerHTML=`<i class="fa-solid fa-arrow-left"></i> ${FASE_LABEL[FASES[idx-1]]}`;
   } else if(idx===FASES.length-1){
     btnAv.style.display='';btnAv.innerHTML=`<i class="fa-solid fa-check"></i> Marcar como Ativo 🎉`;
     btnPerd.style.display='';
+    btnVolt.style.display='';btnVolt.innerHTML=`<i class="fa-solid fa-arrow-left"></i> ${FASE_LABEL[FASES[idx-1]]}`;
   }
+}
+function voltarFaseAtual(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba(_abaAtiva,im);
+  if(im.status==='ativo'){im.status=FASES[FASES.length-1];}
+  else{
+    const idx=FASES.indexOf(im.status);
+    if(idx>0)im.status=FASES[idx-1];
+  }
+  _addAtualizacao(im,`Voltou para a fase "${FASE_LABEL[im.status]}".`,'fase');
+  saveAll();renderKanban();_atualizarHeaderDetalhe(im);
+  showToast(`Voltou para "${FASE_LABEL[im.status]}".`,'peach');
 }
 function showTab(aba,btn){
   // Descarrega qualquer edição pendente da aba anterior ANTES de trocar — sem isso, uma edição
