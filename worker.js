@@ -22,12 +22,16 @@
 const KV_KEY   = 'wc_state';
 const STATS_KEY = 'wc_stats';
 
-// Une duas listas de itens (cada um com `id`) sem nunca derrubar um item que só existe
-// em uma das duas — evita perda silenciosa quando um cliente com estado desatualizado
-// sobrescreve o imóvel inteiro (mesmo bug do merge de wc_imoveis, um nível abaixo).
+// Aceita a lista nova como está (respeita exclusões de propósito) — só recupera itens do
+// servidor quando a encolhida parece catastrófica (cliente desatualizado sobrescrevendo o
+// imóvel inteiro), mesma regra de listKeys/listKeysEstritas abaixo. Antes recuperava QUALQUER
+// item ausente incondicionalmente, o que impedia apagar itensExtras/eventosExtras/vistorias
+// de vez — a exclusão sempre "voltava" na sincronização seguinte.
 function mergeItemArraysById(oldArr, newArr) {
   const oldA = Array.isArray(oldArr) ? oldArr : [];
   const newA = Array.isArray(newArr) ? newArr : [];
+  const catastrofica = (newA.length === 0 && oldA.length > 0) || (oldA.length >= 8 && newA.length <= 2);
+  if (!catastrofica) return newA;
   const newIds = new Set(newA.filter(x => x && x.id).map(x => x.id));
   const recuperados = oldA.filter(x => x && x.id && !newIds.has(x.id));
   return [...newA, ...recuperados];

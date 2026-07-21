@@ -3386,6 +3386,12 @@ function iniciarVistoria(){
   if(!id){showToast('Selecione um imóvel.','peach');return;}
   const im=imoveis.find(i=>i.id===id);
   if(!im){showToast('Imóvel não encontrado.','peach');return;}
+  const rascunho=(im.vistorias||[]).find(v=>v.status==='rascunho');
+  if(rascunho){
+    const dataCriacao=fmtDate((rascunho.criadoEm||'').slice(0,10));
+    const criarOutra=confirm(`Esse imóvel já tem uma vistoria em rascunho (criada em ${dataCriacao}), ainda não enviada.\n\nClique OK pra criar OUTRA mesmo assim (gera um link novo), ou Cancelar pra copiar o link da que já existe.`);
+    if(!criarOutra){_mostrarLinkVistoria(im,rascunho);return;}
+  }
   const v={
     id:'vist_'+uid()+uid(),
     token:uid()+uid(),
