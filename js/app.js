@@ -4,6 +4,8 @@ let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
+let orcamentos=[], ESTOQUE_ENXOVAL={};
+let _editOrcamentoId=null, _orcItensSoltosTemp=[];
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -252,7 +254,7 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
@@ -263,6 +265,8 @@ function showPanel(id,btn){
   if(id==='config')renderConfig();
   if(id==='usuarios')renderUsuarios();
   if(id==='informacoes')renderInformacoes();
+  if(id==='orcamentos')renderOrcamentos();
+  if(id==='estoque')renderEstoque();
 }
 
 // ─── Componente numérico com +/- ───
@@ -392,7 +396,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_enxoval'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -410,6 +414,8 @@ function saveAll(){
   localStorage.setItem('wc_processo_texto',JSON.stringify(processoTexto));
   localStorage.setItem('wc_anotacoes_texto',JSON.stringify(anotacoesTexto));
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
+  localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
+  localStorage.setItem('wc_estoque_enxoval',JSON.stringify(ESTOQUE_ENXOVAL));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -432,6 +438,8 @@ function loadAll(){
   v=g('wc_processo_texto');if(typeof v==='string')processoTexto=v;
   v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
+  v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
+  v=g('wc_estoque_enxoval');if(v&&typeof v==='object')ESTOQUE_ENXOVAL=v;
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -3589,6 +3597,330 @@ function richSalvar(campo){
   else if(campo==='anotacoes')anotacoesTexto=html;
   clearTimeout(_richSalvarTimer);
   _richSalvarTimer=setTimeout(saveAll,600);
+}
+
+// ═══════════════════ ORÇAMENTOS ═══════════════════
+function renderOrcamentos(){
+  const wrap=document.getElementById('orcamentos-wrap');
+  if(!wrap)return;
+  const lista=[...orcamentos].sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+  const secaoLabel={enxoval:'Enxoval',itens:'Itens',fotos:'Fotos',limpeza:'Limpeza',vistoria:'Vistoria'};
+  wrap.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Orçamentos</div>
+      <div class="text-muted">Cotações avulsas — enxoval, itens, fotos, limpeza, vistoria (${orcamentos.length} salvos)</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirNovoOrcamento()"><i class="fa-solid fa-plus"></i> Novo Orçamento</button>
+  </div>
+  <div class="card">
+    <div class="card-body" style="overflow-x:auto;padding:0;">
+      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
+          <th style="text-align:left;padding:8px;">Cliente / Nome</th><th style="text-align:left;padding:8px;">Data</th><th style="text-align:left;padding:8px;">Seções</th><th style="text-align:right;padding:8px;">Total</th><th style="padding:8px;width:180px;"></th>
+        </tr></thead>
+        <tbody>${lista.map(o=>{
+          const tot=_calcOrcamentoTotais(o).totalGeral;
+          const secoesAtivas=Object.entries(o.secoes||{}).filter(([,v])=>v).map(([k])=>secaoLabel[k]||k);
+          return`<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px;font-weight:600;">${esc(o.nomeCliente||'(sem nome)')}</td>
+            <td style="padding:8px;">${fmtDate((o.criadoEm||'').slice(0,10))}</td>
+            <td style="padding:8px;">${secoesAtivas.map(s=>`<span class="tag tag-lav" style="margin-right:4px;">${s}</span>`).join('')||'—'}</td>
+            <td style="padding:8px;text-align:right;font-weight:700;">${fmtMoeda(tot)}</td>
+            <td style="padding:8px;white-space:nowrap;">
+              <button class="btn btn-xs btn-outline" onclick="abrirEditarOrcamento('${esc(o.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-xs" onclick="duplicarOrcamento('${esc(o.id)}')" title="Duplicar"><i class="fa-solid fa-copy"></i></button>
+              <button class="btn btn-xs btn-sage" onclick="gerarPDFOrcamentoAvulso('${esc(o.id)}')" title="Gerar PDF"><i class="fa-solid fa-file-pdf"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="apagarOrcamento('${esc(o.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
+        Nenhum orçamento ainda.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoOrcamento()"><i class="fa-solid fa-plus"></i> Criar primeiro orçamento</button>
+      </div>`}
+    </div>
+  </div>`;
+}
+function _popularDatalistItensOrc(){
+  const dl=document.getElementById('orc-itens-catalogo');
+  if(!dl)return;
+  dl.innerHTML=[...new Set(ITENS_COMPRAS.filter(i=>i.tipoPreco==='fixo').map(i=>i.nome))].map(n=>`<option value="${esc(n)}">`).join('');
+}
+function abrirNovoOrcamento(){
+  _editOrcamentoId=null;
+  _orcItensSoltosTemp=[];
+  document.getElementById('modal-orcamento-title').textContent='Novo Orçamento';
+  document.getElementById('orc-nome').value='';
+  document.getElementById('orc-obs').value='';
+  ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{document.getElementById('orc-sec-'+s).checked=false;});
+  document.getElementById('orc-fornecedor').value='comprado';
+  document.getElementById('camas-list-orc').innerHTML='';
+  document.getElementById('orc-fotos-valor').value=0;document.getElementById('orc-fotos-obs').value='';
+  document.getElementById('orc-limpeza-valor').value=0;document.getElementById('orc-limpeza-obs').value='';
+  document.getElementById('orc-vistoria-valor').value=0;document.getElementById('orc-vistoria-obs').value='';
+  _popularDatalistItensOrc();
+  _renderItensSoltosOrc();
+  _atualizarSecoesOrcamentoUI();
+  document.getElementById('modal-orcamento').classList.add('open');
+}
+function abrirEditarOrcamento(id){
+  const o=orcamentos.find(x=>x.id===id);if(!o)return;
+  _editOrcamentoId=id;
+  _orcItensSoltosTemp=JSON.parse(JSON.stringify(o.itensSoltos||[]));
+  document.getElementById('modal-orcamento-title').textContent='Editar Orçamento';
+  document.getElementById('orc-nome').value=o.nomeCliente||'';
+  document.getElementById('orc-obs').value=o.observacoes||'';
+  ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{document.getElementById('orc-sec-'+s).checked=!!(o.secoes||{})[s];});
+  document.getElementById('orc-fornecedor').value=o.fornecedorEnxoval||'comprado';
+  document.getElementById('camas-list-orc').innerHTML=_htmlCamasOrc(o.camas||[]);
+  document.getElementById('orc-fotos-valor').value=o.fotosValor||0;document.getElementById('orc-fotos-obs').value=o.fotosObs||'';
+  document.getElementById('orc-limpeza-valor').value=o.limpezaValor||0;document.getElementById('orc-limpeza-obs').value=o.limpezaObs||'';
+  document.getElementById('orc-vistoria-valor').value=o.vistoriaValor||0;document.getElementById('orc-vistoria-obs').value=o.vistoriaObs||'';
+  _popularDatalistItensOrc();
+  _renderItensSoltosOrc();
+  _atualizarSecoesOrcamentoUI();
+  document.getElementById('modal-orcamento').classList.add('open');
+}
+function duplicarOrcamento(id){
+  const o=orcamentos.find(x=>x.id===id);if(!o)return;
+  const copia={...JSON.parse(JSON.stringify(o)),id:'orc_'+uid()+uid(),criadoEm:new Date().toISOString(),nomeCliente:(o.nomeCliente||'')+' (cópia)'};
+  orcamentos.push(copia);
+  saveAll();renderOrcamentos();
+  showToast('Orçamento duplicado.','sage');
+}
+function apagarOrcamento(id){
+  if(!confirm('Apagar este orçamento?'))return;
+  orcamentos=orcamentos.filter(o=>o.id!==id);
+  saveAll();renderOrcamentos();
+  showToast('Orçamento apagado.','peach');
+}
+function _htmlCamasOrc(camas){
+  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  return(camas||[]).map(c=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+    <select class="input cama-tipo" style="flex:2" onchange="_atualizarTotalOrcamentoUI()">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
+    ${numInput({value:c.qtd||1,min:1,style:'flex-shrink:0;',oninput:'_atualizarTotalOrcamentoUI()'})}
+    <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove();_atualizarTotalOrcamentoUI()"><i class="fa-solid fa-trash"></i></button>
+  </div>`).join('');
+}
+function adicionarCamaOrc(){
+  document.getElementById('camas-list-orc').insertAdjacentHTML('beforeend',_htmlCamasOrc([{tipo:'Solteiro',qtd:1}]));
+  _atualizarTotalOrcamentoUI();
+}
+function _coletarCamasOrc(){
+  const rows=document.querySelectorAll('#camas-list-orc .cama-row');
+  const camas=[];
+  rows.forEach(r=>{
+    const tipo=r.querySelector('.cama-tipo')?.value;
+    const qtd=+r.querySelector('.num-input-wrap input')?.value||1;
+    if(tipo)camas.push({tipo,qtd});
+  });
+  return camas;
+}
+function _renderItensSoltosOrc(){
+  const wrap=document.getElementById('orc-itens-list');
+  if(!wrap)return;
+  wrap.innerHTML=_orcItensSoltosTemp.length?_orcItensSoltosTemp.map((it,i)=>`
+    <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+      <input class="input" style="flex:2;" value="${esc(it.nome)}" oninput="_orcItensSoltosTemp[${i}].nome=this.value">
+      <input class="input" style="flex:1;" value="${esc(it.categoria||'')}" placeholder="Categoria" oninput="_orcItensSoltosTemp[${i}].categoria=this.value">
+      <input class="input" type="number" min="0" style="width:70px;" value="${it.qtd||1}" oninput="_orcItensSoltosTemp[${i}].qtd=+this.value||0;_atualizarTotalOrcamentoUI()">
+      <input class="input" type="number" min="0" step="0.01" style="width:100px;" value="${it.valorUnit||0}" oninput="_orcItensSoltosTemp[${i}].valorUnit=+this.value||0;_atualizarTotalOrcamentoUI()">
+      <button class="btn btn-xs btn-danger" onclick="_removerItemSoltoOrc(${i})"><i class="fa-solid fa-trash"></i></button>
+    </div>`).join(''):'<div class="text-muted" style="font-size:12px;">Nenhum item adicionado.</div>';
+}
+function _adicionarItemSoltoOrc(){
+  const nomeInput=document.getElementById('orc-novo-item-nome');
+  const nome=(nomeInput?.value||'').trim();
+  if(!nome){showToast('Digite o nome do item.','peach');return;}
+  const catalogo=ITENS_COMPRAS.find(i=>i.nome===nome);
+  _orcItensSoltosTemp.push({nome,categoria:catalogo?.cat||'',qtd:1,valorUnit:catalogo?.tipoPreco==='fixo'?(catalogo.preco||0):0});
+  nomeInput.value='';
+  _renderItensSoltosOrc();
+  _atualizarTotalOrcamentoUI();
+}
+function _removerItemSoltoOrc(i){
+  _orcItensSoltosTemp.splice(i,1);
+  _renderItensSoltosOrc();
+  _atualizarTotalOrcamentoUI();
+}
+function _atualizarSecoesOrcamentoUI(){
+  ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{
+    const on=document.getElementById('orc-sec-'+s)?.checked;
+    const block=document.getElementById('orc-bloco-'+s);
+    if(block)block.style.display=on?'block':'none';
+  });
+  _atualizarTotalOrcamentoUI();
+}
+function _coletarOrcamentoForm(){
+  const g=id=>document.getElementById(id);
+  const secoes={};
+  ['enxoval','itens','fotos','limpeza','vistoria'].forEach(s=>{secoes[s]=!!g('orc-sec-'+s)?.checked;});
+  return{
+    nomeCliente:g('orc-nome')?.value||'',
+    observacoes:g('orc-obs')?.value||'',
+    secoes,
+    fornecedorEnxoval:g('orc-fornecedor')?.value||'comprado',
+    camas:_coletarCamasOrc(),
+    itensSoltos:JSON.parse(JSON.stringify(_orcItensSoltosTemp)),
+    fotosValor:+g('orc-fotos-valor')?.value||0,fotosObs:g('orc-fotos-obs')?.value||'',
+    limpezaValor:+g('orc-limpeza-valor')?.value||0,limpezaObs:g('orc-limpeza-obs')?.value||'',
+    vistoriaValor:+g('orc-vistoria-valor')?.value||0,vistoriaObs:g('orc-vistoria-obs')?.value||'',
+  };
+}
+function _atualizarTotalOrcamentoUI(){
+  const dados=_coletarOrcamentoForm();
+  const totais=_calcOrcamentoTotais(dados);
+  const el=document.getElementById('orc-total-preview');
+  if(el)el.textContent=fmtMoeda(totais.totalGeral);
+  const detEl=document.getElementById('orc-total-detalhe');
+  if(detEl){
+    const partes=[];
+    if(dados.secoes.enxoval)partes.push(`Enxoval: ${fmtMoeda(totais.totalEnxoval)}`);
+    if(dados.secoes.itens)partes.push(`Itens: ${fmtMoeda(totais.totalItens)}`);
+    if(dados.secoes.fotos)partes.push(`Fotos: ${fmtMoeda(totais.totalFotos)}`);
+    if(dados.secoes.limpeza)partes.push(`Limpeza: ${fmtMoeda(totais.totalLimpeza)}`);
+    if(dados.secoes.vistoria)partes.push(`Vistoria: ${fmtMoeda(totais.totalVistoria)}`);
+    detEl.textContent=partes.join(' · ');
+  }
+}
+function salvarOrcamento(){
+  const dados=_coletarOrcamentoForm();
+  if(!dados.nomeCliente.trim()){showToast('Informe o nome do cliente/orçamento.','peach');return;}
+  if(_editOrcamentoId){
+    const o=orcamentos.find(x=>x.id===_editOrcamentoId);
+    if(o)Object.assign(o,dados);
+  } else {
+    orcamentos.push({id:'orc_'+uid()+uid(),criadoEm:new Date().toISOString(),...dados});
+  }
+  saveAll();
+  closeModal('modal-orcamento');
+  renderOrcamentos();
+  showToast('Orçamento salvo.','sage');
+}
+function _calcEnxovalOrcamento(camas,fornecedor){
+  const rows=[];
+  const porTipo={};
+  (camas||[]).forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';(porTipo[t]=porTipo[t]||[]).push(c);});
+  ITENS_COMPRAS.forEach(item=>{
+    if(item.tipoPreco!=='enxoval')return;
+    if(!itemValidoParaModalidade(item,fornecedor))return;
+    Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+      const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
+      if(item.semSofaCama&&!camasParaItem.length)return;
+      const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
+      let qtd=0;
+      if(base==='colchao'||base==='leito')qtd=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+      else qtd=q;
+      if(!qtd)return;
+      const valorUnit=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
+      rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtd,valorUnit,total:qtd*valorUnit});
+    });
+  });
+  return rows;
+}
+function _calcOrcamentoTotais(orc){
+  const secoes=orc.secoes||{};
+  const enxovalRows=secoes.enxoval?_calcEnxovalOrcamento(orc.camas,orc.fornecedorEnxoval):[];
+  const totalEnxoval=enxovalRows.reduce((s,r)=>s+r.total,0);
+  const itensRows=secoes.itens?(orc.itensSoltos||[]):[];
+  const totalItens=itensRows.reduce((s,r)=>s+((+r.qtd||0)*(+r.valorUnit||0)),0);
+  const totalFotos=secoes.fotos?(+orc.fotosValor||0):0;
+  const totalLimpeza=secoes.limpeza?(+orc.limpezaValor||0):0;
+  const totalVistoria=secoes.vistoria?(+orc.vistoriaValor||0):0;
+  return{enxovalRows,totalEnxoval,itensRows,totalItens,totalFotos,totalLimpeza,totalVistoria,
+    totalGeral:totalEnxoval+totalItens+totalFotos+totalLimpeza+totalVistoria};
+}
+async function gerarPDFOrcamentoAvulso(id){
+  const o=orcamentos.find(x=>x.id===id);if(!o)return;
+  const totais=_calcOrcamentoTotais(o);
+  const fornecedorLabel={comprado:'Comprado (Buddemeyer)',flashee:'Aluguel — Flashee',intense:'Aluguel — Intense Clean'}[o.fornecedorEnxoval]||o.fornecedorEnxoval||'';
+  const imFake={nome:o.nomeCliente||'Orçamento',proprietarioNome:'',endereco:''};
+
+  const linhaTabela=(label,qtd,valorUnit,total)=>`<tr style="border-bottom:1px solid #EFE7D6;">
+    <td style="padding:6px 4px;font-size:12.5px;">${esc(label)}</td>
+    <td style="padding:6px 4px;font-size:12.5px;text-align:center;">${qtd}</td>
+    <td style="padding:6px 4px;font-size:12.5px;text-align:right;">${fmtMoeda(valorUnit)}</td>
+    <td style="padding:6px 4px;font-size:12.5px;text-align:right;font-weight:600;">${fmtMoeda(total)}</td>
+  </tr>`;
+  const tabelaHead=`<table style="width:100%;border-collapse:collapse;">
+    <thead><tr style="border-bottom:2px solid #132030;">
+      <th style="text-align:left;padding:6px 4px;font-size:11px;">Item</th>
+      <th style="padding:6px 4px;font-size:11px;">Qtd</th>
+      <th style="text-align:right;padding:6px 4px;font-size:11px;">Valor Unit.</th>
+      <th style="text-align:right;padding:6px 4px;font-size:11px;">Total</th>
+    </tr></thead><tbody>`;
+
+  let secoesHtml='';
+  if(o.secoes?.enxoval){
+    secoesHtml+=_pdfSecaoHtml('🛏️',`Enxoval — ${esc(fornecedorLabel)}`,
+      tabelaHead+totais.enxovalRows.map(r=>linhaTabela(r.label,r.qtd,r.valorUnit,r.total)).join('')+`</tbody></table>
+      <div style="text-align:right;padding:8px 4px;font-weight:700;font-size:13px;color:#B8863C;">Subtotal Enxoval: ${fmtMoeda(totais.totalEnxoval)}</div>`);
+  }
+  if(o.secoes?.itens){
+    secoesHtml+=_pdfSecaoHtml('📦','Itens',
+      tabelaHead+totais.itensRows.map(r=>linhaTabela(r.nome+(r.categoria?` (${r.categoria})`:''),r.qtd,r.valorUnit,(+r.qtd||0)*(+r.valorUnit||0))).join('')+`</tbody></table>
+      <div style="text-align:right;padding:8px 4px;font-weight:700;font-size:13px;color:#B8863C;">Subtotal Itens: ${fmtMoeda(totais.totalItens)}</div>`);
+  }
+  if(o.secoes?.fotos){
+    secoesHtml+=_pdfSecaoHtml('📷','Fotos',_pdfCampoHtml('Valor',fmtMoeda(totais.totalFotos),true)+(o.fotosObs?_pdfCampoHtml('Observações',o.fotosObs):''));
+  }
+  if(o.secoes?.limpeza){
+    secoesHtml+=_pdfSecaoHtml('🧹','Limpeza',_pdfCampoHtml('Valor',fmtMoeda(totais.totalLimpeza),true)+(o.limpezaObs?_pdfCampoHtml('Observações',o.limpezaObs):''));
+  }
+  if(o.secoes?.vistoria){
+    secoesHtml+=_pdfSecaoHtml('📋','Vistoria',_pdfCampoHtml('Valor',fmtMoeda(totais.totalVistoria),true)+(o.vistoriaObs?_pdfCampoHtml('Observações',o.vistoriaObs):''));
+  }
+
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><meta charset="utf-8"><title>Orçamento — ${esc(o.nomeCliente||'')}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:840px;margin:0 auto;}
+    @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}
+  </style></head><body>
+  ${await _pdfHeaderHtml(imFake,'Orçamento')}
+  ${secoesHtml}
+  <div style="margin-top:24px;padding-top:16px;border-top:3px solid #C49A5E;display:flex;justify-content:flex-end;">
+    <div style="font-size:16px;font-weight:800;color:#132030;">Total Geral: <span style="color:#B8863C;">${fmtMoeda(totais.totalGeral)}</span></div>
+  </div>
+  ${o.observacoes?`<div style="margin-top:16px;font-size:12px;color:#666;">${esc(o.observacoes)}</div>`:''}
+  </body></html>`);
+  win.document.close();win.print();
+}
+
+// ═══════════════════ ESTOQUE ═══════════════════
+function renderEstoque(){
+  const wrap=document.getElementById('estoque-wrap');
+  if(!wrap)return;
+  const itens=Object.keys(PRECOS_ENXOVAL);
+  const sizes=['Solteiro','Casal','Queen','King'];
+  wrap.innerHTML=`
+  <div style="margin-bottom:16px;">
+    <div class="section-title" style="margin-bottom:4px;">Controle de Estoque — Enxoval</div>
+    <div class="text-muted">Quantidade que a WeCare tem hoje de cada item, por tamanho (atualização manual)</div>
+  </div>
+  <div class="card">
+    <div class="card-body" style="overflow-x:auto;padding:12px;">
+      ${itens.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left;padding:6px 4px;">Item</th>
+          ${sizes.map(s=>`<th style="text-align:center;padding:6px 4px;width:90px;">${s}</th>`).join('')}
+        </tr></thead>
+        <tbody>${itens.map(nome=>`<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 4px;font-weight:600;">${esc(nome)}</td>
+          ${sizes.map(s=>{
+            const chave=nome+'__'+s;
+            const val=ESTOQUE_ENXOVAL[chave]||0;
+            return`<td style="padding:4px;text-align:center;"><input type="number" min="0" class="input" style="width:70px;text-align:center;padding:4px;margin:0 auto;" value="${val}" onchange="salvarEstoqueItem('${esc(chave)}',this.value)"></td>`;
+          }).join('')}
+        </tr>`).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum item de enxoval cadastrado ainda (configure em Configurações → Preços Enxoval por Tamanho).</div>`}
+    </div>
+  </div>`;
+}
+function salvarEstoqueItem(chave,valor){
+  ESTOQUE_ENXOVAL[chave]=+valor||0;
+  saveAll();
 }
 
 // ═══════════════════ CONFIG ═══════════════════
