@@ -896,7 +896,7 @@ function _coletarDadosAba(aba,im){
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
-    im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0;
+    im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0; im.minimoNoites=gn('d-min-noites')||1;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
     document.querySelectorAll('.pltf-check:checked').forEach(c=>im.plataformas.push(c.value));
@@ -1036,6 +1036,7 @@ function renderAbaDados(im){
 
   <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
     <div class="form-group"><label>Máx. hóspedes</label>${numInput({id:'d-max-hospedes',value:im.maxHospedes||0,min:0})}</div>
+    <div class="form-group"><label>Mínimo de noites</label>${numInput({id:'d-min-noites',value:im.minimoNoites||1,min:1})}</div>
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-bed"></i> Camas</div>
