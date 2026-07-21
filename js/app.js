@@ -3663,9 +3663,9 @@ function abrirNovoOrcamento(){
   document.getElementById('orc-banheiros').value=0;
   document.getElementById('orc-hospedes').value=0;
   document.getElementById('camas-list-orc').innerHTML='';
-  document.getElementById('orc-fotos-valor').value=0;document.getElementById('orc-fotos-obs').value='';
-  document.getElementById('orc-limpeza-valor').value=0;document.getElementById('orc-limpeza-obs').value='';
-  document.getElementById('orc-vistoria-valor').value=0;document.getElementById('orc-vistoria-obs').value='';
+  document.getElementById('orc-fotos-valor').value=0;
+  document.getElementById('orc-limpeza-valor').value=0;
+  document.getElementById('orc-vistoria-valor').value=0;
   _popularDatalistItensOrc();
   _renderItensSoltosOrc();
   _atualizarSecoesOrcamentoUI();
@@ -3683,9 +3683,9 @@ function abrirEditarOrcamento(id){
   document.getElementById('orc-banheiros').value=o.banheiros||0;
   document.getElementById('orc-hospedes').value=o.hospedes||0;
   document.getElementById('camas-list-orc').innerHTML=_htmlCamasOrc(o.camas||[]);
-  document.getElementById('orc-fotos-valor').value=o.fotosValor||0;document.getElementById('orc-fotos-obs').value=o.fotosObs||'';
-  document.getElementById('orc-limpeza-valor').value=o.limpezaValor||0;document.getElementById('orc-limpeza-obs').value=o.limpezaObs||'';
-  document.getElementById('orc-vistoria-valor').value=o.vistoriaValor||0;document.getElementById('orc-vistoria-obs').value=o.vistoriaObs||'';
+  document.getElementById('orc-fotos-valor').value=o.fotosValor||0;
+  document.getElementById('orc-limpeza-valor').value=o.limpezaValor||0;
+  document.getElementById('orc-vistoria-valor').value=o.vistoriaValor||0;
   _popularDatalistItensOrc();
   _renderItensSoltosOrc();
   _atualizarSecoesOrcamentoUI();
@@ -3774,9 +3774,9 @@ function _coletarOrcamentoForm(){
     hospedes:+g('orc-hospedes')?.value||0,
     camas:_coletarCamasOrc(),
     itensSoltos:JSON.parse(JSON.stringify(_orcItensSoltosTemp)),
-    fotosValor:+g('orc-fotos-valor')?.value||0,fotosObs:g('orc-fotos-obs')?.value||'',
-    limpezaValor:+g('orc-limpeza-valor')?.value||0,limpezaObs:g('orc-limpeza-obs')?.value||'',
-    vistoriaValor:+g('orc-vistoria-valor')?.value||0,vistoriaObs:g('orc-vistoria-obs')?.value||'',
+    fotosValor:+g('orc-fotos-valor')?.value||0,
+    limpezaValor:+g('orc-limpeza-valor')?.value||0,
+    vistoriaValor:+g('orc-vistoria-valor')?.value||0,
   };
 }
 function _atualizarTotalOrcamentoUI(){
@@ -3913,13 +3913,13 @@ async function gerarPDFOrcamentoAvulso(id){
       <div style="text-align:right;padding:8px 4px;font-weight:700;font-size:13px;color:#B8863C;">Subtotal Itens: ${fmtMoeda(totais.totalItens)}</div>`);
   }
   if(o.secoes?.fotos){
-    secoesHtml+=_pdfSecaoHtml('📷','Fotos',_pdfCampoHtml('Valor',fmtMoeda(totais.totalFotos),true)+(o.fotosObs?_pdfCampoHtml('Observações',o.fotosObs):''));
+    secoesHtml+=_pdfSecaoHtml('📷','Fotos',_pdfCampoHtml('Valor',fmtMoeda(totais.totalFotos),true));
   }
   if(o.secoes?.limpeza){
-    secoesHtml+=_pdfSecaoHtml('🧹','Limpeza',_pdfCampoHtml('Valor',fmtMoeda(totais.totalLimpeza),true)+(o.limpezaObs?_pdfCampoHtml('Observações',o.limpezaObs):''));
+    secoesHtml+=_pdfSecaoHtml('🧹','Limpeza',_pdfCampoHtml('Valor',fmtMoeda(totais.totalLimpeza),true));
   }
   if(o.secoes?.vistoria){
-    secoesHtml+=_pdfSecaoHtml('📋','Vistoria',_pdfCampoHtml('Valor',fmtMoeda(totais.totalVistoria),true)+(o.vistoriaObs?_pdfCampoHtml('Observações',o.vistoriaObs):''));
+    secoesHtml+=_pdfSecaoHtml('📋','Vistoria',_pdfCampoHtml('Valor',fmtMoeda(totais.totalVistoria),true));
   }
 
   const win=window.open('','_blank');
