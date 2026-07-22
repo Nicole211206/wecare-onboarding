@@ -1977,10 +1977,9 @@ function renderAbaCompras(im){
         <option value="percent"${descTipo==='percent'?' selected':''}>% (porcentagem)</option>
       </select>
     </div>
-    <div class="form-group"><label>Valor</label><input id="cp-desc-val" type="number" class="input" value="${descVal}" min="0" step="10" oninput="_onDescontoChange()"></div>
+    <div class="form-group"><label>Valor</label><input id="cp-desc-val" type="number" class="input" value="${descVal}" min="0" step="10" oninput="_onDescontoInput()" onblur="_onDescontoChange()"></div>
   </div>
   <div style="background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:16px;">
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Total Compras+Frete+Manut.: ${fmtMoeda(totalGeral)} + Margem ${margem}% = ${fmtMoeda(totalComMargem)}</div>
     <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;">
       <span>Total ao Proprietário</span><span id="cp-total-prop" style="color:var(--rose);">${fmtMoeda(totalProp)}</span>
     </div>
@@ -2025,12 +2024,22 @@ function _onCompraPreco(inp,subKey){
   saveAll();
   renderAba('compras');
 }
+// oninput só recalcula o total na tela (sem re-renderizar a aba inteira, que fazia a página
+// pular pro topo a cada dígito digitado); onblur/onchange persiste de fato.
+function _onDescontoInput(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.descontoTipo=document.getElementById('cp-desc-tipo')?.value||'reais';
+  im.descontoValor=+document.getElementById('cp-desc-val')?.value||0;
+  const el=document.getElementById('cp-total-prop');
+  if(el)el.textContent=fmtMoeda(_totalPropCompras(im));
+}
 function _onDescontoChange(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const tipo=document.getElementById('cp-desc-tipo')?.value||'reais';
-  const val=+document.getElementById('cp-desc-val')?.value||0;
-  im.descontoTipo=tipo;im.descontoValor=val;saveAll();
-  renderAba('compras');
+  im.descontoTipo=document.getElementById('cp-desc-tipo')?.value||'reais';
+  im.descontoValor=+document.getElementById('cp-desc-val')?.value||0;
+  saveAll();
+  const el=document.getElementById('cp-total-prop');
+  if(el)el.textContent=fmtMoeda(_totalPropCompras(im));
 }
 function toggleFormExtra(){
   const el=document.getElementById('form-add-extra');
