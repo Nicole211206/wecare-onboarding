@@ -2322,43 +2322,55 @@ function _totalPropCompras(im){
   const descValor=descTipo==='reais'?descVal:totalComMargem*(descVal/100);
   return totalComMargem-descValor;
 }
+// Setup já tem integração própria com a Claire (checkbox "Colocar Setup na Claire?" na aba
+// Captação, lido via setupPorMes no /onboarding-stats) — por isso fica separado do restante
+// aqui: "setup" nunca deve ser reenviado pelo botão de extras, só "outros".
 function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
-  const recebido=(+im.valorSetupCobrado||0)+_totalPropCompras(im);
-  let gastoPago=0,gastoPendente=0;
-
+  let setupPago=0,setupPendente=0;
   ['fotos','limpeza','vistoria'].forEach(k=>{
     const custo=+ops[k]?.custo||0;
-    if(ops[k]?.pago)gastoPago+=custo;else gastoPendente+=custo;
+    if(ops[k]?.pago)setupPago+=custo;else setupPendente+=custo;
   });
-
   (im.eventosExtras||[]).filter(e=>e.gastoSetup).forEach(ev=>{
     const custo=+ev.custo||0;
-    if(ev.pago)gastoPago+=custo;else gastoPendente+=custo;
+    if(ev.pago)setupPago+=custo;else setupPendente+=custo;
   });
+  const setupRecebido=+im.valorSetupCobrado||0;
+  const setup={recebido:setupRecebido,gastoPago:setupPago,gastoPendente:setupPendente,margem:setupRecebido-setupPago};
 
+  let outrosPago=0,outrosPendente=0;
   const lotes=im.comprasLotes||[];
-  gastoPago+=lotes.reduce((s,l)=>s+(+l.valorTotal||0),0);
+  outrosPago+=lotes.reduce((s,l)=>s+(+l.valorTotal||0),0);
   _rowsComprasTodos(im).filter(r=>!r.loteId).forEach(r=>{
-    if(r.pago)gastoPago+=r.total;else gastoPendente+=r.total;
+    if(r.pago)outrosPago+=r.total;else outrosPendente+=r.total;
   });
 
   (im.itensExtras||[]).forEach(x=>{
     const total=(+x.precoUn||0)*(+x.qtd||1);
-    if(x.pago)gastoPago+=total;else gastoPendente+=total;
+    if(x.pago)outrosPago+=total;else outrosPendente+=total;
   });
 
   (im.manutencoes||[]).forEach(m=>{
     const valor=+(m.valor??m.custo??0);
-    if(m.pago)gastoPago+=valor;else gastoPendente+=valor;
+    if(m.pago)outrosPago+=valor;else outrosPendente+=valor;
   });
 
   (im.gastosAvulsos||[]).forEach(g=>{
     const valor=+g.valor||0;
-    if(g.pago)gastoPago+=valor;else gastoPendente+=valor;
+    if(g.pago)outrosPago+=valor;else outrosPendente+=valor;
   });
 
-  return{recebido,gastoPago,gastoPendente,margem:recebido-gastoPago};
+  const outrosRecebido=_totalPropCompras(im);
+  const outros={recebido:outrosRecebido,gastoPago:outrosPago,gastoPendente:outrosPendente,margem:outrosRecebido-outrosPago};
+
+  return{
+    setup,outros,
+    recebido:setup.recebido+outros.recebido,
+    gastoPago:setup.gastoPago+outros.gastoPago,
+    gastoPendente:setup.gastoPendente+outros.gastoPendente,
+    margem:(setup.recebido+outros.recebido)-(setup.gastoPago+outros.gastoPago),
+  };
 }
 
 function renderAbaGastos(im){
@@ -2529,19 +2541,22 @@ function renderAbaGastos(im){
     </table>`}
   </div>`;
 
-  const resumoHtml=`<div style="background:var(--surface-2);border-radius:12px;padding:16px;">
-    <div class="form-section-title"><i class="fa-solid fa-scale-balanced"></i> Resumo Financeiro</div>
+  const _cardResumo=(titulo,r2,extra)=>`<div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:12px;">
+    <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-scale-balanced"></i> ${titulo}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
-      <div><div style="font-size:11px;color:var(--text-muted);">Recebido</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r.recebido)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Gasto (pago)</div><div style="font-size:18px;font-weight:700;color:var(--rose);">${fmtMoeda(r.gastoPago)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Pendente</div><div style="font-size:18px;font-weight:700;color:var(--amber);">${fmtMoeda(r.gastoPendente)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Margem</div><div style="font-size:18px;font-weight:700;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Recebido</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r2.recebido)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Gasto (pago)</div><div style="font-size:18px;font-weight:700;color:var(--rose);">${fmtMoeda(r2.gastoPago)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Pendente</div><div style="font-size:18px;font-weight:700;color:var(--amber);">${fmtMoeda(r2.gastoPendente)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Margem</div><div style="font-size:18px;font-weight:700;color:${r2.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r2.margem)}</div></div>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    ${extra||''}
+  </div>`;
+  const resumoHtml=
+    _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo.</div>')+
+    _cardResumo('Outros Gastos (Compras, Manutenções, Avulsos)',r.outros,`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
       ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
-    </div>
-  </div>`;
+    </div>`);
 
   return`<div>
     ${setupHtml}
@@ -2675,11 +2690,11 @@ function _apagarGastoAvulso(id){
 }
 function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  const r=_calcResumoFinanceiro(im);
-  if(!confirm(`Enviar para a Claire?\n\nRecebido: ${fmtMoeda(r.recebido)}\nGasto: ${fmtMoeda(r.gastoPago)}\nMargem: ${fmtMoeda(r.margem)}`))return;
+  const r=_calcResumoFinanceiro(im).outros;
+  if(!confirm(`Enviar para a Claire (Setup fica de fora, já vai por conta própria)?\n\nRecebido: ${fmtMoeda(r.recebido)}\nGasto: ${fmtMoeda(r.gastoPago)}\nMargem: ${fmtMoeda(r.margem)}`))return;
   fetch('https://claire-dados.nicole-0e7.workers.dev/api/extras?token=wecare-claire-2026-k7x9q2',{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({imovelNome:im.nome,descricao:'Resumo financeiro onboarding',cobrado:r.recebido,gasto:r.gastoPago,obs:`Enviado do onboarding em ${new Date().toLocaleString('pt-BR')}`})
+    body:JSON.stringify({imovelNome:im.nome,descricao:'Resumo financeiro onboarding (compras/manutenções/avulsos)',cobrado:r.recebido,gasto:r.gastoPago,obs:`Enviado do onboarding em ${new Date().toLocaleString('pt-BR')}`})
   }).then(resp=>resp.json()).then(j=>{
     if(j.ok){im.extraClaireEnviadoEm=new Date().toISOString();saveAll();renderAba('gastos');showToast('Enviado para a Claire!','sage');}
     else showToast('Erro ao enviar.','peach');
