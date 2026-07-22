@@ -1956,9 +1956,7 @@ function renderAbaCompras(im){
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total geral: <strong>${fmtMoeda(totalGeral)}</strong></span>
       <button class="btn btn-outline btn-sm" onclick="gerarPDFCompras()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
-        <input type="checkbox" ${im.totalPropRecebido?'checked':''} onchange="_onOutrosRecebidoCheck(this)"> Proprietário já pagou
-      </label>
+      <button class="btn btn-sm ${im.totalPropRecebido?'btn-sage':'btn-outline'}" onclick="_toggleOutrosRecebido()"><i class="fa-solid ${im.totalPropRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.totalPropRecebido?'Proprietário pagou':'Marcar como pago'}</button>
     </div>
   </div>
   ${tabelasCat}
@@ -2428,11 +2426,9 @@ function renderAbaGastos(im){
       </tr>`).join('')}
       </tbody>
     </table>
-    <div style="margin-top:8px;font-size:13px;display:flex;align-items:center;gap:8px;">
+    <div style="margin-top:8px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
-        <input type="checkbox" ${im.valorSetupCobradoRecebido?'checked':''} onchange="_onSetupRecebidoCheck(this)"> Proprietário já pagou
-      </label>
+      <button class="btn btn-sm ${im.valorSetupCobradoRecebido?'btn-sage':'btn-outline'}" onclick="_toggleSetupRecebido()"><i class="fa-solid ${im.valorSetupCobradoRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.valorSetupCobradoRecebido?'Proprietário pagou':'Marcar como pago'}</button>
     </div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Outros gastos de setup (ex: segunda vistoria) são adicionados na aba Produção, marcando "Gasto de Setup" no evento extra.</div>
   </div>`;
@@ -2602,11 +2598,11 @@ function renderAbaGastos(im){
     ${extra||''}
   </div>`;
   const resumoHtml=
-    _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo. Marque "Proprietário já pagou" ali em cima quando confirmar o recebimento.</div>')+
+    _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo. Clique em "Marcar como pago" ali em cima quando confirmar o recebimento.</div>')+
     _cardResumo('Outros Gastos (Compras, Manutenções, Avulsos)',r.outros,`<div style="display:flex;flex-direction:column;gap:10px;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
-        <input type="checkbox" ${im.totalPropRecebido?'checked':''} onchange="_onOutrosRecebidoCheck(this)"> Proprietário já pagou o Total de Compras/Extras
-      </label>
+      <div>
+        <button class="btn btn-sm ${im.totalPropRecebido?'btn-sage':'btn-outline'}" onclick="_toggleOutrosRecebido()"><i class="fa-solid ${im.totalPropRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.totalPropRecebido?'Proprietário pagou o Total de Compras/Extras':'Marcar Total de Compras/Extras como pago'}</button>
+      </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
         ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
@@ -2631,14 +2627,14 @@ function _onGastoSetupPago(cb,key){
   if(cb.checked)im.ops[key].pagoEm=hoje();
   saveAll();renderAba('gastos');
 }
-function _onSetupRecebidoCheck(cb){
+function _toggleSetupRecebido(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  im.valorSetupCobradoRecebido=cb.checked;
+  im.valorSetupCobradoRecebido=!im.valorSetupCobradoRecebido;
   saveAll();renderAba('gastos');
 }
-function _onOutrosRecebidoCheck(cb){
+function _toggleOutrosRecebido(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  im.totalPropRecebido=cb.checked;
+  im.totalPropRecebido=!im.totalPropRecebido;
   saveAll();
   if(_abaAtiva==='compras')renderAba('compras');else renderAba('gastos');
 }
