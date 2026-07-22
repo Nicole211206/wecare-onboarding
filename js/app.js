@@ -2332,6 +2332,11 @@ function _calcResumoFinanceiro(im){
     if(ops[k]?.pago)gastoPago+=custo;else gastoPendente+=custo;
   });
 
+  (im.eventosExtras||[]).filter(e=>e.gastoSetup).forEach(ev=>{
+    const custo=+ev.custo||0;
+    if(ev.pago)gastoPago+=custo;else gastoPendente+=custo;
+  });
+
   const lotes=im.comprasLotes||[];
   gastoPago+=lotes.reduce((s,l)=>s+(+l.valorTotal||0),0);
   _rowsComprasTodos(im).filter(r=>!r.loteId).forEach(r=>{
@@ -2366,24 +2371,34 @@ function renderAbaGastos(im){
   const itensExtras=im.itensExtras||[];
   const gastosAvulsos=im.gastosAvulsos||[];
 
+  const eventosSetup=(im.eventosExtras||[]).filter(e=>e.gastoSetup);
   const setupHtml=`<div style="margin-bottom:24px;">
     <div class="form-section-title"><i class="fa-solid fa-house-circle-check"></i> Setup (Fotos, Limpeza, Vistoria)</div>
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
       <tbody>
       ${['fotos','limpeza','vistoria'].map(k=>{
         const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
         const custo=+ops[k]?.custo||0;
+        const feito=!!ops[k]?.feito;
         const pago=!!ops[k]?.pago;
         return`<tr style="${pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
-          <td style="padding:4px 8px;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
+          <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${feito?'checked':''} onchange="_onGastoSetupFeito(this,'${k}')"></td>
+          <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
           <td style="padding:4px 8px;">${label}</td>
           <td style="text-align:right;padding:0 8px;">${fmtMoeda(custo)}</td>
         </tr>`;
       }).join('')}
+      ${eventosSetup.map(ev=>`<tr style="${ev.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${ev.feito?'checked':''} onchange="_onEventoSetupFeito(this,'${esc(ev.id)}')"></td>
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${ev.pago?'checked':''} onchange="_onEventoSetupPago(this,'${esc(ev.id)}')"></td>
+        <td style="padding:4px 8px;">${esc(ev.titulo||'')}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(+ev.custo||0)}</td>
+      </tr>`).join('')}
       </tbody>
     </table>
     <div style="margin-top:8px;font-size:13px;">Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Outros gastos de setup (ex: segunda vistoria) são adicionados na aba Produção, marcando "Gasto de Setup" no evento extra.</div>
   </div>`;
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
@@ -2544,6 +2559,25 @@ function _onGastoSetupPago(cb,key){
   if(!im.ops[key])im.ops[key]={};
   im.ops[key].pago=cb.checked;
   if(cb.checked)im.ops[key].pagoEm=hoje();
+  saveAll();renderAba('gastos');
+}
+function _onGastoSetupFeito(cb,key){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.ops)im.ops={};
+  if(!im.ops[key])im.ops[key]={};
+  im.ops[key].feito=cb.checked;
+  saveAll();renderAba('gastos');
+}
+function _onEventoSetupFeito(cb,evId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
+  const ev=im.eventosExtras.find(e=>e.id===evId);if(!ev)return;
+  ev.feito=cb.checked;
+  saveAll();renderAba('gastos');
+}
+function _onEventoSetupPago(cb,evId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
+  const ev=im.eventosExtras.find(e=>e.id===evId);if(!ev)return;
+  ev.pago=cb.checked;
   saveAll();renderAba('gastos');
 }
 function _onCompraPagoCheck(cb,subKey){
