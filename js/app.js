@@ -2248,11 +2248,11 @@ function _rowsComprasFalta(im){
 
 // ═══════════════════ MÓDULO DE GASTOS ═══════════════════
 // Linhas do catálogo de compras já com falta (mesma conta de _rowsComprasFalta, que exclui o
-// que o imóvel já tem via qtdTem) + comprado/pago/loteId pra cruzar com compras em lote. O
-// "total" usa o valor cheio (precoUn×qtdNec) quando já comprado — pra manter o valor gasto
-// visível mesmo depois que o qtdTem é atualizado (na aba Compras) e a falta zera — e o valor
-// da falta enquanto ainda não comprado, senão item que o imóvel já tinha de origem (falta=0,
-// nunca comprado) entraria como pendência. "pago" é só o status de pagamento, não afeta o valor.
+// que o imóvel já tem via qtdTem) + comprado/pago/loteId pra cruzar com compras em lote.
+// IMPORTANTE: "comprado" na aba Compras é só um check de "já resolvido" — na prática marca
+// tanto item comprado quanto item que o imóvel já veio com ele de fábrica, sem distinguir os
+// dois casos. Não dá pra usar "comprado" como sinal de gasto real. Só "pago" (setado aqui na
+// aba Gastos, individualmente ou via compra em lote) significa que houve pagamento de fato.
 function _rowsComprasTodos(im){
   const camas=im.camas||[];
   const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
@@ -2268,7 +2268,7 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    const total=comprado?precoUn*qtdNec:precoUn*falta;
+    const total=pago?precoUn*qtdNec:precoUn*falta;
     rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,total,comprado,pago,loteId});
   };
   ITENS_COMPRAS.forEach((item,idx)=>{
@@ -2297,10 +2297,12 @@ function _rowsComprasTodos(im){
   });
   return rows;
 }
-// Só o que de fato precisa aparecer no módulo de Gastos: falta comprar, ou já foi
-// comprado/pago (fica visível mesmo se o qtdTem for atualizado depois e a falta zerar).
+// Só o que de fato precisa aparecer no módulo de Gastos: ainda falta comprar, ou já foi pago
+// (fica visível mesmo se o qtdTem for atualizado depois e a falta zerar). Item que o imóvel já
+// tinha e foi só marcado "comprado" na aba Compras, sem nenhum pagamento registrado aqui, não
+// entra — não tem gasto de fato pra mostrar.
 function _rowsComprasRelevantes(im){
-  return _rowsComprasTodos(im).filter(r=>r.falta>0||r.comprado||r.pago||r.loteId);
+  return _rowsComprasTodos(im).filter(r=>r.falta>0||r.pago||r.loteId);
 }
 // Reproduz o valor "Total ao Proprietário" já calculado em renderAbaCompras, sem duplicar a
 // renderização das linhas — usado pro resumo financeiro (aba Gastos e painel Financeiro).
