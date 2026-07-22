@@ -2490,7 +2490,7 @@ function renderAbaGastos(im){
       <td style="padding:4px 8px;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onCompraPagoCheck(this,'${x.subKey}')"></td>
       <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
       <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(x.previsto)}</td>
-      <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${x.pago?'':'disabled'} onchange="_onCompraValorPago(this,'${x.subKey}')"></td>
+      <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" onchange="_onCompraValorPago(this,'${x.subKey}')"></td>
     </tr>`;
     }).join('')}
     </tbody>
@@ -2520,7 +2520,7 @@ function renderAbaGastos(im){
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.pago?'checked':''} onchange="_onManutPagoCheck(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${m.pago?'':'disabled'} onchange="_onManutValorPago(this,'${esc(m.id)}')"></td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" onchange="_onManutValorPago(this,'${esc(m.id)}')"></td>
       </tr>`;
       }).join('')}
       </tbody>
@@ -2540,7 +2540,7 @@ function renderAbaGastos(im){
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onExtraPagoCheck(this,${xi})"></td>
         <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.nome||'')}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${x.pago?'':'disabled'} onchange="_onExtraValorPago(this,${xi})"></td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" onchange="_onExtraValorPago(this,${xi})"></td>
       </tr>`;
       }).join('')}
       </tbody>
@@ -2581,7 +2581,7 @@ function renderAbaGastos(im){
         <td style="padding:4px 8px;">${esc(g.categoria||'')}</td>
         <td style="padding:4px 8px;${g.pago?'text-decoration:line-through;':''}">${esc(g.descricao||'')}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${g.pago?'':'disabled'} onchange="_onGastoAvulsoValorPago(this,'${esc(g.id)}')"></td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" onchange="_onGastoAvulsoValorPago(this,'${esc(g.id)}')"></td>
         <td><button class="btn btn-xs btn-danger" onclick="_apagarGastoAvulso('${esc(g.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`;
       }).join('')}
