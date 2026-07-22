@@ -2247,10 +2247,11 @@ function _rowsComprasFalta(im){
 }
 
 // ═══════════════════ MÓDULO DE GASTOS ═══════════════════
-// Linhas do catálogo de compras com o valor "cheio" (precoUn×qtdNec), independente do que
-// falta comprar — diferente de _rowsComprasFalta (que mostra só o que falta pra cobrar do
-// proprietário), aqui precisamos do valor total de cada item pra saber quanto foi de fato
-// pago por ele, além de comprado/pago/loteId pra cruzar com compras em lote.
+// Linhas do catálogo de compras já com falta (mesma conta de _rowsComprasFalta, que exclui o
+// que o imóvel já tem via qtdTem) + comprado/pago/loteId pra cruzar com compras em lote. O
+// "total" usa o valor cheio (precoUn×qtdNec) só quando já pago — pra manter o valor gasto
+// visível mesmo depois que o qtdTem é atualizado e a falta zera — e o valor da falta enquanto
+// pendente, senão item que o imóvel já tinha (falta=0, nunca comprado) entraria como pendência.
 function _rowsComprasTodos(im){
   const camas=im.camas||[];
   const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
@@ -2260,6 +2261,15 @@ function _rowsComprasTodos(im){
   const modalidadeAtual=modalidadeEnxovalAtual(im);
   const compras=im.compras||{};
   const rows=[];
+  const pushRow=(subKey,label,cat,qtdNec,precoUn)=>{
+    const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
+    const falta=Math.max(0,qtdNec-qtdTem);
+    const comprado=compras[subKey]?.comprado||false;
+    const pago=compras[subKey]?.pago||false;
+    const loteId=compras[subKey]?.loteId||null;
+    const total=pago?precoUn*qtdNec:precoUn*falta;
+    rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,total,comprado,pago,loteId});
+  };
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
@@ -2275,18 +2285,21 @@ function _rowsComprasTodos(im){
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
-        rows.push({subKey,label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,precoUn,total:precoUn*qtdNec,
-          comprado:compras[subKey]?.comprado||false,pago:compras[subKey]?.pago||false,loteId:compras[subKey]?.loteId||null});
+        pushRow(subKey,`${item.nome} (${tipoEnx})`,item.cat,qtdNec,precoUn);
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
       const subKey=String(idx);
       const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
-      rows.push({subKey,label:item.nome,cat:item.cat,qtdNec,precoUn,total:precoUn*qtdNec,
-        comprado:compras[subKey]?.comprado||false,pago:compras[subKey]?.pago||false,loteId:compras[subKey]?.loteId||null});
+      pushRow(subKey,item.nome,item.cat,qtdNec,precoUn);
     }
   });
   return rows;
+}
+// Só o que de fato precisa aparecer no módulo de Gastos: falta comprar, ou já foi
+// comprado/pago (fica visível mesmo se o qtdTem for atualizado depois e a falta zerar).
+function _rowsComprasRelevantes(im){
+  return _rowsComprasTodos(im).filter(r=>r.falta>0||r.comprado||r.pago||r.loteId);
 }
 // Reproduz o valor "Total ao Proprietário" já calculado em renderAbaCompras, sem duplicar a
 // renderização das linhas — usado pro resumo financeiro (aba Gastos e painel Financeiro).
@@ -2343,7 +2356,7 @@ function _calcResumoFinanceiro(im){
 function renderAbaGastos(im){
   const ops=im.ops||{fotos:{},limpeza:{},vistoria:{}};
   const r=_calcResumoFinanceiro(im);
-  const rows=_rowsComprasTodos(im);
+  const rows=_rowsComprasRelevantes(im);
   const lotes=im.comprasLotes||[];
   const itensLivres=rows.filter(x=>!x.loteId);
   const manutencoes=im.manutencoes||[];
