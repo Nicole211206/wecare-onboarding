@@ -2485,7 +2485,7 @@ function renderAbaGastos(im){
     <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Previsto</th><th style="text-align:right;padding:0 8px;">Pago</th></tr></thead>
     <tbody>
     ${itensLivres.map(x=>{
-      const pagoValor=x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0;
+      const pagoValor=x.valorPago!=null?x.valorPago:(x.pago?x.previsto:0);
       return`<tr style="${x.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
       <td style="padding:4px 8px;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onCompraPagoCheck(this,'${x.subKey}')"></td>
       <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
@@ -2514,7 +2514,7 @@ function renderAbaGastos(im){
       <tbody>
       ${manutencoes.map(m=>{
         const previsto=+(m.valor??m.custo??0);
-        const pagoValor=m.pago?(m.valorPago!=null?m.valorPago:previsto):0;
+        const pagoValor=m.valorPago!=null?m.valorPago:(m.pago?previsto:0);
         return`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.status==='resolvido'?'checked':''} onchange="_onManutFeitoCheckGastos(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.pago?'checked':''} onchange="_onManutPagoCheck(this,'${esc(m.id)}')"></td>
@@ -2535,7 +2535,7 @@ function renderAbaGastos(im){
       <tbody>
       ${itensExtras.map((x,xi)=>{
         const previsto=(+x.precoUn||0)*(+x.qtd||1);
-        const pagoValor=x.pago?(x.valorPago!=null?x.valorPago:previsto):0;
+        const pagoValor=x.valorPago!=null?x.valorPago:(x.pago?previsto:0);
         return`<tr style="${x.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onExtraPagoCheck(this,${xi})"></td>
         <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.nome||'')}</td>
@@ -2575,7 +2575,7 @@ function renderAbaGastos(im){
       <tbody>
       ${gastosAvulsos.map(g=>{
         const previsto=+g.valor||0;
-        const pagoValor=g.pago?(g.valorPago!=null?g.valorPago:previsto):0;
+        const pagoValor=g.valorPago!=null?g.valorPago:(g.pago?previsto:0);
         return`<tr style="${g.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${g.pago?'checked':''} onchange="_onGastoAvulsoPagoCheck(this,'${esc(g.id)}')"></td>
         <td style="padding:4px 8px;">${esc(g.categoria||'')}</td>
