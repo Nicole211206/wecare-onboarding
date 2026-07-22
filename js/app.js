@@ -2269,11 +2269,14 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    const previsto=precoUn*qtdNec;
+    // Previsto pendente = preço × falta (mesma conta da aba Compras — só o que falta comprar).
+    // Uma vez pago, vira o custo cheio (preço × qtdNec), já que o "previsto" original deixa de
+    // fazer sentido depois que o qtdTem for atualizado (a falta zera e o previsto sumiria).
+    const previsto=pago?precoUn*qtdNec:precoUn*falta;
     // valorPago é editável (_onCompraValorPago) — some sobre o valor previsto por padrão, mas a
     // equipe pode ajustar pro valor real pago no item, inclusive quando veio de uma compra em lote.
     const valorPago=compras[subKey]?.valorPago;
-    const total=pago?(valorPago!=null?valorPago:previsto):precoUn*falta;
+    const total=pago?(valorPago!=null?valorPago:previsto):previsto;
     rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,previsto,valorPago,total,comprado,pago,loteId});
   };
   ITENS_COMPRAS.forEach((item,idx)=>{
@@ -2441,11 +2444,10 @@ function renderAbaGastos(im){
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Selecione os itens e ajuste quanto foi pago em cada um (já vem preenchido com o valor de catálogo):</div>
     <div id="lote-itens-wrap" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
       ${itensLivres.filter(x=>!x.comprado).map(x=>{
-        const previsto=x.precoUn*x.qtdNec;
         return`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;">
         <input type="checkbox" class="lote-item-check" data-subkey="${x.subKey}" onchange="_onLoteItemCheck(this)">
         <span style="flex:1;">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></span>
-        <input type="number" class="input lote-item-valor" data-subkey="${x.subKey}" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${previsto.toFixed(2)}" disabled oninput="_onLoteValorInput()">
+        <input type="number" class="input lote-item-valor" data-subkey="${x.subKey}" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${x.previsto.toFixed(2)}" disabled oninput="_onLoteValorInput()">
       </div>`;
       }).join('')||'<div style="font-size:12.5px;color:var(--text-muted);">Nenhum item pendente.</div>'}
     </div>
@@ -2461,7 +2463,7 @@ function renderAbaGastos(im){
     <tbody>
     ${lotes.map(l=>{
       const itensDoLote=rows.filter(r=>r.loteId===l.id);
-      const previstoLote=itensDoLote.reduce((s,r)=>s+r.precoUn*r.qtdNec,0);
+      const previstoLote=itensDoLote.reduce((s,r)=>s+r.previsto,0);
       return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_toggleLoteDetalhe('${l.id}')" title="Clique para ver os itens">
       <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
       <td style="padding:4px 8px;">${esc(l.local||'-')}</td>
