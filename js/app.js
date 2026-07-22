@@ -1953,9 +1953,12 @@ function renderAbaCompras(im){
   return`<div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-cart-shopping"></i> Compras &amp; Manutenção</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <span class="tag tag-gold" style="font-size:13px;padding:6px 14px;">Total geral: <strong>${fmtMoeda(totalGeral)}</strong></span>
       <button class="btn btn-outline btn-sm" onclick="gerarPDFCompras()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" ${im.totalPropRecebido?'checked':''} onchange="_onOutrosRecebidoCheck(this)"> Proprietário já pagou
+      </label>
     </div>
   </div>
   ${tabelasCat}
@@ -2268,8 +2271,12 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    const total=pago?precoUn*qtdNec:precoUn*falta;
-    rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,total,comprado,pago,loteId});
+    const previsto=precoUn*qtdNec;
+    // valorPago é editável (_onCompraValorPago) — some sobre o valor previsto por padrão, mas a
+    // equipe pode ajustar pro valor real pago no item, inclusive quando veio de uma compra em lote.
+    const valorPago=compras[subKey]?.valorPago;
+    const total=pago?(valorPago!=null?valorPago:previsto):precoUn*falta;
+    rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,previsto,valorPago,total,comprado,pago,loteId});
   };
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
@@ -2325,6 +2332,10 @@ function _totalPropCompras(im){
 // Setup já tem integração própria com a Claire (checkbox "Colocar Setup na Claire?" na aba
 // Captação, lido via setupPorMes no /onboarding-stats) — por isso fica separado do restante
 // aqui: "setup" nunca deve ser reenviado pelo botão de extras, só "outros".
+function _valorPagoOuPrevisto(pago,previsto,override){
+  if(!pago)return 0;
+  return override!=null?override:previsto;
+}
 function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
   let setupPago=0,setupPendente=0;
@@ -2336,8 +2347,11 @@ function _calcResumoFinanceiro(im){
     const custo=+ev.custo||0;
     if(ev.pago)setupPago+=custo;else setupPendente+=custo;
   });
-  const setupRecebido=+im.valorSetupCobrado||0;
-  const setup={recebido:setupRecebido,gastoPago:setupPago,gastoPendente:setupPendente,margem:setupRecebido-setupPago};
+  // Recebido só conta se o proprietário já pagou de fato (checkbox ao lado do valor) — senão
+  // o número fica "irreal" mostrando receita de contrato que nem foi assinado/cobrado ainda.
+  const setupRecebidoPrevisto=+im.valorSetupCobrado||0;
+  const setupRecebido=im.valorSetupCobradoRecebido?setupRecebidoPrevisto:0;
+  const setup={recebidoPrevisto:setupRecebidoPrevisto,recebido:setupRecebido,gastoPago:setupPago,gastoPendente:setupPendente,margem:setupRecebido-setupPago};
 
   let outrosPago=0,outrosPendente=0;
   const lotes=im.comprasLotes||[];
@@ -2347,25 +2361,30 @@ function _calcResumoFinanceiro(im){
   });
 
   (im.itensExtras||[]).forEach(x=>{
-    const total=(+x.precoUn||0)*(+x.qtd||1);
-    if(x.pago)outrosPago+=total;else outrosPendente+=total;
+    const previsto=(+x.precoUn||0)*(+x.qtd||1);
+    const valor=_valorPagoOuPrevisto(x.pago,previsto,x.valorPago);
+    if(x.pago)outrosPago+=valor;else outrosPendente+=previsto;
   });
 
   (im.manutencoes||[]).forEach(m=>{
-    const valor=+(m.valor??m.custo??0);
-    if(m.pago)outrosPago+=valor;else outrosPendente+=valor;
+    const previsto=+(m.valor??m.custo??0);
+    const valor=_valorPagoOuPrevisto(m.pago,previsto,m.valorPago);
+    if(m.pago)outrosPago+=valor;else outrosPendente+=previsto;
   });
 
   (im.gastosAvulsos||[]).forEach(g=>{
-    const valor=+g.valor||0;
-    if(g.pago)outrosPago+=valor;else outrosPendente+=valor;
+    const previsto=+g.valor||0;
+    const valor=_valorPagoOuPrevisto(g.pago,previsto,g.valorPago);
+    if(g.pago)outrosPago+=valor;else outrosPendente+=previsto;
   });
 
-  const outrosRecebido=_totalPropCompras(im);
-  const outros={recebido:outrosRecebido,gastoPago:outrosPago,gastoPendente:outrosPendente,margem:outrosRecebido-outrosPago};
+  const outrosRecebidoPrevisto=_totalPropCompras(im);
+  const outrosRecebido=im.totalPropRecebido?outrosRecebidoPrevisto:0;
+  const outros={recebidoPrevisto:outrosRecebidoPrevisto,recebido:outrosRecebido,gastoPago:outrosPago,gastoPendente:outrosPendente,margem:outrosRecebido-outrosPago};
 
   return{
     setup,outros,
+    recebidoPrevisto:setup.recebidoPrevisto+outros.recebidoPrevisto,
     recebido:setup.recebido+outros.recebido,
     gastoPago:setup.gastoPago+outros.gastoPago,
     gastoPendente:setup.gastoPendente+outros.gastoPendente,
@@ -2409,7 +2428,12 @@ function renderAbaGastos(im){
       </tr>`).join('')}
       </tbody>
     </table>
-    <div style="margin-top:8px;font-size:13px;">Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></div>
+    <div style="margin-top:8px;font-size:13px;display:flex;align-items:center;gap:8px;">
+      <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;">
+        <input type="checkbox" ${im.valorSetupCobradoRecebido?'checked':''} onchange="_onSetupRecebidoCheck(this)"> Proprietário já pagou
+      </label>
+    </div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Outros gastos de setup (ex: segunda vistoria) são adicionados na aba Produção, marcando "Gasto de Setup" no evento extra.</div>
   </div>`;
 
@@ -2417,14 +2441,19 @@ function renderAbaGastos(im){
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
       <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="lote-data-input" type="date" class="input" value="${hoje()}"></div>
       <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Local / Loja</label><input id="lote-local-input" class="input" placeholder="Ex: Mercado Livre"></div>
-      <div class="form-group" style="width:130px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor total (R$)</label><input id="lote-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
     </div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Selecione os itens que essa compra cobre:</div>
-    <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
-      ${itensLivres.filter(x=>!x.comprado).map(x=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;">
-        <input type="checkbox" class="lote-item-check" data-subkey="${x.subKey}"> ${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)} · ${fmtMoeda(x.total)})</span>
-      </label>`).join('')||'<div style="font-size:12.5px;color:var(--text-muted);">Nenhum item pendente.</div>'}
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Selecione os itens e ajuste quanto foi pago em cada um (já vem preenchido com o valor de catálogo):</div>
+    <div id="lote-itens-wrap" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
+      ${itensLivres.filter(x=>!x.comprado).map(x=>{
+        const previsto=x.precoUn*x.qtdNec;
+        return`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;">
+        <input type="checkbox" class="lote-item-check" data-subkey="${x.subKey}" onchange="_onLoteItemCheck(this)">
+        <span style="flex:1;">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></span>
+        <input type="number" class="input lote-item-valor" data-subkey="${x.subKey}" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${previsto.toFixed(2)}" disabled oninput="_onLoteValorInput()">
+      </div>`;
+      }).join('')||'<div style="font-size:12.5px;color:var(--text-muted);">Nenhum item pendente.</div>'}
     </div>
+    <div style="margin-top:10px;font-size:13px;font-weight:700;text-align:right;">Total pago: <span id="lote-total-preview">${fmtMoeda(0)}</span></div>
     <div style="display:flex;gap:6px;margin-top:10px;">
       <button class="btn btn-sm btn-sage" onclick="confirmarCompraLote()"><i class="fa-solid fa-check"></i> Salvar compra em lote</button>
       <button class="btn btn-sm btn-outline" onclick="toggleFormLote()"><i class="fa-solid fa-xmark"></i></button>
@@ -2447,7 +2476,7 @@ function renderAbaGastos(im){
     </tr>
     <tr id="lote-detalhe-${l.id}" style="display:none;background:var(--surface-2,#f8f4f9);">
       <td colspan="6" style="padding:8px 14px;font-size:12px;color:var(--text-muted);">
-        ${itensDoLote.length?itensDoLote.map(r=>esc(r.label)).join(', '):'Itens não encontrados (catálogo pode ter mudado).'}
+        ${itensDoLote.length?itensDoLote.map(r=>`${esc(r.label)}: <strong style="color:var(--text);">${fmtMoeda(l.valoresPorItem?.[r.subKey]??0)}</strong>`).join(' &nbsp;·&nbsp; '):'Itens não encontrados (catálogo pode ter mudado).'}
       </td>
     </tr>`;
     }).join('')}
@@ -2458,13 +2487,12 @@ function renderAbaGastos(im){
     <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Previsto</th><th style="text-align:right;padding:0 8px;">Pago</th></tr></thead>
     <tbody>
     ${itensLivres.map(x=>{
-      const previsto=x.precoUn*x.qtdNec;
-      const pagoValor=x.pago?previsto:0;
-      return`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+      const pagoValor=x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0;
+      return`<tr style="${x.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
       <td style="padding:4px 8px;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onCompraPagoCheck(this,'${x.subKey}')"></td>
-      <td style="padding:4px 8px;">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
-      <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-      <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+      <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
+      <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(x.previsto)}</td>
+      <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${x.pago?'':'disabled'} onchange="_onCompraValorPago(this,'${x.subKey}')"></td>
     </tr>`;
     }).join('')}
     </tbody>
@@ -2488,13 +2516,13 @@ function renderAbaGastos(im){
       <tbody>
       ${manutencoes.map(m=>{
         const previsto=+(m.valor??m.custo??0);
-        const pagoValor=m.pago?previsto:0;
+        const pagoValor=m.pago?(m.valorPago!=null?m.valorPago:previsto):0;
         return`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.status==='resolvido'?'checked':''} onchange="_onManutFeitoCheckGastos(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.pago?'checked':''} onchange="_onManutPagoCheck(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${m.pago?'':'disabled'} onchange="_onManutValorPago(this,'${esc(m.id)}')"></td>
       </tr>`;
       }).join('')}
       </tbody>
@@ -2509,12 +2537,12 @@ function renderAbaGastos(im){
       <tbody>
       ${itensExtras.map((x,xi)=>{
         const previsto=(+x.precoUn||0)*(+x.qtd||1);
-        const pagoValor=x.pago?previsto:0;
-        return`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        const pagoValor=x.pago?(x.valorPago!=null?x.valorPago:previsto):0;
+        return`<tr style="${x.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onExtraPagoCheck(this,${xi})"></td>
-        <td style="padding:4px 8px;">${esc(x.nome||'')}</td>
+        <td style="padding:4px 8px;${x.pago?'text-decoration:line-through;':''}">${esc(x.nome||'')}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${x.pago?'':'disabled'} onchange="_onExtraValorPago(this,${xi})"></td>
       </tr>`;
       }).join('')}
       </tbody>
@@ -2549,13 +2577,13 @@ function renderAbaGastos(im){
       <tbody>
       ${gastosAvulsos.map(g=>{
         const previsto=+g.valor||0;
-        const pagoValor=g.pago?previsto:0;
-        return`<tr style="${g.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        const pagoValor=g.pago?(g.valorPago!=null?g.valorPago:previsto):0;
+        return`<tr style="${g.pago?'opacity:.85;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${g.pago?'checked':''} onchange="_onGastoAvulsoPagoCheck(this,'${esc(g.id)}')"></td>
         <td style="padding:4px 8px;">${esc(g.categoria||'')}</td>
-        <td style="padding:4px 8px;">${esc(g.descricao||'')}</td>
+        <td style="padding:4px 8px;${g.pago?'text-decoration:line-through;':''}">${esc(g.descricao||'')}</td>
         <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+        <td style="text-align:right;padding:0 8px;"><input type="number" class="input" style="width:90px;padding:3px 6px;text-align:right;" min="0" step="1" value="${pagoValor.toFixed(2)}" ${g.pago?'':'disabled'} onchange="_onGastoAvulsoValorPago(this,'${esc(g.id)}')"></td>
         <td><button class="btn btn-xs btn-danger" onclick="_apagarGastoAvulso('${esc(g.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`;
       }).join('')}
@@ -2566,18 +2594,23 @@ function renderAbaGastos(im){
   const _cardResumo=(titulo,r2,extra)=>`<div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:12px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-scale-balanced"></i> ${titulo}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
-      <div><div style="font-size:11px;color:var(--text-muted);">Recebido</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r2.recebido)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Recebido (previsto: ${fmtMoeda(r2.recebidoPrevisto)})</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r2.recebido)}</div></div>
       <div><div style="font-size:11px;color:var(--text-muted);">Gasto (pago)</div><div style="font-size:18px;font-weight:700;color:var(--rose);">${fmtMoeda(r2.gastoPago)}</div></div>
       <div><div style="font-size:11px;color:var(--text-muted);">Pendente</div><div style="font-size:18px;font-weight:700;color:var(--amber);">${fmtMoeda(r2.gastoPendente)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Margem</div><div style="font-size:18px;font-weight:700;color:${r2.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r2.margem)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Margem (real)</div><div style="font-size:18px;font-weight:700;color:${r2.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r2.margem)}</div></div>
     </div>
     ${extra||''}
   </div>`;
   const resumoHtml=
-    _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo.</div>')+
-    _cardResumo('Outros Gastos (Compras, Manutenções, Avulsos)',r.outros,`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-      <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
-      ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
+    _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo. Marque "Proprietário já pagou" ali em cima quando confirmar o recebimento.</div>')+
+    _cardResumo('Outros Gastos (Compras, Manutenções, Avulsos)',r.outros,`<div style="display:flex;flex-direction:column;gap:10px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" ${im.totalPropRecebido?'checked':''} onchange="_onOutrosRecebidoCheck(this)"> Proprietário já pagou o Total de Compras/Extras
+      </label>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
+        ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
+      </div>
     </div>`);
 
   return`<div>
@@ -2597,6 +2630,17 @@ function _onGastoSetupPago(cb,key){
   im.ops[key].pago=cb.checked;
   if(cb.checked)im.ops[key].pagoEm=hoje();
   saveAll();renderAba('gastos');
+}
+function _onSetupRecebidoCheck(cb){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.valorSetupCobradoRecebido=cb.checked;
+  saveAll();renderAba('gastos');
+}
+function _onOutrosRecebidoCheck(cb){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.totalPropRecebido=cb.checked;
+  saveAll();
+  if(_abaAtiva==='compras')renderAba('compras');else renderAba('gastos');
 }
 function _onGastoSetupFeito(cb,key){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -2624,20 +2668,50 @@ function _onCompraPagoCheck(cb,subKey){
   im.compras[subKey].pago=cb.checked;
   saveAll();renderAba('gastos');
 }
+function _onCompraValorPago(inp,subKey){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.compras)im.compras={};
+  if(!im.compras[subKey])im.compras[subKey]={};
+  im.compras[subKey].valorPago=+inp.value||0;
+  saveAll();renderAba('gastos');
+}
 function toggleFormLote(){
   const el=document.getElementById('form-add-lote');if(!el)return;
   el.style.display=el.style.display==='none'?'block':'none';
+  if(el.style.display==='block')_onLoteValorInput();
+}
+function _onLoteItemCheck(cb){
+  const valInput=document.querySelector(`.lote-item-valor[data-subkey="${cb.dataset.subkey}"]`);
+  if(valInput)valInput.disabled=!cb.checked;
+  _onLoteValorInput();
+}
+function _onLoteValorInput(){
+  const total=[...document.querySelectorAll('.lote-item-check:checked')].reduce((s,cb)=>{
+    const valInput=document.querySelector(`.lote-item-valor[data-subkey="${cb.dataset.subkey}"]`);
+    return s+(+valInput?.value||0);
+  },0);
+  const el=document.getElementById('lote-total-preview');
+  if(el)el.textContent=fmtMoeda(total);
 }
 function confirmarCompraLote(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const data=(document.getElementById('lote-data-input')||{}).value||hoje();
   const local=(document.getElementById('lote-local-input')||{}).value||'';
-  const valorTotal=+(document.getElementById('lote-valor-input')||{}).value||0;
-  const subKeys=[...document.querySelectorAll('.lote-item-check:checked')].map(cb=>cb.dataset.subkey);
-  if(!subKeys.length){showToast('Selecione ao menos um item.','peach');return;}
-  if(!valorTotal){showToast('Informe o valor total da compra.','peach');return;}
+  const checks=[...document.querySelectorAll('.lote-item-check:checked')];
+  if(!checks.length){showToast('Selecione ao menos um item.','peach');return;}
+  const valoresPorItem={};
+  let valorTotal=0;
+  checks.forEach(cb=>{
+    const sk=cb.dataset.subkey;
+    const valInput=document.querySelector(`.lote-item-valor[data-subkey="${sk}"]`);
+    const v=+valInput?.value||0;
+    valoresPorItem[sk]=v;
+    valorTotal+=v;
+  });
+  if(!valorTotal){showToast('Informe ao menos um valor pago maior que zero.','peach');return;}
   if(!im.comprasLotes)im.comprasLotes=[];
-  const lote={id:uid(),data,local:local.trim(),valorTotal,itensVinculados:subKeys,criadoEm:new Date().toISOString()};
+  const subKeys=Object.keys(valoresPorItem);
+  const lote={id:uid(),data,local:local.trim(),valorTotal,valoresPorItem,itensVinculados:subKeys,criadoEm:new Date().toISOString()};
   im.comprasLotes.push(lote);
   if(!im.compras)im.compras={};
   subKeys.forEach(sk=>{
@@ -2672,10 +2746,20 @@ function _onManutPagoCheck(cb,manId){
   const m=im.manutencoes.find(x=>x.id===manId);
   if(m){m.pago=cb.checked;if(cb.checked)m.pagoEm=hoje();saveAll();renderAba('gastos');}
 }
+function _onManutValorPago(inp,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.valorPago=+inp.value||0;saveAll();renderAba('gastos');}
+}
 function _onExtraPagoCheck(cb,xi){
   const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
   im.itensExtras[xi].pago=cb.checked;
   if(cb.checked)im.itensExtras[xi].pagoEm=hoje();
+  saveAll();renderAba('gastos');
+}
+function _onExtraValorPago(inp,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  im.itensExtras[xi].valorPago=+inp.value||0;
   saveAll();renderAba('gastos');
 }
 function toggleFormGastoAvulso(){
@@ -2704,6 +2788,11 @@ function _onGastoAvulsoPagoCheck(cb,id){
   const g=(im.gastosAvulsos||[]).find(x=>x.id===id);
   if(g){g.pago=cb.checked;if(cb.checked)g.pagoEm=hoje();saveAll();renderAba('gastos');}
 }
+function _onGastoAvulsoValorPago(inp,id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const g=(im.gastosAvulsos||[]).find(x=>x.id===id);
+  if(g){g.valorPago=+inp.value||0;saveAll();renderAba('gastos');}
+}
 function _apagarGastoAvulso(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!confirm('Apagar este gasto?'))return;
@@ -2725,41 +2814,46 @@ function enviarResumoClaire(){
 
 function renderFinanceiro(){
   const container=document.getElementById('panel-financeiro');if(!container)return;
-  const filtroAtual=(document.getElementById('fin-filtro-status')||{}).value||'ativos';
-  const lista=imoveis.filter(im=>filtroAtual==='todos'?true:filtroAtual==='perdidos'?im.status==='perdido':im.status!=='perdido');
-  const linhas=lista.map(im=>({im,r:_calcResumoFinanceiro(im)}));
+  const filtroAtual=(document.getElementById('fin-filtro-status')||{}).value||'assinados';
+  const lista=imoveis.filter(im=>{
+    if(filtroAtual==='todos')return true;
+    if(filtroAtual==='perdidos')return im.status==='perdido';
+    return im.status!=='perdido'&&im.contratoAssinado===true; // 'assinados' — só quem já assinou tem dinheiro real em jogo
+  });
+  const linhas=lista.map(im=>({im,r:_calcResumoFinanceiro(im)}))
+    .sort((a,b)=>(a.im.nome||'').localeCompare(b.im.nome||''));
   const totRecebido=linhas.reduce((s,x)=>s+x.r.recebido,0);
   const totGasto=linhas.reduce((s,x)=>s+x.r.gastoPago,0);
   const totMargem=linhas.reduce((s,x)=>s+x.r.margem,0);
   container.innerHTML=`
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
       <div class="tag tag-gold" style="font-size:14px;padding:10px 18px;">Recebido: <strong>${fmtMoeda(totRecebido)}</strong></div>
       <div class="tag" style="font-size:14px;padding:10px 18px;">Gasto: <strong>${fmtMoeda(totGasto)}</strong></div>
       <div class="tag tag-sage" style="font-size:14px;padding:10px 18px;">Margem: <strong>${fmtMoeda(totMargem)}</strong></div>
       <select id="fin-filtro-status" class="input" style="width:auto;margin-left:auto;" onchange="renderFinanceiro()">
-        <option value="ativos"${filtroAtual==='ativos'?' selected':''}>Sem perdidos</option>
+        <option value="assinados"${filtroAtual==='assinados'?' selected':''}>Contrato assinado</option>
         <option value="todos"${filtroAtual==='todos'?' selected':''}>Todos os imóveis</option>
         <option value="perdidos"${filtroAtual==='perdidos'?' selected':''}>Só perdidos</option>
       </select>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)">
-        <th style="padding:6px 8px;text-align:left;">Imóvel</th><th>Fase</th>
-        <th style="text-align:right;">Recebido</th><th style="text-align:right;">Gasto</th>
-        <th style="text-align:right;">Pendente</th><th style="text-align:right;">Margem</th><th></th>
-      </tr></thead>
-      <tbody>
-      ${linhas.map(({im,r})=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:4px 8px;">${esc(im.nome||'(sem nome)')}</td>
-        <td style="text-align:center;">${im.status==='ativo'?'Ativo':im.status==='perdido'?'Perdido':esc(FASE_LABEL[im.status]||im.status)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.recebido)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.gastoPago)}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.gastoPendente)}</td>
-        <td style="text-align:right;padding:0 8px;font-weight:600;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</td>
-        <td><button class="btn btn-xs btn-outline" onclick="_abrirGastosImovel('${im.id}')">Ver detalhe →</button></td>
-      </tr>`).join('')||'<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text-muted);">Nenhum imóvel.</td></tr>'}
-      </tbody>
-    </table>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
+      ${linhas.map(({im,r})=>{
+        const faseLabel=im.status==='ativo'?'Ativo':im.status==='perdido'?'Perdido':(FASE_LABEL[im.status]||im.status);
+        const faseCor=im.status==='ativo'?'sage':im.status==='perdido'?'peach':'gold';
+        return`<div style="background:var(--surface-2);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s;" onclick="_abrirGastosImovel('${im.id}')" onmouseover="this.style.boxShadow='0 2px 10px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:13.5px;line-height:1.3;">${esc(im.nome||'(sem nome)')}</div>
+            <span class="tag tag-${faseCor}" style="flex-shrink:0;font-size:10.5px;">${esc(faseLabel)}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 8px;font-size:12px;">
+            <div><div style="color:var(--text-muted);font-size:10.5px;">Recebido</div><div style="font-weight:700;color:var(--green);">${fmtMoeda(r.recebido)}</div></div>
+            <div><div style="color:var(--text-muted);font-size:10.5px;">Gasto</div><div style="font-weight:700;color:var(--rose);">${fmtMoeda(r.gastoPago)}</div></div>
+            <div><div style="color:var(--text-muted);font-size:10.5px;">Pendente</div><div style="font-weight:700;color:var(--amber);">${fmtMoeda(r.gastoPendente)}</div></div>
+            <div><div style="color:var(--text-muted);font-size:10.5px;">Margem</div><div style="font-weight:700;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</div></div>
+          </div>
+        </div>`;
+      }).join('')||'<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text-muted);">Nenhum imóvel neste filtro.</div>'}
+    </div>
   `;
 }
 function _abrirGastosImovel(id){
