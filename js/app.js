@@ -2249,9 +2249,10 @@ function _rowsComprasFalta(im){
 // ═══════════════════ MÓDULO DE GASTOS ═══════════════════
 // Linhas do catálogo de compras já com falta (mesma conta de _rowsComprasFalta, que exclui o
 // que o imóvel já tem via qtdTem) + comprado/pago/loteId pra cruzar com compras em lote. O
-// "total" usa o valor cheio (precoUn×qtdNec) só quando já pago — pra manter o valor gasto
-// visível mesmo depois que o qtdTem é atualizado e a falta zera — e o valor da falta enquanto
-// pendente, senão item que o imóvel já tinha (falta=0, nunca comprado) entraria como pendência.
+// "total" usa o valor cheio (precoUn×qtdNec) quando já comprado — pra manter o valor gasto
+// visível mesmo depois que o qtdTem é atualizado (na aba Compras) e a falta zera — e o valor
+// da falta enquanto ainda não comprado, senão item que o imóvel já tinha de origem (falta=0,
+// nunca comprado) entraria como pendência. "pago" é só o status de pagamento, não afeta o valor.
 function _rowsComprasTodos(im){
   const camas=im.camas||[];
   const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
@@ -2267,7 +2268,7 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    const total=pago?precoUn*qtdNec:precoUn*falta;
+    const total=comprado?precoUn*qtdNec:precoUn*falta;
     rows.push({subKey,label,cat,qtdNec,qtdTem,falta,precoUn,total,comprado,pago,loteId});
   };
   ITENS_COMPRAS.forEach((item,idx)=>{
