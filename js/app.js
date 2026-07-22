@@ -2432,19 +2432,21 @@ function renderAbaGastos(im){
   </div>`;
 
   const lotesHtml=lotes.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
-    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Local</th><th style="text-align:center;">Itens</th><th style="text-align:right;">Valor</th><th style="width:32px;"></th></tr></thead>
+    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Local</th><th style="text-align:center;">Itens</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th><th style="width:32px;"></th></tr></thead>
     <tbody>
     ${lotes.map(l=>{
       const itensDoLote=rows.filter(r=>r.loteId===l.id);
+      const previstoLote=itensDoLote.reduce((s,r)=>s+r.precoUn*r.qtdNec,0);
       return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_toggleLoteDetalhe('${l.id}')" title="Clique para ver os itens">
       <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
       <td style="padding:4px 8px;">${esc(l.local||'-')}</td>
       <td style="text-align:center;"><i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--text-muted);margin-right:4px;"></i>${l.itensVinculados.length}</td>
+      <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previstoLote)}</td>
       <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
       <td><button class="btn btn-xs btn-danger" onclick="event.stopPropagation();_apagarCompraLote('${l.id}')"><i class="fa-solid fa-trash"></i></button></td>
     </tr>
     <tr id="lote-detalhe-${l.id}" style="display:none;background:var(--surface-2,#f8f4f9);">
-      <td colspan="5" style="padding:8px 14px;font-size:12px;color:var(--text-muted);">
+      <td colspan="6" style="padding:8px 14px;font-size:12px;color:var(--text-muted);">
         ${itensDoLote.length?itensDoLote.map(r=>esc(r.label)).join(', '):'Itens não encontrados (catálogo pode ter mudado).'}
       </td>
     </tr>`;
@@ -2453,13 +2455,18 @@ function renderAbaGastos(im){
   </table>`:'';
 
   const itensLivresHtml=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-    <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Valor</th></tr></thead>
+    <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Previsto</th><th style="text-align:right;padding:0 8px;">Pago</th></tr></thead>
     <tbody>
-    ${itensLivres.map(x=>`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+    ${itensLivres.map(x=>{
+      const previsto=x.precoUn*x.qtdNec;
+      const pagoValor=x.pago?previsto:0;
+      return`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
       <td style="padding:4px 8px;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onCompraPagoCheck(this,'${x.subKey}')"></td>
       <td style="padding:4px 8px;">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
-      <td style="text-align:right;padding:0 8px;">${fmtMoeda(x.total)}</td>
-    </tr>`).join('')}
+      <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
+      <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+    </tr>`;
+    }).join('')}
     </tbody>
   </table>`;
 
@@ -2477,14 +2484,19 @@ function renderAbaGastos(im){
     <div class="form-section-title"><i class="fa-solid fa-wrench"></i> Manutenções</div>
     ${!manutencoes.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhuma manutenção registrada.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Valor</th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
       <tbody>
-      ${manutencoes.map(m=>`<tr style="border-bottom:1px solid var(--border);">
+      ${manutencoes.map(m=>{
+        const previsto=+(m.valor??m.custo??0);
+        const pagoValor=m.pago?previsto:0;
+        return`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.status==='resolvido'?'checked':''} onchange="_onManutFeitoCheckGastos(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.pago?'checked':''} onchange="_onManutPagoCheck(this,'${esc(m.id)}')"></td>
         <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(m.valor??m.custo??0)}</td>
-      </tr>`).join('')}
+        <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+      </tr>`;
+      }).join('')}
       </tbody>
     </table>`}
   </div>`;
@@ -2493,13 +2505,18 @@ function renderAbaGastos(im){
     <div class="form-section-title"><i class="fa-solid fa-circle-plus"></i> Itens Extras (pedidos pelo proprietário)</div>
     ${!itensExtras.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum item extra registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;">Valor</th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
       <tbody>
-      ${itensExtras.map((x,xi)=>`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+      ${itensExtras.map((x,xi)=>{
+        const previsto=(+x.precoUn||0)*(+x.qtd||1);
+        const pagoValor=x.pago?previsto:0;
+        return`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onExtraPagoCheck(this,${xi})"></td>
         <td style="padding:4px 8px;">${esc(x.nome||'')}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
-      </tr>`).join('')}
+        <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
+      </tr>`;
+      }).join('')}
       </tbody>
     </table>`}
   </div>`;
@@ -2528,15 +2545,20 @@ function renderAbaGastos(im){
     </div>
     ${!gastosAvulsos.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum gasto avulso registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Categoria</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Valor</th><th style="width:32px;"></th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Categoria</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th><th style="width:32px;"></th></tr></thead>
       <tbody>
-      ${gastosAvulsos.map(g=>`<tr style="${g.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+      ${gastosAvulsos.map(g=>{
+        const previsto=+g.valor||0;
+        const pagoValor=g.pago?previsto:0;
+        return`<tr style="${g.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
         <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${g.pago?'checked':''} onchange="_onGastoAvulsoPagoCheck(this,'${esc(g.id)}')"></td>
         <td style="padding:4px 8px;">${esc(g.categoria||'')}</td>
         <td style="padding:4px 8px;">${esc(g.descricao||'')}</td>
-        <td style="text-align:right;padding:0 8px;">${fmtMoeda(g.valor)}</td>
+        <td style="text-align:right;padding:0 8px;color:var(--text-muted);">${fmtMoeda(previsto)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(pagoValor)}</td>
         <td><button class="btn btn-xs btn-danger" onclick="_apagarGastoAvulso('${esc(g.id)}')"><i class="fa-solid fa-trash"></i></button></td>
-      </tr>`).join('')}
+      </tr>`;
+      }).join('')}
       </tbody>
     </table>`}
   </div>`;
