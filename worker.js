@@ -356,7 +356,7 @@ Regras:
       const todosImoveis = Array.isArray(state2.wc_imoveis) ? state2.wc_imoveis : [];
       const imoveis = todosImoveis
         .filter(im => im.status !== 'perdido' && (im.contratoAssinado === true || im.status !== 'contrato'))
-        .map(im => ({ nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataAtivacao: im.dataAtivacao, incluirKpiClaire: !!im.incluirKpiClaire, mesReferenciaKpi: im.mesReferenciaKpi || null }));
+        .map(im => ({ nome: im.nome, status: im.status, dataCriacao: im.dataCriacao, dataContratoAssinado: im.dataContratoAssinado || null, dataAtivacao: im.dataAtivacao, incluirKpiClaire: !!im.incluirKpiClaire, mesReferenciaKpi: im.mesReferenciaKpi || null }));
       // KPIs calculados
       const ativos    = stats.filter(s => s.status === 'ativo' && s.diasOnboarding != null);
       const mediaOnboarding = ativos.length
@@ -364,12 +364,14 @@ Regras:
         : null;
       const emOnboarding = stats.filter(s => s.status && s.status !== 'ativo' && s.status !== 'perdido').length;
       // Média de "tempo de onboarding" por mês de referência, só para imóveis marcados "colocar na Claire"
+      // Mede Contrato → Ativo (dataContratoAssinado), não a criação do card no kanban (dataCriacao) —
+      // o card pode ser criado antes ou depois da assinatura de fato, o que distorcia a métrica.
       const kpiPorMes = {};
       todosImoveis
-        .filter(im => im.incluirKpiClaire === true && im.mesReferenciaKpi && im.dataCriacao && im.dataAtivacao)
+        .filter(im => im.incluirKpiClaire === true && im.mesReferenciaKpi && im.dataContratoAssinado && im.dataAtivacao)
         .forEach(im => {
           const mes = im.mesReferenciaKpi;
-          const dias = (new Date(im.dataAtivacao) - new Date(im.dataCriacao)) / 86400000;
+          const dias = (new Date(im.dataAtivacao) - new Date(im.dataContratoAssinado)) / 86400000;
           if (!kpiPorMes[mes]) kpiPorMes[mes] = { somaDias: 0, count: 0 };
           kpiPorMes[mes].somaDias += dias;
           kpiPorMes[mes].count += 1;
