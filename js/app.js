@@ -2407,13 +2407,21 @@ function renderAbaGastos(im){
   const lotesHtml=lotes.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
     <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Local</th><th style="text-align:center;">Itens</th><th style="text-align:right;">Valor</th><th style="width:32px;"></th></tr></thead>
     <tbody>
-    ${lotes.map(l=>`<tr style="border-bottom:1px solid var(--border);">
+    ${lotes.map(l=>{
+      const itensDoLote=rows.filter(r=>r.loteId===l.id);
+      return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_toggleLoteDetalhe('${l.id}')" title="Clique para ver os itens">
       <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
       <td style="padding:4px 8px;">${esc(l.local||'-')}</td>
-      <td style="text-align:center;">${l.itensVinculados.length}</td>
+      <td style="text-align:center;"><i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--text-muted);margin-right:4px;"></i>${l.itensVinculados.length}</td>
       <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
-      <td><button class="btn btn-xs btn-danger" onclick="_apagarCompraLote('${l.id}')"><i class="fa-solid fa-trash"></i></button></td>
-    </tr>`).join('')}
+      <td><button class="btn btn-xs btn-danger" onclick="event.stopPropagation();_apagarCompraLote('${l.id}')"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>
+    <tr id="lote-detalhe-${l.id}" style="display:none;background:var(--surface-2,#f8f4f9);">
+      <td colspan="5" style="padding:8px 14px;font-size:12px;color:var(--text-muted);">
+        ${itensDoLote.length?itensDoLote.map(r=>esc(r.label)).join(', '):'Itens não encontrados (catálogo pode ter mudado).'}
+      </td>
+    </tr>`;
+    }).join('')}
     </tbody>
   </table>`:'';
 
@@ -2577,6 +2585,11 @@ function _apagarCompraLote(loteId){
     if(im.compras[sk]?.loteId===loteId){im.compras[sk].comprado=false;im.compras[sk].pago=false;im.compras[sk].loteId=null;}
   });
   saveAll();renderAba('gastos');showToast('Removido.','peach');
+}
+function _toggleLoteDetalhe(loteId){
+  const el=document.getElementById('lote-detalhe-'+loteId);
+  if(!el)return;
+  el.style.display=el.style.display==='none'?'table-row':'none';
 }
 function _onManutFeitoCheckGastos(cb,manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
