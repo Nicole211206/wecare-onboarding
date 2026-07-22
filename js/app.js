@@ -259,10 +259,11 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',financeiro:'Financeiro',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
+  if(id==='financeiro')renderFinanceiro();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
   if(id==='vistoria')renderVistoria();
@@ -807,7 +808,7 @@ function renderAba(aba){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const fns={captacao:()=>renderAbaCaptacao(im),dados:()=>renderAbaDados(im),contrato:()=>renderAbaContrato(im),
     definicoes:()=>renderAbaDefinicoes(im),fotos:()=>renderAbaFotos(im),formulario:()=>renderAbaFormulario(im),
-    compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),
+    compras:()=>renderAbaCompras(im),enxoval:()=>renderAbaEnxoval(im),gastos:()=>renderAbaGastos(im),
     operacional:()=>renderAbaOperacional(im),custos:()=>renderAbaCustos(im),final:()=>renderAbaFinal(im),
     atualizacoes:()=>renderAbaAtualizacoes(im)};
   document.getElementById('detalhe-body').innerHTML=(fns[aba]||fns.dados)();
@@ -2244,6 +2245,431 @@ function _rowsComprasFalta(im){
   });
   return rows;
 }
+
+// ═══════════════════ MÓDULO DE GASTOS ═══════════════════
+// Linhas do catálogo de compras com o valor "cheio" (precoUn×qtdNec), independente do que
+// falta comprar — diferente de _rowsComprasFalta (que mostra só o que falta pra cobrar do
+// proprietário), aqui precisamos do valor total de cada item pra saber quanto foi de fato
+// pago por ele, além de comprado/pago/loteId pra cruzar com compras em lote.
+function _rowsComprasTodos(im){
+  const camas=im.camas||[];
+  const banheiros=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
+  const banheirosCompletos=im.banheirosCompletos||(im.banheiros||1);
+  const quartos=im.quartos||1;
+  const hospedes=im.maxHospedes||0;const lavabos=im.banheirosLavabo||0;const andares=im.andares||1;
+  const modalidadeAtual=modalidadeEnxovalAtual(im);
+  const compras=im.compras||{};
+  const rows=[];
+  ITENS_COMPRAS.forEach((item,idx)=>{
+    if(!itemValidoParaModalidade(item,modalidadeAtual))return;
+    if(item.tipoPreco==='enxoval'&&camas.length){
+      const porTipo={};
+      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
+      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
+        if(item.semSofaCama&&!camasParaItem.length)return;
+        const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
+        let qtdNec=0;
+        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        else qtdNec=q;
+        const subKey=`${idx}_${tipoEnx}`;
+        const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
+        rows.push({subKey,label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,precoUn,total:precoUn*qtdNec,
+          comprado:compras[subKey]?.comprado||false,pago:compras[subKey]?.pago||false,loteId:compras[subKey]?.loteId||null});
+      });
+    } else {
+      const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
+      const subKey=String(idx);
+      const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
+      rows.push({subKey,label:item.nome,cat:item.cat,qtdNec,precoUn,total:precoUn*qtdNec,
+        comprado:compras[subKey]?.comprado||false,pago:compras[subKey]?.pago||false,loteId:compras[subKey]?.loteId||null});
+    }
+  });
+  return rows;
+}
+// Reproduz o valor "Total ao Proprietário" já calculado em renderAbaCompras, sem duplicar a
+// renderização das linhas — usado pro resumo financeiro (aba Gastos e painel Financeiro).
+function _totalPropCompras(im){
+  const totalEstimado=_rowsComprasFalta(im).reduce((s,r)=>s+r.total,0);
+  const itensExtras=im.itensExtras||[];
+  const totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
+  const frete=im.freteTotal||0;
+  const manutencoes=im.manutencoes||[];
+  const totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
+  const totalServicosOpcionais=_totalServicosOpcionaisCompras(im);
+  const totalGeral=totalEstimado+totalExtras+frete+totalManutencao+totalServicosOpcionais;
+  const margem=im.margemWecare||15;
+  const descTipo=im.descontoTipo||'reais';
+  const descVal=im.descontoValor||0;
+  const totalComMargem=totalGeral*(1+margem/100);
+  const descValor=descTipo==='reais'?descVal:totalComMargem*(descVal/100);
+  return totalComMargem-descValor;
+}
+function _calcResumoFinanceiro(im){
+  const ops=im.ops||{};
+  const recebido=(+im.valorSetupCobrado||0)+_totalPropCompras(im);
+  let gastoPago=0,gastoPendente=0;
+
+  ['fotos','limpeza','vistoria'].forEach(k=>{
+    const custo=+ops[k]?.custo||0;
+    if(ops[k]?.pago)gastoPago+=custo;else gastoPendente+=custo;
+  });
+
+  const lotes=im.comprasLotes||[];
+  gastoPago+=lotes.reduce((s,l)=>s+(+l.valorTotal||0),0);
+  _rowsComprasTodos(im).filter(r=>!r.loteId).forEach(r=>{
+    if(r.pago)gastoPago+=r.total;else gastoPendente+=r.total;
+  });
+
+  (im.itensExtras||[]).forEach(x=>{
+    const total=(+x.precoUn||0)*(+x.qtd||1);
+    if(x.pago)gastoPago+=total;else gastoPendente+=total;
+  });
+
+  (im.manutencoes||[]).forEach(m=>{
+    const valor=+(m.valor??m.custo??0);
+    if(m.pago)gastoPago+=valor;else gastoPendente+=valor;
+  });
+
+  (im.gastosAvulsos||[]).forEach(g=>{
+    const valor=+g.valor||0;
+    if(g.pago)gastoPago+=valor;else gastoPendente+=valor;
+  });
+
+  return{recebido,gastoPago,gastoPendente,margem:recebido-gastoPago};
+}
+
+function renderAbaGastos(im){
+  const ops=im.ops||{fotos:{},limpeza:{},vistoria:{}};
+  const r=_calcResumoFinanceiro(im);
+  const rows=_rowsComprasTodos(im);
+  const lotes=im.comprasLotes||[];
+  const itensLivres=rows.filter(x=>!x.loteId);
+  const manutencoes=im.manutencoes||[];
+  const itensExtras=im.itensExtras||[];
+  const gastosAvulsos=im.gastosAvulsos||[];
+
+  const setupHtml=`<div style="margin-bottom:24px;">
+    <div class="form-section-title"><i class="fa-solid fa-house-circle-check"></i> Setup (Fotos, Limpeza, Vistoria)</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
+      <tbody>
+      ${['fotos','limpeza','vistoria'].map(k=>{
+        const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
+        const custo=+ops[k]?.custo||0;
+        const pago=!!ops[k]?.pago;
+        return`<tr style="${pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+          <td style="padding:4px 8px;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
+          <td style="padding:4px 8px;">${label}</td>
+          <td style="text-align:right;padding:0 8px;">${fmtMoeda(custo)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:8px;font-size:13px;">Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></div>
+  </div>`;
+
+  const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="lote-data-input" type="date" class="input" value="${hoje()}"></div>
+      <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Local / Loja</label><input id="lote-local-input" class="input" placeholder="Ex: Mercado Livre"></div>
+      <div class="form-group" style="width:130px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor total (R$)</label><input id="lote-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Selecione os itens que essa compra cobre:</div>
+    <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
+      ${itensLivres.filter(x=>!x.comprado).map(x=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;">
+        <input type="checkbox" class="lote-item-check" data-subkey="${x.subKey}"> ${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)} · ${fmtMoeda(x.total)})</span>
+      </label>`).join('')||'<div style="font-size:12.5px;color:var(--text-muted);">Nenhum item pendente.</div>'}
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <button class="btn btn-sm btn-sage" onclick="confirmarCompraLote()"><i class="fa-solid fa-check"></i> Salvar compra em lote</button>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormLote()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>`;
+
+  const lotesHtml=lotes.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
+    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Local</th><th style="text-align:center;">Itens</th><th style="text-align:right;">Valor</th><th style="width:32px;"></th></tr></thead>
+    <tbody>
+    ${lotes.map(l=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+      <td style="padding:4px 8px;">${esc(l.local||'-')}</td>
+      <td style="text-align:center;">${l.itensVinculados.length}</td>
+      <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
+      <td><button class="btn btn-xs btn-danger" onclick="_apagarCompraLote('${l.id}')"><i class="fa-solid fa-trash"></i></button></td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`:'';
+
+  const itensLivresHtml=`<table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+    <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Valor</th></tr></thead>
+    <tbody>
+    ${itensLivres.map(x=>`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+      <td style="padding:4px 8px;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onCompraPagoCheck(this,'${x.subKey}')"></td>
+      <td style="padding:4px 8px;">${esc(x.label)} <span style="color:var(--text-muted);">(${esc(x.cat)})</span></td>
+      <td style="text-align:right;padding:0 8px;">${fmtMoeda(x.total)}</td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+
+  const comprasHtml=`<div style="margin-bottom:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-cart-shopping"></i> Compras</div>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormLote()"><i class="fa-solid fa-layer-group"></i> Registrar compra em lote</button>
+    </div>
+    ${loteFormHtml}
+    ${lotesHtml}
+    ${itensLivresHtml}
+  </div>`;
+
+  const manutHtml=`<div style="margin-bottom:24px;">
+    <div class="form-section-title"><i class="fa-solid fa-wrench"></i> Manutenções</div>
+    ${!manutencoes.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhuma manutenção registrada.</div>':`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Valor</th></tr></thead>
+      <tbody>
+      ${manutencoes.map(m=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.status==='resolvido'?'checked':''} onchange="_onManutFeitoCheckGastos(this,'${esc(m.id)}')"></td>
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${m.pago?'checked':''} onchange="_onManutPagoCheck(this,'${esc(m.id)}')"></td>
+        <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(m.valor??m.custo??0)}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
+  const extrasHtml=`<div style="margin-bottom:24px;">
+    <div class="form-section-title"><i class="fa-solid fa-circle-plus"></i> Itens Extras (pedidos pelo proprietário)</div>
+    ${!itensExtras.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum item extra registrado.</div>':`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;">Valor</th></tr></thead>
+      <tbody>
+      ${itensExtras.map((x,xi)=>`<tr style="${x.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${x.pago?'checked':''} onchange="_onExtraPagoCheck(this,${xi})"></td>
+        <td style="padding:4px 8px;">${esc(x.nome||'')}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda((+x.precoUn||0)*(+x.qtd||1))}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
+  const gastosAvulsosHtml=`<div style="margin-bottom:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-plug"></i> Gastos Avulsos / Instalações</div>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormGastoAvulso()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    <div id="form-add-gasto-avulso" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:2;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Descrição</label><input id="gasto-avulso-desc-input" class="input" placeholder="Ex: Instalação de internet"></div>
+        <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Categoria</label>
+          <select id="gasto-avulso-cat-input" class="input">
+            <option value="Instalação">Instalação</option>
+            <option value="Prestador">Prestador</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-group" style="width:110px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor (R$)</label><input id="gasto-avulso-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-sage" onclick="confirmarGastoAvulso()"><i class="fa-solid fa-check"></i> Salvar</button>
+          <button class="btn btn-sm btn-outline" onclick="toggleFormGastoAvulso()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+    </div>
+    ${!gastosAvulsos.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum gasto avulso registrado.</div>':`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th>Pago</th><th style="text-align:left;">Categoria</th><th style="text-align:left;">Descrição</th><th style="text-align:right;">Valor</th><th style="width:32px;"></th></tr></thead>
+      <tbody>
+      ${gastosAvulsos.map(g=>`<tr style="${g.pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${g.pago?'checked':''} onchange="_onGastoAvulsoPagoCheck(this,'${esc(g.id)}')"></td>
+        <td style="padding:4px 8px;">${esc(g.categoria||'')}</td>
+        <td style="padding:4px 8px;">${esc(g.descricao||'')}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(g.valor)}</td>
+        <td><button class="btn btn-xs btn-danger" onclick="_apagarGastoAvulso('${esc(g.id)}')"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+
+  const resumoHtml=`<div style="background:var(--surface-2);border-radius:12px;padding:16px;">
+    <div class="form-section-title"><i class="fa-solid fa-scale-balanced"></i> Resumo Financeiro</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
+      <div><div style="font-size:11px;color:var(--text-muted);">Recebido</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r.recebido)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Gasto (pago)</div><div style="font-size:18px;font-weight:700;color:var(--rose);">${fmtMoeda(r.gastoPago)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Pendente</div><div style="font-size:18px;font-weight:700;color:var(--amber);">${fmtMoeda(r.gastoPendente)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-muted);">Margem</div><div style="font-size:18px;font-weight:700;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
+      ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
+    </div>
+  </div>`;
+
+  return`<div>
+    ${setupHtml}
+    ${comprasHtml}
+    ${manutHtml}
+    ${extrasHtml}
+    ${gastosAvulsosHtml}
+    ${resumoHtml}
+  </div>`;
+}
+
+function _onGastoSetupPago(cb,key){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.ops)im.ops={};
+  if(!im.ops[key])im.ops[key]={};
+  im.ops[key].pago=cb.checked;
+  if(cb.checked)im.ops[key].pagoEm=hoje();
+  saveAll();renderAba('gastos');
+}
+function _onCompraPagoCheck(cb,subKey){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.compras)im.compras={};
+  if(!im.compras[subKey])im.compras[subKey]={};
+  im.compras[subKey].pago=cb.checked;
+  saveAll();renderAba('gastos');
+}
+function toggleFormLote(){
+  const el=document.getElementById('form-add-lote');if(!el)return;
+  el.style.display=el.style.display==='none'?'block':'none';
+}
+function confirmarCompraLote(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const data=(document.getElementById('lote-data-input')||{}).value||hoje();
+  const local=(document.getElementById('lote-local-input')||{}).value||'';
+  const valorTotal=+(document.getElementById('lote-valor-input')||{}).value||0;
+  const subKeys=[...document.querySelectorAll('.lote-item-check:checked')].map(cb=>cb.dataset.subkey);
+  if(!subKeys.length){showToast('Selecione ao menos um item.','peach');return;}
+  if(!valorTotal){showToast('Informe o valor total da compra.','peach');return;}
+  if(!im.comprasLotes)im.comprasLotes=[];
+  const lote={id:uid(),data,local:local.trim(),valorTotal,itensVinculados:subKeys,criadoEm:new Date().toISOString()};
+  im.comprasLotes.push(lote);
+  if(!im.compras)im.compras={};
+  subKeys.forEach(sk=>{
+    if(!im.compras[sk])im.compras[sk]={};
+    im.compras[sk].comprado=true;
+    im.compras[sk].pago=true;
+    im.compras[sk].loteId=lote.id;
+  });
+  saveAll();renderAba('gastos');showToast('Compra em lote registrada!','sage');
+}
+function _apagarCompraLote(loteId){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Remover esta compra em lote? Os itens voltam a ficar pendentes.'))return;
+  im.comprasLotes=(im.comprasLotes||[]).filter(l=>l.id!==loteId);
+  Object.keys(im.compras||{}).forEach(sk=>{
+    if(im.compras[sk]?.loteId===loteId){im.compras[sk].comprado=false;im.compras[sk].pago=false;im.compras[sk].loteId=null;}
+  });
+  saveAll();renderAba('gastos');showToast('Removido.','peach');
+}
+function _onManutFeitoCheckGastos(cb,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.status=cb.checked?'resolvido':'pendente';saveAll();renderKanban();renderAba('gastos');}
+}
+function _onManutPagoCheck(cb,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.pago=cb.checked;if(cb.checked)m.pagoEm=hoje();saveAll();renderAba('gastos');}
+}
+function _onExtraPagoCheck(cb,xi){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.itensExtras?.[xi])return;
+  im.itensExtras[xi].pago=cb.checked;
+  if(cb.checked)im.itensExtras[xi].pagoEm=hoje();
+  saveAll();renderAba('gastos');
+}
+function toggleFormGastoAvulso(){
+  const el=document.getElementById('form-add-gasto-avulso');if(!el)return;
+  const visible=el.style.display!=='none';
+  el.style.display=visible?'none':'block';
+  if(!visible){
+    const d=document.getElementById('gasto-avulso-desc-input');
+    const v=document.getElementById('gasto-avulso-valor-input');
+    if(d){d.value='';d.focus();}
+    if(v)v.value='0';
+  }
+}
+function confirmarGastoAvulso(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const descricao=(document.getElementById('gasto-avulso-desc-input')||{}).value||'';
+  const categoria=(document.getElementById('gasto-avulso-cat-input')||{}).value||'Outro';
+  const valor=+(document.getElementById('gasto-avulso-valor-input')||{}).value||0;
+  if(!descricao.trim()){showToast('Informe a descrição.','peach');return;}
+  if(!im.gastosAvulsos)im.gastosAvulsos=[];
+  im.gastosAvulsos.push({id:uid(),data:hoje(),categoria,descricao:descricao.trim(),valor,pago:false,pagoEm:null,obs:''});
+  saveAll();renderAba('gastos');showToast('Gasto adicionado!','sage');
+}
+function _onGastoAvulsoPagoCheck(cb,id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const g=(im.gastosAvulsos||[]).find(x=>x.id===id);
+  if(g){g.pago=cb.checked;if(cb.checked)g.pagoEm=hoje();saveAll();renderAba('gastos');}
+}
+function _apagarGastoAvulso(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Apagar este gasto?'))return;
+  im.gastosAvulsos=(im.gastosAvulsos||[]).filter(x=>x.id!==id);
+  saveAll();renderAba('gastos');
+}
+function enviarResumoClaire(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const r=_calcResumoFinanceiro(im);
+  if(!confirm(`Enviar para a Claire?\n\nRecebido: ${fmtMoeda(r.recebido)}\nGasto: ${fmtMoeda(r.gastoPago)}\nMargem: ${fmtMoeda(r.margem)}`))return;
+  fetch('https://claire-dados.nicole-0e7.workers.dev/api/extras?token=wecare-claire-2026-k7x9q2',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({imovelNome:im.nome,descricao:'Resumo financeiro onboarding',cobrado:r.recebido,gasto:r.gastoPago,obs:`Enviado do onboarding em ${new Date().toLocaleString('pt-BR')}`})
+  }).then(resp=>resp.json()).then(j=>{
+    if(j.ok){im.extraClaireEnviadoEm=new Date().toISOString();saveAll();renderAba('gastos');showToast('Enviado para a Claire!','sage');}
+    else showToast('Erro ao enviar.','peach');
+  }).catch(()=>showToast('Falha de conexão ao enviar.','peach'));
+}
+
+function renderFinanceiro(){
+  const container=document.getElementById('panel-financeiro');if(!container)return;
+  const filtroAtual=(document.getElementById('fin-filtro-status')||{}).value||'ativos';
+  const lista=imoveis.filter(im=>filtroAtual==='todos'?true:filtroAtual==='perdidos'?im.status==='perdido':im.status!=='perdido');
+  const linhas=lista.map(im=>({im,r:_calcResumoFinanceiro(im)}));
+  const totRecebido=linhas.reduce((s,x)=>s+x.r.recebido,0);
+  const totGasto=linhas.reduce((s,x)=>s+x.r.gastoPago,0);
+  const totMargem=linhas.reduce((s,x)=>s+x.r.margem,0);
+  container.innerHTML=`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+      <div class="tag tag-gold" style="font-size:14px;padding:10px 18px;">Recebido: <strong>${fmtMoeda(totRecebido)}</strong></div>
+      <div class="tag" style="font-size:14px;padding:10px 18px;">Gasto: <strong>${fmtMoeda(totGasto)}</strong></div>
+      <div class="tag tag-sage" style="font-size:14px;padding:10px 18px;">Margem: <strong>${fmtMoeda(totMargem)}</strong></div>
+      <select id="fin-filtro-status" class="input" style="width:auto;margin-left:auto;" onchange="renderFinanceiro()">
+        <option value="ativos"${filtroAtual==='ativos'?' selected':''}>Sem perdidos</option>
+        <option value="todos"${filtroAtual==='todos'?' selected':''}>Todos os imóveis</option>
+        <option value="perdidos"${filtroAtual==='perdidos'?' selected':''}>Só perdidos</option>
+      </select>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)">
+        <th style="padding:6px 8px;text-align:left;">Imóvel</th><th>Fase</th>
+        <th style="text-align:right;">Recebido</th><th style="text-align:right;">Gasto</th>
+        <th style="text-align:right;">Pendente</th><th style="text-align:right;">Margem</th><th></th>
+      </tr></thead>
+      <tbody>
+      ${linhas.map(({im,r})=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;">${esc(im.nome||'(sem nome)')}</td>
+        <td style="text-align:center;">${im.status==='ativo'?'Ativo':im.status==='perdido'?'Perdido':esc(FASE_LABEL[im.status]||im.status)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.recebido)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.gastoPago)}</td>
+        <td style="text-align:right;padding:0 8px;">${fmtMoeda(r.gastoPendente)}</td>
+        <td style="text-align:right;padding:0 8px;font-weight:600;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</td>
+        <td><button class="btn btn-xs btn-outline" onclick="_abrirGastosImovel('${im.id}')">Ver detalhe →</button></td>
+      </tr>`).join('')||'<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--text-muted);">Nenhum imóvel.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+function _abrirGastosImovel(id){
+  abrirDetalhe(id);
+  setTimeout(()=>{
+    const btn=[...document.querySelectorAll('#detalhe-tabs .tab-btn')].find(b=>(b.getAttribute('onclick')||'').includes("'gastos'"));
+    if(btn)showTab('gastos',btn);
+  },50);
+}
+
 // ═══════════════════ LOGO NOS PDFs ═══════════════════
 // Busca a logo real (fundo claro, pra cair bem no papel branco dos PDFs) e converte pra
 // data URI — os PDFs abrem numa aba em branco via document.write, sem base URL confiável
