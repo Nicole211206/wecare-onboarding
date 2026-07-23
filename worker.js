@@ -37,8 +37,39 @@ function mergeItemArraysById(oldArr, newArr) {
   return [...newA, ...recuperados];
 }
 
+// compras/ops não são arrays (são objetos soltos por imóvel), então nunca passavam pela
+// proteção de "encolhida catastrófica" acima — um dispositivo desatualizado sincronizando
+// sobrescrevia esses campos inteiros sem chance de recuperação (incidente 2026-07-23, imóvel
+// Ária Higienópolis: 35 itens marcados como comprado + datas de fotos/limpeza voltaram a
+// zero/vazio). Mede quantos itens do catálogo de compras estão marcados como comprado — se
+// isso despenca catastroficamente, o "novo" compras provavelmente é uma versão antiga.
+function contarComprados(compras) {
+  return Object.values(compras || {}).filter(c => c && c.comprado).length;
+}
+function mergeCompras(oldCompras, newCompras) {
+  const oldCount = contarComprados(oldCompras);
+  const newCount = contarComprados(newCompras);
+  const catastrofica = (newCount === 0 && oldCount > 0) || (oldCount >= 8 && newCount <= 2);
+  return catastrofica ? (oldCompras || {}) : (newCompras || {});
+}
+// Mesma lógica pro "ops" (fotos/limpeza/vistoria): se um campo de data que já estava
+// preenchido some (vira ''), quase certo que é sobrescrita de cliente desatualizado — uma
+// data marcada não costuma ser apagada de propósito, só substituída por outra data.
+function mergeOps(oldOps, newOps) {
+  const o = oldOps || {};
+  const n = { ...(newOps || {}) };
+  for (const k of ['fotos', 'limpeza', 'vistoria']) {
+    if (!o[k]) continue;
+    const nk = { ...(n[k] || {}) };
+    if (o[k].data && !nk.data) nk.data = o[k].data;
+    n[k] = nk;
+  }
+  return n;
+}
+
 // Casa imóveis por id entre o estado antigo e o novo e recupera itens de sublistas
-// (itensExtras, eventosExtras) que sumiram no imóvel novo mas existiam no antigo.
+// (itensExtras, eventosExtras, manutenções, compras em lote, gastos avulsos) que sumiram no
+// imóvel novo mas existiam no antigo, além de compras/ops (ver mergeCompras/mergeOps acima).
 function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
   if (!Array.isArray(oldImoveis) || !Array.isArray(newImoveis)) return newImoveis;
   const oldById = new Map(oldImoveis.filter(i => i && i.id).map(i => [i.id, i]));
@@ -50,6 +81,11 @@ function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
       itensExtras:   mergeItemArraysById(old.itensExtras,   im.itensExtras),
       eventosExtras: mergeItemArraysById(old.eventosExtras, im.eventosExtras),
       vistorias:     mergeItemArraysById(old.vistorias,     im.vistorias),
+      manutencoes:   mergeItemArraysById(old.manutencoes,   im.manutencoes),
+      comprasLotes:  mergeItemArraysById(old.comprasLotes,  im.comprasLotes),
+      gastosAvulsos: mergeItemArraysById(old.gastosAvulsos, im.gastosAvulsos),
+      compras: mergeCompras(old.compras, im.compras),
+      ops:     mergeOps(old.ops, im.ops),
     };
   });
 }
