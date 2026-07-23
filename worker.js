@@ -80,6 +80,28 @@ function mergeStatusAtivacao(old, novo) {
   return { status: novo.status, dataAtivacao: novo.dataAtivacao, statusAnterior: novo.statusAnterior };
 }
 
+// plataformas/camas são listas curtas reescritas por inteiro a cada save da aba Contrato (sem
+// id nos itens) — mesma regra de encolhida catastrófica das demais listas, só sem recuperação
+// item-a-item (não dá pra casar por id).
+function mergeArraySimples(oldArr, newArr) {
+  const oldA = Array.isArray(oldArr) ? oldArr : [];
+  const newA = Array.isArray(newArr) ? newArr : [];
+  const catastrofica = (newA.length === 0 && oldA.length > 0) || (oldA.length >= 8 && newA.length <= 2);
+  return catastrofica ? oldA : newA;
+}
+
+// defLimpeza/defEnxoval são objetos soltos preenchidos na aba Definições — se um campo já
+// preenchido chega vazio num save mais novo, é sinal de sobrescrita por cliente desatualizado
+// (mesma lógica de mergeOps), não uma limpeza proposital do campo.
+function mergeCamposNaoVazios(old, novo) {
+  const o = old || {};
+  const n = { ...(novo || {}) };
+  for (const k in o) {
+    if (hasVal(o[k]) && !hasVal(n[k])) n[k] = o[k];
+  }
+  return n;
+}
+
 // Casa imóveis por id entre o estado antigo e o novo e recupera itens de sublistas
 // (itensExtras, eventosExtras, manutenções, compras em lote, gastos avulsos, atualizações) que
 // sumiram no imóvel novo mas existiam no antigo, além de compras/ops/status (ver merge* acima).
@@ -98,8 +120,13 @@ function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
       comprasLotes:  mergeItemArraysById(old.comprasLotes,  im.comprasLotes),
       gastosAvulsos: mergeItemArraysById(old.gastosAvulsos, im.gastosAvulsos),
       atualizacoes:  mergeItemArraysById(old.atualizacoes,  im.atualizacoes),
+      fotos:         mergeItemArraysById(old.fotos,         im.fotos),
+      plataformas:   mergeArraySimples(old.plataformas, im.plataformas),
+      camas:         mergeArraySimples(old.camas,       im.camas),
       compras: mergeCompras(old.compras, im.compras),
       ops:     mergeOps(old.ops, im.ops),
+      defLimpeza: mergeCamposNaoVazios(old.defLimpeza, im.defLimpeza),
+      defEnxoval: mergeCamposNaoVazios(old.defEnxoval, im.defEnxoval),
       ...mergeStatusAtivacao(old, im),
     };
   });
@@ -300,7 +327,7 @@ export default {
       // (dispositivo desatualizado zerando a lista), mesma regra do listKeys acima. Antes
       // qualquer encolhida era rejeitada, o que impedia até um apagar de 1 item só de
       // colar (ex: remover 1 campo de vistoria nunca "pegava" de verdade na sincronização).
-      const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout', 'wc_vistoria_campos', 'wc_templates_msg', 'wc_orcamentos'];
+      const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout', 'wc_vistoria_campos', 'wc_templates_msg', 'wc_orcamentos', 'wc_estoque_itens'];
       for (const k of listKeysEstritas) {
         const sv = Array.isArray(current[k]) ? current[k] : [];
         const iv = Array.isArray(body[k])    ? body[k]    : [];
@@ -804,7 +831,7 @@ Regras:
           const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
           const data = `data:${ct};base64,${b64}`;
           const nome = fotoUrl.split('/').pop().split('?')[0] || `foto_${Date.now()}.jpg`;
-          im.fotos.push({ nome, data, tipo: ct, fonte: body.fonte || 'externo' });
+          im.fotos.push({ id: 'foto_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), nome, data, tipo: ct, fonte: body.fonte || 'externo' });
           total++;
         } catch {}
       }

@@ -4,7 +4,7 @@ let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
-let orcamentos=[], ESTOQUE_ENXOVAL={};
+let orcamentos=[], estoqueItens=[];
 let _editOrcamentoId=null, _orcItensSoltosTemp=[];
 
 // ═══════════════════ FASES ═══════════════════
@@ -402,7 +402,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_enxoval'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -421,7 +421,7 @@ function saveAll(){
   localStorage.setItem('wc_anotacoes_texto',JSON.stringify(anotacoesTexto));
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
-  localStorage.setItem('wc_estoque_enxoval',JSON.stringify(ESTOQUE_ENXOVAL));
+  localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -445,7 +445,7 @@ function loadAll(){
   v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
-  v=g('wc_estoque_enxoval');if(v&&typeof v==='object')ESTOQUE_ENXOVAL=v;
+  v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -736,7 +736,7 @@ function salvarNovoImovel(){
     // final
     linkFotos:'', linkRelatorio:'', responsavelCriacao:'', tarefaClaireId:null,
     prazoAtivacaoHoras:24, dataEnvioParaCriacao:null,
-    valorMinNoite:0, valorBaseNoite:0, taxaHospedeExtra:0, taxaHospedeExtraAcimaDe:0, taxaLimpeza:0, observacoes:'',
+    valorMinNoite:0, valorBaseNoite:0, taxaHospedeExtra:0, taxaHospedeExtraAcimaDe:0, taxaLimpeza:0, custoLimpezaRecorrente:0, observacoes:'',
     valorCaucao:0, politicaCancelamento:'',
     comentarios:{}
   };
@@ -931,6 +931,7 @@ function _coletarDadosAba(aba,im){
     im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
     im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
     im.taxaLimpeza=gn('ct-taxa-limpeza');
+    im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
     if(!im.ops)im.ops={fotos:{},limpeza:{},vistoria:{}};
     ['fotos','limpeza','vistoria'].forEach(op=>{
@@ -1260,7 +1261,7 @@ async function _onUploadFotos(ev){
   for(const file of files){
     try{
       const data=await _comprimirImagem(file,900,0.72);
-      im.fotos.push({nome:file.name,data,tipo:file.type});ok++;
+      im.fotos.push({id:'foto_'+uid()+uid(),nome:file.name,data,tipo:file.type});ok++;
     }catch(e){showToast('Erro ao processar '+file.name,'peach');}
   }
   saveAll();
@@ -1385,7 +1386,14 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'ct-taxa-extra',value:im.taxaHospedeExtra||0,min:0,step:10})}</div>
     <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'ct-extra-acima',value:im.taxaHospedeExtraAcimaDe||0,min:0})}</div>
   </div>
-  <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10})}</div>
+  <div class="form-row">
+    <div class="form-group"><label>Taxa de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">cobrada do hóspede (Hostaway)</span></label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
+    <div class="form-group"><label>Custo de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">pago ao prestador por diária</span></label>${numInput({id:'ct-custo-limpeza',value:im.custoLimpezaRecorrente||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin:-6px 0 16px;">
+    <span id="ct-margem-limpeza-label">Margem por limpeza</span>
+    <span id="ct-margem-limpeza-val" style="font-weight:600;color:${(( +im.taxaLimpeza||0)-(+im.custoLimpezaRecorrente||0))>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda((+im.taxaLimpeza||0)-(+im.custoLimpezaRecorrente||0))}</span>
+  </div>
   <div class="form-row">
     <div class="form-group"><label>Caução (R$)</label>${numInput({id:'ct-caucao',value:im.valorCaucao||0,min:0,step:10})}</div>
     <div class="form-group"><label>Política de Cancelamento</label>
@@ -1427,6 +1435,13 @@ function _atualizarSubtotalSetup(){
   if(mgValEl){mgValEl.textContent=fmtMoeda(margem);mgValEl.style.color=margem>=0?'var(--sage)':'var(--rose)';}
   if(totalEl)totalEl.textContent=fmtMoeda(cobrado);
   if(im){im.valorSetupCobrado=cobrado;saveAll();}
+}
+function _atualizarMargemLimpeza(){
+  const taxa=+document.getElementById('ct-taxa-limpeza')?.value||0;
+  const custo=+document.getElementById('ct-custo-limpeza')?.value||0;
+  const margem=taxa-custo;
+  const valEl=document.getElementById('ct-margem-limpeza-val');
+  if(valEl){valEl.textContent=fmtMoeda(margem);valEl.style.color=margem>=0?'var(--sage)':'var(--rose)';}
 }
 function desmarcarGastoSetup(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -3521,6 +3536,8 @@ async function gerarPDFOutrasInformacoes(){
       ${campo('Diária mínima',im.valorMinNoite?fmtMoeda(im.valorMinNoite):'',true)}
       ${campo('Diária base',im.valorBaseNoite?fmtMoeda(im.valorBaseNoite):'',true)}
       ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
+      ${campo('Custo de limpeza',im.custoLimpezaRecorrente?fmtMoeda(im.custoLimpezaRecorrente):'',true)}
+      ${campo('Margem por limpeza',(im.taxaLimpeza||im.custoLimpezaRecorrente)?fmtMoeda((+im.taxaLimpeza||0)-(+im.custoLimpezaRecorrente||0)):'',true)}
       ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
       ${campo('Caução',im.valorCaucao?fmtMoeda(im.valorCaucao):'',true)}
       ${campo('Mínimo de noites',im.minimoNoites)}
@@ -4620,52 +4637,88 @@ async function gerarPDFOrcamentoAvulso(id){
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
-  const itensPorTamanho=Object.keys(PRECOS_ENXOVAL);
-  const sizes=['Solteiro','Casal','Queen','King'];
-  const itensUnicos=ITENS_COMPRAS.filter(i=>i.estoqueEnxoval);
+  const h=hoje();
+  // "em estoque hoje" = já deu entrada e (nunca saiu OU a saída registrada é no futuro)
+  const emEstoque=estoqueItens.filter(i=>i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h));
+  const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0),0);
+  const porItem={};
+  emEstoque.forEach(i=>{porItem[i.item]=(porItem[i.item]||0)+1;});
+  const lista=[...estoqueItens].sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
   wrap.innerHTML=`
   <div style="margin-bottom:16px;">
-    <div class="section-title" style="margin-bottom:4px;">Controle de Estoque — Enxoval</div>
-    <div class="text-muted">Quantidade que a WeCare tem hoje de cada item (atualização manual)</div>
+    <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
+    <div class="text-muted">Item, data de entrada/saída e valor — o resumo abaixo é calculado a partir das datas</div>
   </div>
+
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-bed" style="color:var(--lavender)"></i> Itens por tamanho de cama</span></div>
-    <div class="card-body" style="overflow-x:auto;padding:12px;">
-      ${itensPorTamanho.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);">
-          <th style="text-align:left;padding:6px 4px;">Item</th>
-          ${sizes.map(s=>`<th style="text-align:center;padding:6px 4px;width:90px;">${s}</th>`).join('')}
-        </tr></thead>
-        <tbody>${itensPorTamanho.map(nome=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:6px 4px;font-weight:600;">${esc(nome)}</td>
-          ${sizes.map(s=>{
-            const chave=nome+'__'+s;
-            const val=ESTOQUE_ENXOVAL[chave]||0;
-            return`<td style="padding:4px;text-align:center;"><input type="number" min="0" class="input" style="width:70px;text-align:center;padding:4px;margin:0 auto;" value="${val}" onchange="salvarEstoqueItem('${esc(chave)}',this.value)"></td>`;
-          }).join('')}
-        </tr>`).join('')}</tbody>
-      </table>`:`<div class="text-muted" style="font-size:13px;">Nenhum item cadastrado.</div>`}
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus" style="color:var(--sage)"></i> Adicionar item</span></div>
+    <div class="card-body" style="padding:12px;">
+      <div class="form-row" style="flex-wrap:wrap;gap:12px;">
+        <div class="form-group" style="flex:2;min-width:180px;"><label>Item</label><input id="est-item" class="input" placeholder="Ex: Travesseiro Sanomed"></div>
+        <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
+        <div class="form-group" style="min-width:150px;"><label>Data de saída</label><input id="est-saida" type="date" class="input"></div>
+        <div class="form-group" style="min-width:130px;"><label>Valor (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
+      </div>
+      <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>
   </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Resumo — em estoque hoje</span></div>
+    <div class="card-body" style="padding:12px;">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
+        <div><div class="text-muted" style="font-size:12px;">Itens em estoque</div><div style="font-size:20px;font-weight:700;">${emEstoque.length}</div></div>
+        <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
+      </div>
+      ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd. em estoque</th></tr></thead>
+        <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([nome,qtd])=>`<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 4px;">${esc(nome)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${qtd}</td>
+        </tr>`).join('')}</tbody>
+      </table>`:''}
+    </div>
+  </div>
+
   <div class="card">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-box" style="color:var(--sage)"></i> Itens únicos (travesseiro, toalha, tapete, etc.)</span></div>
-    <div class="card-body" style="overflow-x:auto;padding:12px;">
-      ${itensUnicos.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item</th><th style="text-align:center;padding:6px 4px;width:100px;">Em estoque</th></tr></thead>
-        <tbody>${itensUnicos.map(item=>{
-          const val=ESTOQUE_ENXOVAL[item.nome]||0;
-          return`<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:6px 4px;font-weight:600;">${esc(item.nome)}</td>
-            <td style="padding:4px;text-align:center;"><input type="number" min="0" class="input" style="width:80px;text-align:center;padding:4px;margin:0 auto;" value="${val}" onchange="salvarEstoqueItem('${esc(item.nome)}',this.value)"></td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`:`<div class="text-muted" style="font-size:13px;">Nenhum item cadastrado.</div>`}
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span></div>
+    <div class="card-body" style="overflow-x:auto;padding:0;">
+      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
+          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:left;padding:8px;">Entrada</th><th style="text-align:left;padding:8px;">Saída</th><th style="text-align:right;padding:8px;">Valor</th><th style="padding:8px;width:120px;"></th>
+        </tr></thead>
+        <tbody>${lista.map(i=>`<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px;font-weight:600;">${esc(i.item)}</td>
+          <td style="padding:8px;">${fmtDate(i.dataEntrada)}</td>
+          <td style="padding:8px;">${i.dataSaida?fmtDate(i.dataSaida):`<span class="tag tag-sage">em estoque</span>`}</td>
+          <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
+          <td style="padding:8px;white-space:nowrap;text-align:right;">
+            ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
+            <button class="btn btn-xs btn-danger" onclick="apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum item cadastrado ainda.</div>`}
     </div>
   </div>`;
 }
-function salvarEstoqueItem(chave,valor){
-  ESTOQUE_ENXOVAL[chave]=+valor||0;
-  saveAll();
+function adicionarEstoqueItem(){
+  const item=document.getElementById('est-item').value.trim();
+  const dataEntrada=document.getElementById('est-entrada').value||hoje();
+  const dataSaida=document.getElementById('est-saida').value||null;
+  const valor=+document.getElementById('est-valor').value||0;
+  if(!item){showToast('Informe o nome do item.','peach');return;}
+  estoqueItens.push({id:'est_'+uid()+uid(),item,dataEntrada,dataSaida,valor});
+  saveAll();renderEstoque();
+  showToast('Item adicionado ao estoque.','sage');
+}
+function marcarSaidaEstoqueItem(id){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  it.dataSaida=hoje();
+  saveAll();renderEstoque();
+}
+function apagarEstoqueItem(id){
+  if(!confirm('Apagar este registro de estoque?'))return;
+  estoqueItens=estoqueItens.filter(x=>x.id!==id);
+  saveAll();renderEstoque();
 }
 
 // ═══════════════════ CONFIG ═══════════════════
