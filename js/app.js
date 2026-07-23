@@ -3669,6 +3669,42 @@ function renderDashboard(){
       <td>${fmtDate(im.dataAtivacao)}</td>
       <td>${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+'d':'—'}</td>
     </tr>`).join(''):`<tr><td colspan="4" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+
+  const chartEl=document.getElementById('dash-chart-ativacao');
+  if(chartEl){
+    const dadosChart=imoveis
+      .filter(i=>i.status==='ativo'&&i.dataContratoAssinado&&i.dataAtivacao)
+      .sort((a,b)=>a.dataAtivacao.localeCompare(b.dataAtivacao))
+      .map(i=>({nome:i.nome,dias:diasEntre(i.dataContratoAssinado,i.dataAtivacao)}));
+    chartEl.innerHTML=_chartAtivacaoSvg(dadosChart);
+  }
+}
+function _chartAtivacaoSvg(dados){
+  if(!dados.length)return`<div class="empty-state" style="padding:12px;">Nenhum imóvel ativado com contrato e ativação registrados ainda.</div>`;
+  const media=Math.round(dados.reduce((s,d)=>s+d.dias,0)/dados.length);
+  const maxVal=Math.max(...dados.map(d=>d.dias),media)*1.15||1;
+  const bw=32,gap=18,leftPad=8,rightPad=90,topPad=26,plotH=180,labelH=70;
+  const w=leftPad+dados.length*(bw+gap)+rightPad;
+  const h=topPad+plotH+labelH;
+  const yFor=v=>topPad+plotH-(v/maxVal*plotH);
+  const bars=dados.map((d,idx)=>{
+    const x=leftPad+idx*(bw+gap);
+    const yTop=yFor(d.dias);
+    const barH=topPad+plotH-yTop;
+    const label=d.nome.length>16?d.nome.slice(0,15)+'…':d.nome;
+    return`<g>
+      <rect x="${x}" y="${yTop}" width="${bw}" height="${barH}" rx="4" style="fill:var(--sage);"><title>${esc(d.nome)}: ${d.dias} dias</title></rect>
+      <text x="${x+bw/2}" y="${yTop-6}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--text-strong,#1a1a1a);">${d.dias}d</text>
+      <text x="${x+bw/2}" y="${topPad+plotH+16}" text-anchor="end" transform="rotate(-35 ${x+bw/2} ${topPad+plotH+16})" style="font-size:10.5px;fill:var(--text-muted);">${esc(label)}</text>
+    </g>`;
+  }).join('');
+  const yMedia=yFor(media);
+  return`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;">
+    <line x1="${leftPad}" y1="${yMedia}" x2="${w-rightPad+10}" y2="${yMedia}" style="stroke:var(--text-muted);stroke-width:1.5;stroke-dasharray:5,4;"/>
+    <text x="${w-rightPad+16}" y="${yMedia+4}" style="font-size:11.5px;font-weight:700;fill:var(--text-muted);">Média: ${media}d</text>
+    <line x1="${leftPad}" y1="${topPad+plotH}" x2="${leftPad+dados.length*(bw+gap)}" y2="${topPad+plotH}" style="stroke:var(--border);stroke-width:1;"/>
+    ${bars}
+  </svg>`;
 }
 function _kpiCard(label,val,icon,cor){
   return`<div style="background:var(--card-bg);border-radius:12px;padding:18px 20px;border-left:4px solid var(--${cor},var(--rose));">
