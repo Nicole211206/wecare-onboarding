@@ -1909,7 +1909,7 @@ function renderAbaCompras(im){
     </label>`).join('')}
   </div>`;
   const totalGeral=totalEstimado+totalExtras+frete+totalManutencao+totalServicosOpcionais;
-  const margem=im.margemWecare||15;
+  const margem=im.margemWecare??15;
   const descTipo=im.descontoTipo||'reais';
   const descVal=im.descontoValor||0;
   const totalComMargem=totalGeral*(1+margem/100);
@@ -2332,7 +2332,7 @@ function _totalPropCompras(im){
   const totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
   const totalServicosOpcionais=_totalServicosOpcionaisCompras(im);
   const totalGeral=totalEstimado+totalExtras+frete+totalManutencao+totalServicosOpcionais;
-  const margem=im.margemWecare||15;
+  const margem=im.margemWecare??15;
   const descTipo=im.descontoTipo||'reais';
   const descVal=im.descontoValor||0;
   const totalComMargem=totalGeral*(1+margem/100);
@@ -3184,7 +3184,7 @@ function renderAbaCustos(im){
   const freteCustos=im.freteTotal||0;
   const totalServicosOpcionaisCustos=_totalServicosOpcionaisCompras(im);
   const subtotal=totalCompras+freteCustos+totalServicosOpcionaisCustos;
-  const margem=im.margemWecare||15;
+  const margem=im.margemWecare??15;
   const comissao=subtotal*(margem/100);
   let desc=0;
   if(im.descontoTipo==='reais')desc=im.descontoValor||0;
@@ -3253,7 +3253,7 @@ async function gerarPDFOrcamento(){
   const custosServicosOpcionais=servicosOpcionaisAtivos.reduce((s,so)=>s+so.valor,0);
   const linhasServicosOpcionais=servicosOpcionaisAtivos.map(so=>`<tr><td style="padding:7px 10px;">${esc(so.nome)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(so.valor)}</td></tr>`).join('');
   const sub=totalC+frete+custoFotos+custoLimpeza+custoVistoria+custosExtras+custosServicosOpcionais;
-  const marg=sub*(im.margemWecare||15)/100;
+  const marg=sub*(im.margemWecare??15)/100;
   const desc=im.descontoTipo==='reais'?(im.descontoValor||0):(sub+marg)*(im.descontoValor||0)/100;
   const total=sub+marg-desc;
   const banhTotal=(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1);
@@ -3320,7 +3320,7 @@ async function gerarPDFOrcamento(){
     ${custosServicosOpcionais?`<div class="summary-line"><span>Serviços Opcionais</span><span>${fmtMoeda(custosServicosOpcionais)}</span></div>`:''}
     ${custosExtras?`<div class="summary-line"><span>Outros</span><span>${fmtMoeda(custosExtras)}</span></div>`:''}
     <div class="summary-sub"><span>Subtotal</span><span>${fmtMoeda(sub)}</span></div>
-    <div class="summary-line"><span>Margem WeCare (${im.margemWecare||15}%)</span><span>${fmtMoeda(marg)}</span></div>
+    <div class="summary-line"><span>Margem WeCare (${im.margemWecare??15}%)</span><span>${fmtMoeda(marg)}</span></div>
     ${desc?`<div class="summary-line"><span>Desconto</span><span>–${fmtMoeda(desc)}</span></div>`:''}
     <div class="summary-total"><span>Total ao Proprietário</span><span>${fmtMoeda(total)}</span></div>
   </div>
