@@ -3627,6 +3627,7 @@ function renderDashboard(){
   const tempoMedio=ativados.length
     ?Math.round(ativados.reduce((s,i)=>s+diasEntre(i.dataCriacao,i.dataAtivacao),0)/ativados.length):null;
   const porFase=FASES.map(f=>({fase:f,qtd:imoveis.filter(i=>i.status===f).length}));
+  const maxFase=Math.max(1,...porFase.map(f=>f.qtd));
 
   const stats=document.getElementById('dash-stats');
   if(stats)stats.innerHTML=
@@ -3637,24 +3638,37 @@ function renderDashboard(){
     _kpiCard('Tempo Médio',tempoMedio!=null?tempoMedio+' dias':'—','clock','lavender');
 
   const fases=document.getElementById('dash-fases');
-  if(fases)fases.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:8px;">
-    ${porFase.map(({fase,qtd})=>`<div style="background:var(--bg3,#f8f4f9);border-radius:8px;padding:8px 14px;text-align:center;min-width:100px;">
-      <div style="font-weight:700;font-size:20px;">${qtd}</div>
-      <div style="font-size:11px;color:var(--text3,#888);">${FASE_LABEL[fase]}</div>
-    </div>`).join('')}
-  </div>`;
+  if(fases)fases.innerHTML=porFase.every(f=>!f.qtd)
+    ?`<div class="empty-state" style="padding:12px;">Nenhum imóvel em andamento.</div>`
+    :porFase.map(({fase,qtd})=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="width:160px;flex-shrink:0;font-size:12.5px;color:var(--text-muted);">${FASE_LABEL[fase]}</div>
+        <div style="flex:1;background:var(--bg3,#f5f0e8);border-radius:6px;height:20px;overflow:hidden;">
+          <div style="width:${qtd/maxFase*100}%;min-width:${qtd?'4px':'0'};height:100%;border-radius:6px;background:var(--${FASE_COLOR[fase]});"></div>
+        </div>
+        <div style="width:22px;text-align:right;font-weight:700;font-size:13px;">${qtd}</div>
+      </div>`).join('');
+
+  const assinadosBody=document.getElementById('dash-assinados-body');
+  const assinados=imoveis
+    .filter(i=>i.contratoAssinado&&i.dataContratoAssinado&&i.status!=='ativo'&&i.status!=='perdido')
+    .sort((a,b)=>a.dataContratoAssinado.localeCompare(b.dataContratoAssinado));
+  if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>`<tr>
+      <td style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')" class="link">${esc(im.nome)}</td>
+      <td>${fmtDate(im.dataContratoAssinado)}</td>
+      <td>${diasEntre(im.dataContratoAssinado,hoje())}d</td>
+    </tr>`).join(''):`<tr><td colspan="3" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
 
   const tbody=document.getElementById('dash-ativos-body');
-  if(tbody)tbody.innerHTML=[...imoveis]
+  const recentes=[...imoveis]
     .filter(i=>i.status==='ativo')
     .sort((a,b)=>b.dataAtivacao?.localeCompare(a.dataAtivacao||'')||0)
-    .slice(0,10)
-    .map(im=>`<tr>
+    .slice(0,10);
+  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>`<tr>
       <td style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')" class="link">${esc(im.nome)}</td>
-      <td>${fmtDate(im.dataCriacao)}</td>
+      <td>${im.dataContratoAssinado?fmtDate(im.dataContratoAssinado):'—'}</td>
       <td>${fmtDate(im.dataAtivacao)}</td>
-      <td>${im.dataCriacao&&im.dataAtivacao?diasEntre(im.dataCriacao,im.dataAtivacao)+'d':'—'}</td>
-    </tr>`).join('');
+      <td>${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+'d':'—'}</td>
+    </tr>`).join(''):`<tr><td colspan="4" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
 }
 function _kpiCard(label,val,icon,cor){
   return`<div style="background:var(--card-bg);border-radius:12px;padding:18px 20px;border-left:4px solid var(--${cor},var(--rose));">

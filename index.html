@@ -133,10 +133,21 @@
     <!-- ── DASHBOARD ── -->
     <div class="panel" id="panel-dashboard">
       <div class="stats-grid" id="dash-stats"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header"><span class="card-title"><i class="fa-solid fa-layer-group" style="color:var(--rose)"></i> Imóveis por Fase</span></div>
+        <div class="card-body" id="dash-fases"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
         <div class="card">
-          <div class="card-header"><span class="card-title"><i class="fa-solid fa-hourglass-half" style="color:var(--rose)"></i> Tempo por Fase</span></div>
-          <div class="card-body" id="dash-fases"></div>
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-file-signature" style="color:var(--gold)"></i> Contratos Assinados — Aguardando Ativação</span></div>
+          <div class="card-body">
+            <table class="data-table" style="font-size:12px;">
+              <thead><tr><th>Imóvel</th><th>Assinatura</th><th>Dias aguardando</th></tr></thead>
+              <tbody id="dash-assinados-body"></tbody>
+            </table>
+          </div>
         </div>
         <div class="card">
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-house-circle-check" style="color:var(--sage)"></i> Ativações Recentes</span></div>
@@ -666,6 +677,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=64"></script>
+<script src="js/app.js?v=65"></script>
 </body>
 </html>
