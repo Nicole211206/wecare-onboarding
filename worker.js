@@ -67,9 +67,22 @@ function mergeOps(oldOps, newOps) {
   return n;
 }
 
+// Incidente 2026-07-23 (parte 2): o mesmo tipo de sobrescrita por cliente desatualizado
+// derrubou um imóvel de status:'ativo' de volta pra uma fase anterior do kanban, apagando
+// dataAtivacao — bem mais grave que perder um checkbox, pois o imóvel "sai do ar" da lista de
+// ativos. 'ativo' é estado terminal (só se chega lá por avancarFaseAtual, dificilmente alguém
+// reverte de propósito), então tratamos regressão pra fora de 'ativo' como sinal de sobrescrita
+// obsoleta e mantemos o estado antigo.
+function mergeStatusAtivacao(old, novo) {
+  if (old && old.status === 'ativo' && novo && novo.status !== 'ativo' && old.dataAtivacao && !novo.dataAtivacao) {
+    return { status: old.status, dataAtivacao: old.dataAtivacao, statusAnterior: old.statusAnterior };
+  }
+  return { status: novo.status, dataAtivacao: novo.dataAtivacao, statusAnterior: novo.statusAnterior };
+}
+
 // Casa imóveis por id entre o estado antigo e o novo e recupera itens de sublistas
-// (itensExtras, eventosExtras, manutenções, compras em lote, gastos avulsos) que sumiram no
-// imóvel novo mas existiam no antigo, além de compras/ops (ver mergeCompras/mergeOps acima).
+// (itensExtras, eventosExtras, manutenções, compras em lote, gastos avulsos, atualizações) que
+// sumiram no imóvel novo mas existiam no antigo, além de compras/ops/status (ver merge* acima).
 function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
   if (!Array.isArray(oldImoveis) || !Array.isArray(newImoveis)) return newImoveis;
   const oldById = new Map(oldImoveis.filter(i => i && i.id).map(i => [i.id, i]));
@@ -84,8 +97,10 @@ function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
       manutencoes:   mergeItemArraysById(old.manutencoes,   im.manutencoes),
       comprasLotes:  mergeItemArraysById(old.comprasLotes,  im.comprasLotes),
       gastosAvulsos: mergeItemArraysById(old.gastosAvulsos, im.gastosAvulsos),
+      atualizacoes:  mergeItemArraysById(old.atualizacoes,  im.atualizacoes),
       compras: mergeCompras(old.compras, im.compras),
       ops:     mergeOps(old.ops, im.ops),
+      ...mergeStatusAtivacao(old, im),
     };
   });
 }
