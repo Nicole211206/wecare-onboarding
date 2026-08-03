@@ -1,0 +1,15 @@
+[Unit]
+Description=WeCare Onboarding — Backend API (FastAPI, migrado de Cloudflare Worker)
+After=network.target
+
+[Service]
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/apps/wecare-onboarding/backend
+ExecStart=/home/jarvis/.local/bin/uv run uvicorn app.main:app --host 127.0.0.1 --port 18791
+Restart=always
+RestartSec=5
+EnvironmentFile=-/home/jarvis/apps/wecare-onboarding/backend/.env
+
+[Install]
+WantedBy=multi-user.target

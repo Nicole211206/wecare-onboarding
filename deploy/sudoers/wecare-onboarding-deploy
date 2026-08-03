@@ -1,0 +1,6 @@
+# Permite ao usuário jarvis reiniciar SÓ o serviço wecare-onboarding sem senha,
+# pra o cron do auto-deploy.sh (rodando como jarvis) poder chamar systemctl restart.
+# Instalar com: sudo cp deploy/sudoers/wecare-onboarding-deploy /etc/sudoers.d/
+#               sudo chmod 440 /etc/sudoers.d/wecare-onboarding-deploy
+#               sudo visudo -c
+jarvis ALL=(root) NOPASSWD: /usr/bin/systemctl restart wecare-onboarding
