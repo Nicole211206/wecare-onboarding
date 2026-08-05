@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Auto-deploy do wecare-onboarding — git pull (branch main) + restart condicional
+# Auto-deploy do wecare-onboarding — git pull (branch develop, main fica intocada
+# até o cutover) + restart condicional
 # do serviço systemd. Pensado pra rodar via cron a cada 5 minutos (mesmo padrão
 # do claire-project).
 #
@@ -12,7 +13,7 @@ set -euo pipefail
 REPO_DIR="/home/jarvis/apps/wecare-onboarding"
 BACKEND_DIR="$REPO_DIR/backend"
 SERVICE_NAME="wecare-onboarding"
-BRANCH="main"
+BRANCH="develop"
 UV_BIN="/home/jarvis/.local/bin/uv"
 LOG_FILE="$REPO_DIR/deploy/auto-deploy.log"
 LOCK_FILE="/tmp/wecare-onboarding-autodeploy.lock"
