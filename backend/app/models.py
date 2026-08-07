@@ -19,7 +19,7 @@ class Imovel(Base):
     incluir_kpi_claire: Mapped[bool] = mapped_column(Boolean, default=False)
     incluir_setup_claire: Mapped[bool] = mapped_column(Boolean, default=False)
     mes_referencia_kpi: Mapped[str | None] = mapped_column(String)
-    valor_setup_cobrado: Mapped[float | None] = mapped_column(Numeric)
+    valor_setup_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     form_token: Mapped[str | None] = mapped_column(String)
     claude_analisado_em: Mapped[str | None] = mapped_column(String)
     jarvis_preenchido_em: Mapped[str | None] = mapped_column(String)
@@ -79,7 +79,7 @@ class Prestador(Base):
     tipo: Mapped[str | None] = mapped_column(String)
     telefone: Mapped[str | None] = mapped_column(String)
     cidade: Mapped[str | None] = mapped_column(String)
-    nota: Mapped[float | None] = mapped_column(Numeric)
+    nota: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     valor: Mapped[str | None] = mapped_column(String)
     obs: Mapped[str | None] = mapped_column(String)
 
@@ -98,7 +98,7 @@ class Item(Base):
     qtd_rule: Mapped[str | None] = mapped_column(String)
     link: Mapped[str | None] = mapped_column(String)
     modalidades: Mapped[list] = mapped_column(JSON, default=list)
-    preco: Mapped[float | None] = mapped_column(Numeric)
+    preco: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     estoque_enxoval: Mapped[bool] = mapped_column(Boolean, default=False)
     sem_sofa_cama: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -108,7 +108,7 @@ class EnxovalPreco(Base):
 
     item: Mapped[str] = mapped_column(String, primary_key=True)
     tipo_cama: Mapped[str] = mapped_column(String, primary_key=True)
-    preco: Mapped[float] = mapped_column(Numeric)
+    preco: Mapped[float] = mapped_column(Numeric(asdecimal=False))
 
 
 class Limpeza(Base):
@@ -118,8 +118,8 @@ class Limpeza(Base):
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     quartos: Mapped[int | None] = mapped_column(Integer)
     empresa: Mapped[str | None] = mapped_column(String)
-    custo: Mapped[float | None] = mapped_column(Numeric)
-    cobrado: Mapped[float | None] = mapped_column(Numeric)
+    custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
 
 
 class LimpezaCheckout(Base):
@@ -129,8 +129,8 @@ class LimpezaCheckout(Base):
     ordem: Mapped[int] = mapped_column(Integer, default=0)
     empresa: Mapped[str | None] = mapped_column(String)
     especificacao: Mapped[str | None] = mapped_column(String)
-    custo: Mapped[float | None] = mapped_column(Numeric)
-    cobrado: Mapped[float | None] = mapped_column(Numeric)
+    custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     regiao: Mapped[str | None] = mapped_column(String)
 
 
@@ -174,11 +174,11 @@ class Orcamento(Base):
     fornecedor_enxoval: Mapped[str | None] = mapped_column(String)
     camas: Mapped[list] = mapped_column(JSON, default=list)
     itens_soltos: Mapped[list] = mapped_column(JSON, default=list)
-    fotos_valor: Mapped[float | None] = mapped_column(Numeric)
+    fotos_valor: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     fotos_obs: Mapped[str | None] = mapped_column(String)
-    limpeza_valor: Mapped[float | None] = mapped_column(Numeric)
+    limpeza_valor: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     limpeza_obs: Mapped[str | None] = mapped_column(String)
-    vistoria_valor: Mapped[float | None] = mapped_column(Numeric)
+    vistoria_valor: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     vistoria_obs: Mapped[str | None] = mapped_column(String)
 
 
@@ -189,15 +189,15 @@ class EstoqueItem(Base):
     item: Mapped[str | None] = mapped_column(String)
     data_entrada: Mapped[str | None] = mapped_column(String)
     data_saida: Mapped[str | None] = mapped_column(String)
-    valor: Mapped[float | None] = mapped_column(Numeric)
+    valor: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
 
 
 class ConfigFotoPreco(Base):
     __tablename__ = "config_fotos_precos"
 
     quartos: Mapped[int] = mapped_column(Integer, primary_key=True)
-    min: Mapped[float | None] = mapped_column(Numeric)
-    max: Mapped[float | None] = mapped_column(Numeric)
+    min: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    max: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     resp: Mapped[str | None] = mapped_column(String)
 
 
