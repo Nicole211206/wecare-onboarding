@@ -842,6 +842,7 @@ select.urg-select {
     </a>
     <div id="nav-geral"></div>
     <div id="nav-comodos"></div>
+    <div id="nav-itens"></div>
     <a class="nav-item" href="#sec-conclusao" onclick="navClick(this)">
       <span class="nav-icon ic-fin"><i class="fa-solid fa-circle-check"></i></span>
       Conclusão
@@ -895,6 +896,9 @@ select.urg-select {
 
 <!-- Cômodos gerados dinamicamente via JS -->
 <div id="comodos-container"></div>
+
+<!-- Itens obrigatórios gerados dinamicamente via JS -->
+<div id="itens-container"></div>
 
 <!-- ═══════════════════════════════════════
      CONCLUSÃO
@@ -1094,12 +1098,99 @@ const WC_WORKER_URL = 'https://onboarding.wecarehosting.com.br';
 // ═══════════════════════════════════════════════════════
 let currentImovel = MOCK_IMOVEL;
 let VISTORIA_ID = null, VISTORIA_TOKEN = null, VISTORIA_STATUS = 'rascunho';
+let IMOVEL_DADOS = {}, COMPRAS_ATUAL = {};
 // videoFiles[idx] = File[] (armazenado em memória, não no localStorage)
 const videoFiles = {};
 
 // Campos extras configuráveis pela equipe (Configurações → Campos de Vistoria, no app.js)
 let VISTORIA_CAMPOS = [];
 const VISTORIA_COMODO_TIPOS = ['Quarto','Sala','Cozinha','Banheiro Completo','Lavabo','Lavanderia','Área Externa','Varanda/Pátio'];
+
+// Catálogo de itens obrigatórios (Configurações → Itens/Enxoval, no app.js) — mesmo
+// default hardcoded ali, sobrescrito pelo que vier de /vistoria-load se a equipe
+// já tiver customizado (wc_itens/wc_enxoval). Duplicado aqui de propósito: as duas
+// telas (app.js e vistoria.html) não compartilham módulo JS (mesmo padrão de
+// getComodos/_getComodosImovel). Vistoriador só registra "quanto já tem" por item —
+// isso alimenta direto im.compras[subKey].qtdTem no admin, sem passo manual no meio.
+let ITENS_COMPRAS = [
+  {cat:'Cama',nome:'Jogo de Cama Basic Percalle',tipoPreco:'enxoval',qtdRule:'3-colchao',modalidades:['comprado']},
+  {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',qtdRule:'2-colchao',modalidades:['comprado']},
+  {cat:'Cama',nome:'Edredom Premier Hotel',tipoPreco:'enxoval',qtdRule:'1-colchao',modalidades:['comprado','flashee']},
+  {cat:'Cama',nome:'Capa p/ Edredom Hotel 180 fios',tipoPreco:'enxoval',qtdRule:'2-colchao',modalidades:['comprado','flashee']},
+  {cat:'Cama',nome:'Protetor de Colchão',tipoPreco:'enxoval',qtdRule:'1-colchao',semSofaCama:true},
+  {cat:'Cama',nome:'Fronha Basic Percalle c/ Abas',tipoPreco:'fixo',qtdRule:'2-leito',modalidades:['comprado']},
+  {cat:'Cama',nome:'Travesseiro Sanomed',tipoPreco:'fixo',qtdRule:'1-leito'},
+  {cat:'Cama',nome:'Travesseiro Toque de Pluma',tipoPreco:'fixo',qtdRule:'1-leito'},
+  {cat:'Cama',nome:'Protetor de Travesseiro',tipoPreco:'fixo',qtdRule:'2-leito'},
+  {cat:'Banheiro',nome:'Toalha de Banho Lory Hotel',tipoPreco:'fixo',qtdRule:'3-leito',modalidades:['comprado']},
+  {cat:'Banheiro',nome:'Toalha de Rosto Lory Hotel',tipoPreco:'fixo',qtdRule:'3-leito',modalidades:['comprado']},
+  {cat:'Banheiro',nome:'Tapete Piso Luxor Hotel',tipoPreco:'fixo',qtdRule:'3-banheiro'},
+  {cat:'Banheiro',nome:'Lixeira Inox com Pedal 3L',tipoPreco:'fixo',qtdRule:'1-banheiro'},
+  {cat:'Banheiro',nome:'Dispenser de Sabonete',tipoPreco:'fixo',qtdRule:'1-banheiro'},
+  {cat:'Banheiro',nome:'Secador de Cabelo',tipoPreco:'fixo',qtdRule:'1-banheiro-completo'},
+  {cat:'Lavanderia',nome:'Passadeira a Vapor',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Xícaras (kit 6)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Copos (kit 6)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Pratos Rasos (kit 6)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Pratos de Sobremesa (kit 6)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Taças (kit 6)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Talheres (24 peças)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Abridor Vinho e Cerveja',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Balde para Gelo',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Jogo de Panelas (10 peças)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Colheres para Cozinhar (kit)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Escorredor de Pratos',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Baixelas Inox (kit 4)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Potes Herméticos (10 un)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Facas para Cozinha (kit)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Liquidificador Mondial',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Sanduicheira Mondial Inox',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Cafeteira Nespresso Essenza Mini',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Microondas Electrolux 20L',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Purificador de Água',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Chaleira Elétrica',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Air Fryer',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Panos de Prato (kit 10)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Cozinha',nome:'Lixeira de Pia',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Quarto',nome:'Berço Portátil',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Quarto',nome:'Banheira Portátil',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Quarto',nome:'Persiana Blackout',tipoPreco:'fixo',qtdRule:'1-quarto'},
+  {cat:'Limpeza',nome:'Pano de Chão (kit 10)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Limpeza',nome:'Escada de Alumínio',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Limpeza',nome:'Balde (kit 2)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Limpeza',nome:'Vassoura + Pá',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Limpeza',nome:'Panos de Microfibra (kit 10)',tipoPreco:'fixo',qtdRule:'1-unidade'},
+  {cat:'Limpeza',nome:'Vassoura de Pelos',tipoPreco:'fixo',qtdRule:'1-unidade',modalidades:['flashee']},
+  {cat:'Outros',nome:'Detector de Fumaça e Monóxido de Carbono',tipoPreco:'fixo',qtdRule:'1-andar'},
+];
+const CAMA_TIPO_ENXOVAL = {
+  'Solteiro':'Solteiro','Sofá-cama Solteiro':'Solteiro','Viúva':'Solteiro','Beliche':'Solteiro','Bicama':'Solteiro',
+  'Casal':'Casal','Sofá-cama Casal':'Casal','Queen':'Queen','King':'King'
+};
+const CAMA_LEITOS = {'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solteiro':1,'Sofá-cama Casal':1,'Beliche':2,'Bicama':2,'Viúva':1};
+
+function _qtdComodoVal(v) { if (v === true) return 1; if (!v) return 0; const n = parseInt(v); return isNaN(n) ? 0 : n; }
+function totalLeitosVistoria(camas) { return (camas || []).reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0); }
+function modalidadeEnxovalAtualVistoria(imDados) {
+  const def = (imDados && imDados.defEnxoval) || {};
+  if ((def.tipo || 'comprado') !== 'aluguel') return 'comprado';
+  return (def.fornecedor || '').toLowerCase().includes('intense') ? 'intense' : 'flashee';
+}
+function itemValidoParaModalidadeVistoria(item, modalidade) { return !item.modalidades || item.modalidades.includes(modalidade); }
+function calcNecessarioVistoria(item, camas, banheiros, quartos, banheirosCompletos, hospedes, lavabos, andares) {
+  const rule = item.qtdRule || '1-unidade';
+  const dashIdx = rule.indexOf('-');
+  const n = rule.slice(0, dashIdx), base = rule.slice(dashIdx + 1);
+  const q = parseInt(n) || 1;
+  if (base === 'colchao' || base === 'leito') return q * totalLeitosVistoria(camas);
+  if (base === 'banheiro-completo') return q * (+banheirosCompletos || 1);
+  if (base === 'banheiro') return q * (+banheiros || 1);
+  if (base === 'quarto') return q * (+quartos || 1);
+  if (base === 'andar') return q * (+andares || 1);
+  if (base === 'hospede') return q * (+hospedes || 1);
+  if (base === 'lavabo') return q * (+lavabos || 0);
+  return q;
+}
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -1127,6 +1218,9 @@ async function _carregarVistoria() {
     VISTORIA_ID = vid; VISTORIA_TOKEN = t; VISTORIA_STATUS = j.status || 'rascunho';
     currentImovel = { id, nome: j.imovelNome || id, comodosSnapshot: j.comodos || [] };
     VISTORIA_CAMPOS = Array.isArray(j.camposVistoria) ? j.camposVistoria : [];
+    if (Array.isArray(j.itensCompras) && j.itensCompras.length) ITENS_COMPRAS = j.itensCompras;
+    IMOVEL_DADOS = j.imovelDados || {};
+    COMPRAS_ATUAL = j.comprasAtual || {};
     return j.dados || {};
   } catch (e) {
     showLinkError('Erro de conexão. Verifique sua internet e tente novamente.');
@@ -1162,6 +1256,12 @@ function _restaurarDados(dados) {
     const el = document.getElementById(`geral-${campo.id}`);
     if (!el) return;
     if (campo.tipo === 'checkbox') el.checked = !!val; else el.value = val ?? '';
+  });
+  Object.entries(dados.itensChecklist || {}).forEach(([subKey, info]) => {
+    const qtdEl = document.getElementById(`item-qtd-${subKey}`);
+    const obsEl = document.getElementById(`item-obs-${subKey}`);
+    if (qtdEl && info.qtdTem != null) qtdEl.value = info.qtdTem;
+    if (obsEl && info.obs) obsEl.value = info.obs;
   });
   (dados.comodos || []).forEach((c, idx) => {
     const irreg = document.getElementById('irreg-' + idx);
@@ -1326,6 +1426,93 @@ function buildComodos() {
   navContainer.innerHTML = navHtml;
 }
 
+// ═══════════════════════════════════════════════════════
+// ITENS OBRIGATÓRIOS — mesmo catálogo/regra de quantidade necessária da aba
+// Compras do admin (ver renderAbaCompras em js/app.js). O vistoriador só registra
+// "quanto já tem no imóvel" por item; o subKey é IDÊNTICO ao usado lá, então ao
+// enviar a vistoria isso vira o im.compras[subKey].qtdTem direto, sem retrabalho.
+// ═══════════════════════════════════════════════════════
+function _gerarLinhasItensObrigatorios() {
+  const d = IMOVEL_DADOS || {};
+  const camas = d.camas || [];
+  const modalidade = modalidadeEnxovalAtualVistoria(d);
+  const rows = [];
+  ITENS_COMPRAS.forEach((item, idx) => {
+    if (!itemValidoParaModalidadeVistoria(item, modalidade)) return;
+    if (item.tipoPreco === 'enxoval' && camas.length) {
+      const porTipo = {};
+      camas.forEach(c => { const t = CAMA_TIPO_ENXOVAL[c.tipo] || 'Solteiro'; (porTipo[t] = porTipo[t] || []).push(c); });
+      Object.entries(porTipo).forEach(([tipoEnx, camasTipo]) => {
+        const camasParaItem = item.semSofaCama ? camasTipo.filter(c => !c.tipo.startsWith('Sofá-cama')) : camasTipo;
+        if (item.semSofaCama && !camasParaItem.length) return;
+        const dashIdx = (item.qtdRule || '1-colchao').indexOf('-');
+        const q = parseInt((item.qtdRule || '1-colchao').slice(0, dashIdx)) || 1;
+        const qtdNec = q * camasParaItem.reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0);
+        rows.push({ subKey: `${idx}_${tipoEnx}`, cat: item.cat, label: `${item.nome} (${tipoEnx})`, qtdNec });
+      });
+    } else {
+      const qtdNec = calcNecessarioVistoria(item, camas, d.banheiros, d.quartos, d.banheirosCompletos, d.maxHospedes, d.banheirosLavabo, d.andares);
+      rows.push({ subKey: String(idx), cat: item.cat, label: item.nome, qtdNec });
+    }
+  });
+  return rows;
+}
+
+function buildItensObrigatorios() {
+  const container = document.getElementById('itens-container');
+  const navContainer = document.getElementById('nav-itens');
+  if (!container) return;
+  const rows = _gerarLinhasItensObrigatorios();
+  if (!rows.length) { container.innerHTML = ''; if (navContainer) navContainer.innerHTML = ''; return; }
+  const cats = [...new Set(rows.map(r => r.cat))];
+  const linhasHtml = cats.map(cat => `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${esc(cat)}</div>
+      ${rows.filter(r => r.cat === cat).map(r => {
+        const atual = COMPRAS_ATUAL[r.subKey] || {};
+        const qtdTem = atual.qtdTem ?? atual.qtdReal ?? '';
+        const obs = atual.obsVistoria || '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--gray-100);flex-wrap:wrap;">
+          <div style="flex:2;min-width:140px;font-size:13px;">${esc(r.label)}</div>
+          <div style="font-size:11px;color:var(--gray-400);white-space:nowrap;">Necessário: ${r.qtdNec}</div>
+          <input type="number" min="0" id="item-qtd-${r.subKey}" placeholder="Qtd. que tem" value="${esc(qtdTem)}" oninput="updateProgress()" style="width:90px;">
+          <input type="text" id="item-obs-${r.subKey}" placeholder="Observação (opcional)" value="${esc(obs)}" style="flex:1;min-width:140px;">
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+  container.innerHTML = `
+    <div class="section-card" id="sec-itens">
+      <div class="section-header" onclick="toggleSection('sec-itens')">
+        <div class="section-icon ic-dec"><i class="fa-solid fa-list-check"></i></div>
+        <div class="section-title">Itens Obrigatórios</div>
+        <i class="fa-solid fa-chevron-down section-chevron"></i>
+      </div>
+      <div class="section-body">
+        <div class="hint" style="margin-bottom:10px;">Preencha quanto já existe no imóvel de cada item — isso atualiza a lista de compras automaticamente, sem precisar reenviar depois.</div>
+        ${linhasHtml}
+      </div>
+    </div>`;
+  if (navContainer) navContainer.innerHTML = `
+    <a class="nav-item" href="#sec-itens" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-list-check"></i></span>
+      Itens Obrigatórios
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>`;
+}
+
+function _coletarItensObrigatorios() {
+  const out = {};
+  _gerarLinhasItensObrigatorios().forEach(r => {
+    const qtdEl = document.getElementById(`item-qtd-${r.subKey}`);
+    const obsEl = document.getElementById(`item-obs-${r.subKey}`);
+    const qtdVal = qtdEl ? qtdEl.value.trim() : '';
+    const obsVal = obsEl ? obsEl.value.trim() : '';
+    if (qtdVal === '' && !obsVal) return; // não toca no que o vistoriador não preencheu
+    out[r.subKey] = { qtdTem: qtdVal === '' ? null : (+qtdVal || 0), obs: obsVal };
+  });
+  return out;
+}
+
 function addVideo(idx, event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -1443,6 +1630,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('field-imovel-display').value = currentImovel.nome;
   buildGeral();
   buildComodos();
+  buildItensObrigatorios();
   _restaurarDados(dados);
   updateProgress();
 
@@ -1587,6 +1775,7 @@ function collectFormData() {
     vistoriador: document.getElementById('field-vistoriador').value,
     comodos: comodosData,
     camposGerais: _coletarCamposGerais(),
+    itensChecklist: _coletarItensObrigatorios(),
     aptoPara: (document.querySelector('input[name="apto"]:checked') || {}).value || null,
     obsFinais: document.getElementById('field-obs-finais').value,
     nomeConc: document.getElementById('field-nome-conclusao').value,

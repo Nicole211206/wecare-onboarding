@@ -51,6 +51,18 @@ def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Request = N
         "camposVistoria": data.get("wc_vistoria_campos") or [],
         "dados": v.get("dados") or {},
         "status": v.get("status") or "rascunho",
+        "itensCompras": data.get("wc_itens") or [],
+        "imovelDados": {
+            "camas": im.get("camas") or [],
+            "quartos": im.get("quartos") or 1,
+            "andares": im.get("andares") or 1,
+            "banheiros": (im.get("banheirosCompletos") or 0) + (im.get("banheirosLavabo") or 0) or im.get("banheiros") or 1,
+            "banheirosCompletos": im.get("banheirosCompletos") or im.get("banheiros") or 1,
+            "banheirosLavabo": im.get("banheirosLavabo") or 0,
+            "maxHospedes": im.get("maxHospedes") or 0,
+            "defEnxoval": im.get("defEnxoval") or {},
+        },
+        "comprasAtual": im.get("compras") or {},
     }
 
 
@@ -90,6 +102,24 @@ async def vistoria_save(id: str = "", vid: str = "", t: str = "", request: Reque
     if body.get("enviado") is True and v.get("status") != "enviado":
         v["status"] = "enviado"
         v["enviadoEm"] = agora
+
+        # Liga o checklist de itens obrigatórios preenchido na vistoria direto na aba
+        # Compras — sem isso, o "já tem X no imóvel" registrado no local nunca chegaria
+        # lá sem alguém digitar tudo de novo manualmente no admin.
+        itens_checklist = v["dados"].get("itensChecklist")
+        if isinstance(itens_checklist, dict):
+            if not isinstance(im.get("compras"), dict):
+                im["compras"] = {}
+            for sub_key, info in itens_checklist.items():
+                if not isinstance(info, dict):
+                    continue
+                if not isinstance(im["compras"].get(sub_key), dict):
+                    im["compras"][sub_key] = {}
+                if info.get("qtdTem") is not None:
+                    im["compras"][sub_key]["qtdTem"] = info["qtdTem"]
+                if info.get("obs"):
+                    im["compras"][sub_key]["obsVistoria"] = info["obs"]
+
         pendencias = (v["dados"].get("pendencias") or []) if isinstance(v["dados"].get("pendencias"), list) else []
         if pendencias:
             if not isinstance(im.get("manutencoes"), list):

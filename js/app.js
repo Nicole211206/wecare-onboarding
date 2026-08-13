@@ -1726,16 +1726,16 @@ function renderAbaCompras(im){
       <table class="compras-table" style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead><tr style="background:var(--surface-2)"><th style="padding:6px 8px;">✓</th><th>Item</th><th style="text-align:center;">Nec.</th><th style="text-align:center;">Já tem</th><th style="text-align:center;">Falta</th><th style="text-align:right;padding:0 8px;">R$/Un</th><th style="text-align:right;padding:0 8px;">Total</th><th>Link</th></tr></thead>
         <tbody>
-        ${itensC.map(({subKey,item,label,qtdNec,qtdTem,falta,precoUn,total,comprado})=>`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
+        ${itensC.map(({subKey,item,label,qtdNec,qtdTem,falta,precoUn,total,comprado})=>{const obsVistoria=(compras[subKey]||{}).obsVistoria;return`<tr style="${comprado?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
           <td style="padding:4px 8px;"><input type="checkbox" class="compra-check" ${comprado?'checked':''} data-idx="${subKey}" onchange="_onCompraCheck(this,'${subKey}')"></td>
-          <td style="padding:4px 8px;">${esc(label)}</td>
+          <td style="padding:4px 8px;">${esc(label)}${obsVistoria?`<div title="${esc(obsVistoria)}" style="font-size:11px;color:var(--text-muted);"><i class="fa-solid fa-clipboard-check"></i> ${esc(obsVistoria)}</div>`:''}</td>
           <td style="text-align:center;color:var(--text-muted);">${qtdNec}</td>
           <td style="text-align:center;"><input class="input compra-qtd-input" style="width:56px;padding:3px 6px;" type="number" min="0" value="${qtdTem}" data-idx="${subKey}" onchange="_onCompraQtd(this,'${subKey}')"></td>
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 4px;"><input class="input compra-preco-input" data-subkey="${subKey}" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
           <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
         </tbody>
       </table>
     </div>`;
