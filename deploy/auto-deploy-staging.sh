@@ -28,7 +28,9 @@ DEV_URL="https://dev-onboarding.wecarehosting.com.br"
 log() { printf '%s %s\n' "$(date -Is)" "$1" >> "$LOG_FILE"; }
 
 apply_dev_sync_override() {
-  sed -i -E "s#window\.WC_SYNC = \{[^}]*\};#window.WC_SYNC = { url: '${DEV_URL}', token: '${DEV_TOKEN}' };#" "$REPO_DIR/index.html"
+  # -z: bloco WC_SYNC é multi-linha no index.html (url/token em linhas
+  # separadas) — sed normal não casa \{[^}]*\} através de quebras de linha.
+  sed -i -z -E "s#window\.WC_SYNC = \{[^}]*\};#window.WC_SYNC = {\n      url:   '${DEV_URL}',\n      token: '${DEV_TOKEN}'\n    };#" "$REPO_DIR/index.html"
   sed -i -E "s#window\.WC_WORKER_URL = '[^']*';#window.WC_WORKER_URL = '${DEV_URL}';#" "$REPO_DIR/form.html"
   sed -i -E "s#^const WC_WORKER_URL = '[^']*';#const WC_WORKER_URL = '${DEV_URL}';#" "$REPO_DIR/vistoria.html"
 }
