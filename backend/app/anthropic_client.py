@@ -85,14 +85,33 @@ Regras:
 - valor_setup_cobrado: valor em reais da taxa de setup/start-up cobrada do proprietário (é um valor único de implantação, não a comissão recorrente mensal). Confira o número com atenção antes de responder — não arredonde nem aproxime.
 - fonte_valor_setup_cobrado: copie e cole a frase EXATA (verbatim) do documento onde você leu o valor de valor_setup_cobrado, incluindo o nome do arquivo se identificável.
 - definicoes: são serviços/produtos contratados da WeCare mencionados nos documentos (ex: "seguro EasyCover obrigatório" → seguroEasyCover:true; fechadura eletrônica instalada → fechaduraEletronica:true). NÃO são restrições.
-- restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão, taxa de setup ou pagadoria — isso são produtos/condições comerciais, não restrições, e já têm campo próprio."""
+- restricoes: SOMENTE limitações de uso do imóvel que não têm campo próprio no onboarding — proibição de animais, de festas, número máximo de hóspedes, cláusulas restritivas do condomínio/contrato. NUNCA inclua aqui seguro, kit amenities, internet, fechadura eletrônica, comissão, taxa de setup ou pagadoria — isso são produtos/condições comerciais, não restrições, e já têm campo próprio.
+- formRascunho: além das perguntas já cobertas pelos campos diretos acima (q9/q81/q82/q83/q86), preencha TAMBÉM qualquer outra pergunta da lista abaixo cuja resposta você encontrar com segurança nos documentos/imagens — não é necessário responder todas, só as que houver informação clara. NÃO chute nem invente pra "completar" — pergunta sem informação clara fica de fora do JSON (não retorne string vazia pra ela). Perguntas do tipo "radio"/"checkbox" só aceitam as opções exatamente como listadas entre parênteses — não invente opção nova, e se for checkbox pode combinar mais de uma separada por vírgula. Perguntas "number" respondem só com o número."""
 
 
-async def analisar_drive(user_content: list[dict]) -> dict:
+def _monta_bloco_perguntas(perguntas: list[dict]) -> str:
+    linhas = []
+    for p in perguntas:
+        pid, label, tipo = p.get("id"), p.get("label"), p.get("tipo")
+        if not pid or not label:
+            continue
+        opcoes = p.get("opcoes")
+        sufixo = f" (opções: {', '.join(opcoes)})" if isinstance(opcoes, list) and opcoes else ""
+        linhas.append(f"- {pid} [{tipo}]: {label}{sufixo}")
+    return "\n".join(linhas)
+
+
+async def analisar_drive(user_content: list[dict], perguntas: list[dict] | None = None) -> dict:
+    system = SYSTEM_ANALISAR_DRIVE
+    if perguntas:
+        bloco = _monta_bloco_perguntas(perguntas)
+        if bloco:
+            system += "\n\nLISTA COMPLETA DE PERGUNTAS DO FORMULÁRIO (id [tipo]: pergunta):\n" + bloco
+
     resp = await _client.messages.create(
         model=MODEL,
-        max_tokens=2048,
-        system=SYSTEM_ANALISAR_DRIVE,
+        max_tokens=4096,
+        system=system,
         messages=[{"role": "user", "content": user_content}],
     )
     texto = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")

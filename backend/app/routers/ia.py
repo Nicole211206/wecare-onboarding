@@ -221,8 +221,10 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
         }
     user_content.append({"type": "text", "text": f'Nome deste imóvel no sistema: "{im.get("nome") or ""}". Extraia os dados deste imóvel específico e retorne o JSON.'})
 
+    perguntas = body.get("perguntas") if isinstance(body.get("perguntas"), list) else []
+
     try:
-        resultado = await anthropic_client.analisar_drive(user_content)
+        resultado = await anthropic_client.analisar_drive(user_content, perguntas)
     except Exception as e:
         return {"ok": False, "error": f"Erro Claude: {e}"}
 
@@ -308,5 +310,9 @@ def _aplicar_resultado_drive(im: dict, resultado: dict) -> None:
         im["formRascunho"] = {}
     conf = im.get("formConfirmados") or {}
     for qid, val in (resultado.get("formRascunho") or {}).items():
-        if not conf.get(qid) and _has_val(val):
+        # Só preenche se ainda vazio — mesma regra "só preenche campo vazio" do resto
+        # da função. Sem isso, ao expandir a IA pra tentar responder as ~85 perguntas
+        # do formulário (antes eram só 5), uma correção manual da equipe no rascunho
+        # seria apagada silenciosamente na próxima vez que a pasta fosse reanalisada.
+        if not conf.get(qid) and _has_val(val) and not _has_val(im["formRascunho"].get(qid)):
             im["formRascunho"][qid] = str(val)

@@ -1200,9 +1200,10 @@ async function triggerDriveAnalysis(im){
   }catch{}
 
   try{
+    const perguntas=(window.FORM_PERGUNTAS_FLAT||[]).map(p=>({id:p.id,label:p.label,tipo:p.tipo,opcoes:p.opcoes}));
     const r=await fetch(s.url.replace(/\/$/,'')+'/analisar-drive?token='+encodeURIComponent(s.token||''),{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:im.id,captacaoLink:im.captacaoLink||'',vistoriaRecente})
+      body:JSON.stringify({id:im.id,captacaoLink:im.captacaoLink||'',vistoriaRecente,perguntas})
     });
     const j=await r.json();
     if(!j.ok)throw new Error(j.error||'Falha na análise');
