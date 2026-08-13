@@ -3,14 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+import httpx
+from fastapi import APIRouter, File, Request, UploadFile
 from sqlalchemy.orm import Session
-from fastapi import Depends
+from fastapi import Depends, Form
 
-from .. import state
+from .. import google_drive, state
+from ..config import settings
 from ..database import get_db
 
 router = APIRouter()
+
+MAX_MIDIA_POR_COMODO = 30
 
 
 def _find_imovel(data: dict, imovel_id: str) -> dict | None:
@@ -160,4 +164,85 @@ async def vistoria_midia(id: str = "", vid: str = "", t: str = "", request: Requ
         "adicionados": len(a_adicionar),
         "total": len(comodos[comodo_idx]["midiaFrames"]),
         "limiteAtingido": len(a_adicionar) < len(frames),
+    }
+
+
+@router.post("/vistoria-upload")
+async def vistoria_upload(
+    id: str = Form(...),
+    vid: str = Form(...),
+    t: str = Form(...),
+    comodoIdx: int = Form(...),
+    comodoNome: str = Form(""),
+    file: UploadFile = File(...),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """Sobe a foto/vídeo BRUTO da vistoria direto pra pasta do imóvel no Google Drive
+    (subpasta "Vistoria"), em vez de guardar frames extraídos em base64 no banco.
+    Resolve o bug de perda de dados em celulares fracos, onde a extração de frames
+    no navegador (canvas + <video> seeking) podia travar sem nunca completar."""
+    if not id or not vid or not t or comodoIdx < 0:
+        return {"ok": False, "error": "Dados inválidos"}
+    if not settings.google_client_id or not settings.google_client_secret or not settings.google_refresh_token:
+        return {"ok": False, "error": "Integração com Google Drive não configurada"}
+
+    data = state.get_state(db, str(request.base_url).rstrip("/"), "")
+    im = _find_imovel(data, id)
+    if not im:
+        return {"ok": False, "error": "Imóvel não encontrado"}
+    v = _find_vistoria(im, vid)
+    if not v:
+        return {"ok": False, "error": "Vistoria não encontrada"}
+    if v.get("token") != t:
+        return {"ok": False, "error": "Token inválido"}
+    if v.get("status") == "enviado":
+        return {"ok": False, "error": "Vistoria já enviada"}
+
+    if not isinstance(v.get("dados"), dict):
+        v["dados"] = {}
+    if not isinstance(v["dados"].get("comodos"), list):
+        v["dados"]["comodos"] = []
+    comodos = v["dados"]["comodos"]
+    while len(comodos) <= comodoIdx:
+        comodos.append({})
+    if not isinstance(comodos[comodoIdx].get("midiaDrive"), list):
+        comodos[comodoIdx]["midiaDrive"] = []
+
+    if len(comodos[comodoIdx]["midiaDrive"]) >= MAX_MIDIA_POR_COMODO:
+        return {"ok": False, "error": "Limite de mídia deste cômodo atingido"}
+
+    folder_id = google_drive.extract_folder_id(im.get("captacaoLink"))
+    if not folder_id:
+        return {"ok": False, "error": "Imóvel sem pasta do Drive configurada (link de captação)"}
+
+    content = await file.read()
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            token = await google_drive.get_google_access_token(client)
+            vistoria_folder_id = await google_drive.find_or_create_folder(client, token, folder_id, "Vistoria")
+            nome_arquivo = f"{comodoNome or ('Comodo_' + str(comodoIdx))} - {datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')} - {file.filename or 'midia'}"
+            resultado = await google_drive.upload_file(
+                client, token, vistoria_folder_id, nome_arquivo, file.content_type or "application/octet-stream", content
+            )
+    except Exception as e:
+        return {"ok": False, "error": f"Falha ao enviar pro Drive: {e}"}
+
+    comodos[comodoIdx]["midiaDrive"].append(
+        {
+            "driveFileId": resultado.get("id"),
+            "driveLink": resultado.get("webViewLink"),
+            "nome": nome_arquivo,
+            "tipo": "video" if (file.content_type or "").startswith("video/") else "foto",
+            "enviadoEm": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+    state.put_state(db, data)
+    db.commit()
+    return {
+        "ok": True,
+        "total": len(comodos[comodoIdx]["midiaDrive"]),
+        "driveLink": resultado.get("webViewLink"),
     }

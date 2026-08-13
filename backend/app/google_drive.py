@@ -118,3 +118,70 @@ async def download_file_base64(client: httpx.AsyncClient, file_id: str, mime_typ
     if res.status_code != 200:
         return None
     return {"base64": base64.b64encode(res.content).decode(), "mimeType": mime_type}
+
+
+async def find_or_create_folder(client: httpx.AsyncClient, token: str, parent_id: str, name: str) -> str:
+    """Acha (ou cria) uma subpasta com esse nome dentro de parent_id. Usado pra
+    isolar a mídia da vistoria (fotos/vídeos) dentro da pasta do imóvel, sem
+    misturar com os documentos de captação já existentes lá."""
+    headers = {"Authorization": f"Bearer {token}"}
+    shared_drive_id = await _find_shared_drive_id(client, parent_id, token)
+    extra_params = (
+        {"supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "corpora": "drive", "driveId": shared_drive_id}
+        if shared_drive_id
+        else {"supportsAllDrives": "true", "includeItemsFromAllDrives": "true"}
+    )
+    escaped_name = name.replace("'", "\\'")
+    res = await client.get(
+        "https://www.googleapis.com/drive/v3/files",
+        params={
+            "q": f"'{parent_id}' in parents and name='{escaped_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            "fields": "files(id,name)",
+            "pageSize": 1,
+            **extra_params,
+        },
+        headers=headers,
+    )
+    data = res.json()
+    if "error" in data:
+        raise RuntimeError(f"Drive API: {data['error']}")
+    found = data.get("files") or []
+    if found:
+        return found[0]["id"]
+
+    create_res = await client.post(
+        "https://www.googleapis.com/drive/v3/files",
+        params={"supportsAllDrives": "true", "fields": "id"},
+        headers=headers,
+        json={"name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]},
+    )
+    create_data = create_res.json()
+    if "error" in create_data:
+        raise RuntimeError(f"Drive API: {create_data['error']}")
+    return create_data["id"]
+
+
+async def upload_file(
+    client: httpx.AsyncClient, token: str, folder_id: str, filename: str, mime_type: str, content: bytes
+) -> dict:
+    """Sobe um arquivo (foto/vídeo bruto) pra uma pasta do Drive via upload resumable —
+    mais tolerante a conexões instáveis do que multipart simples pra arquivos grandes."""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
+    init_res = await client.post(
+        "https://www.googleapis.com/upload/drive/v3/files",
+        params={"uploadType": "resumable", "supportsAllDrives": "true", "fields": "id,name,webViewLink"},
+        headers={**headers, "X-Upload-Content-Type": mime_type},
+        json={"name": filename, "parents": [folder_id]},
+    )
+    upload_url = init_res.headers.get("location")
+    if not upload_url:
+        raise RuntimeError(f"Drive API: falha ao iniciar upload resumable ({init_res.status_code}: {init_res.text})")
+
+    put_res = await client.put(
+        upload_url,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": mime_type},
+        content=content,
+    )
+    if put_res.status_code not in (200, 201):
+        raise RuntimeError(f"Drive API: falha no upload ({put_res.status_code}: {put_res.text})")
+    return put_res.json()

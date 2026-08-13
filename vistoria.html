@@ -1173,10 +1173,14 @@ function _restaurarDados(dados) {
       if (!el) return;
       if (campo.tipo === 'checkbox') el.checked = !!val; else el.value = val ?? '';
     });
-    if (Array.isArray(c.midiaFrames) && c.midiaFrames.length) {
-      _midiaJaSalva[idx] = c.midiaFrames.length;
+    const qtdDrive = Array.isArray(c.midiaDrive) ? c.midiaDrive.length : 0;
+    const qtdFramesAntigos = Array.isArray(c.midiaFrames) ? c.midiaFrames.length : 0;
+    if (qtdDrive || qtdFramesAntigos) {
+      _midiaJaSalva[idx] = qtdDrive || qtdFramesAntigos;
       const status = document.getElementById('midia-status-' + idx);
-      if (status) status.innerHTML = `<i class="fa-solid fa-check" style="color:var(--green)"></i> ${c.midiaFrames.length} imagem(ns) já salva(s) de antes`;
+      if (status) status.innerHTML = qtdDrive
+        ? `<i class="fa-solid fa-check" style="color:var(--green)"></i> ${qtdDrive} arquivo(s) já salvo(s) no Drive`
+        : `<i class="fa-solid fa-check" style="color:var(--green)"></i> ${qtdFramesAntigos} imagem(ns) já salva(s) de antes`;
     }
   });
 }
@@ -1335,72 +1339,60 @@ function addVideo(idx, event) {
   renderVideoGrid(idx);
   event.target.value = '';
   updateProgress();
-  _enviarMidiaComoFrames(idx, file);
+  _enviarMidiaDrive(idx, file);
 }
 
-// Extrai algumas imagens do vídeo (mesmo princípio já usado no painel principal pra
-// mandar frames pro Gemini — canvas capturando o <video> em alguns instantes) ou,
-// se for uma foto, só redimensiona/comprime. Nunca manda o vídeo bruto: a Anthropic
-// (e o Gemini, no outro fluxo já existente) só aceita imagem, não vídeo nativo — e o
-// arquivo bruto nem caberia no limite de 25MB do KV que guarda o sistema inteiro.
-async function _extrairFramesMidia(file) {
-  if (!file.type.startsWith('video/')) {
-    return new Promise(resolve => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const w = Math.min(img.width, 800);
-        canvas.width = w; canvas.height = Math.round(w * (img.height / img.width));
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve([canvas.toDataURL('image/jpeg', 0.6).split(',')[1]]);
-      };
-      img.onerror = () => resolve([]);
-      img.src = URL.createObjectURL(file);
-    });
+// Sobe o arquivo BRUTO (foto ou vídeo) pro backend, que encaminha pra pasta do
+// imóvel no Google Drive — nada de extrair frame no navegador (canvas/<video>
+// seeking), que travava sem completar em celulares mais fracos e fazia a pessoa
+// perder a mídia do cômodo inteiro. Tenta de novo automaticamente em falha de
+// rede antes de pedir pro usuário tentar de novo manualmente.
+const _uploadsPendentes = new Set();
+const _uploadsFalhos = {}; // uploadKey -> File, pra permitir "tente de novo" manual
+
+window.addEventListener('beforeunload', (e) => {
+  if (_uploadsPendentes.size > 0) {
+    e.preventDefault();
+    e.returnValue = '';
   }
-  return new Promise(resolve => {
-    const video = document.createElement('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const frames = [];
-    video.muted = true; video.preload = 'auto';
-    video.onloadedmetadata = () => {
-      const w = Math.min(video.videoWidth || 800, 800);
-      canvas.width = w; canvas.height = Math.round(w * ((video.videoHeight || w) / (video.videoWidth || w)));
-      const maxFrames = 2;
-      const times = [];
-      for (let t = 1; t < video.duration && times.length < maxFrames; t += Math.max(3, video.duration / (maxFrames + 1))) times.push(t);
-      if (!times.length) times.push(0);
-      let i = 0;
-      const next = () => { if (i >= times.length) { URL.revokeObjectURL(video.src); resolve(frames); return; } video.currentTime = times[i++]; };
-      video.onseeked = () => { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); frames.push(canvas.toDataURL('image/jpeg', 0.55).split(',')[1]); next(); };
-      video.onerror = () => resolve(frames);
-      next();
-    };
-    video.onerror = () => resolve(frames);
-    video.src = URL.createObjectURL(file);
-  });
+});
+
+function _retentarUpload(idx, uploadKey) {
+  const file = _uploadsFalhos[uploadKey];
+  if (!file) return;
+  delete _uploadsFalhos[uploadKey];
+  _enviarMidiaDrive(idx, file);
 }
 
-async function _enviarMidiaComoFrames(idx, file) {
+async function _enviarMidiaDrive(idx, file, tentativa = 1) {
+  const uploadKey = idx + ':' + file.name + ':' + file.size;
   const status = document.getElementById('midia-status-' + idx);
-  if (status) status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+  _uploadsPendentes.add(uploadKey);
+  if (status) status.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando${tentativa > 1 ? ' (tentativa ' + tentativa + ')' : ''}...`;
   try {
-    const frames = await _extrairFramesMidia(file);
-    if (!frames.length) throw new Error('Não foi possível processar o arquivo.');
-    const r = await fetch(`${WC_WORKER_URL}/vistoria-midia?id=${encodeURIComponent(currentImovel.id)}&vid=${encodeURIComponent(VISTORIA_ID)}&t=${encodeURIComponent(VISTORIA_TOKEN)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comodoIdx: idx, frames }),
-    });
+    const nomeComodo = (getComodosAtuais()[idx] || ('Cômodo ' + (idx + 1)));
+    const form = new FormData();
+    form.append('id', currentImovel.id);
+    form.append('vid', VISTORIA_ID);
+    form.append('t', VISTORIA_TOKEN);
+    form.append('comodoIdx', idx);
+    form.append('comodoNome', nomeComodo);
+    form.append('file', file, file.name);
+    const r = await fetch(`${WC_WORKER_URL}/vistoria-upload`, { method: 'POST', body: form });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'Falha ao salvar');
-    _midiaJaSalva[idx] = j.total || ((_midiaJaSalva[idx] || 0) + frames.length);
+    _uploadsPendentes.delete(uploadKey);
+    _midiaJaSalva[idx] = j.total || ((_midiaJaSalva[idx] || 0) + 1);
     updateProgress();
-    if (status) status.innerHTML = j.limiteAtingido
-      ? '<i class="fa-solid fa-triangle-exclamation" style="color:var(--amber)"></i> Limite de mídia da vistoria atingido'
-      : '<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo';
+    if (status) status.innerHTML = '<i class="fa-solid fa-cloud-arrow-up" style="color:var(--green)"></i> Salvo no Drive';
   } catch (e) {
-    if (status) status.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Erro ao salvar — tente de novo';
+    if (tentativa < 3) {
+      setTimeout(() => _enviarMidiaDrive(idx, file, tentativa + 1), 4000);
+      return;
+    }
+    _uploadsPendentes.delete(uploadKey);
+    _uploadsFalhos[uploadKey] = file;
+    if (status) status.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Erro ao salvar — <a href="#" onclick="event.preventDefault();_retentarUpload(${idx}, ${JSON.stringify(uploadKey)});" style="color:var(--red);text-decoration:underline;">tente de novo</a>`;
   }
 }
 

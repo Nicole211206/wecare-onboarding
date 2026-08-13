@@ -3785,9 +3785,11 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
   const comodosHtml=(d.comodos||[]).map(c=>{
     const extras=Object.entries(c.camposExtras||{}).filter(([,val])=>val!==''&&val!==false&&val!=null);
     const midias=Array.isArray(c.midiaFrames)?c.midiaFrames:[];
+    const midiasDrive=Array.isArray(c.midiaDrive)?c.midiaDrive:[];
     return`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
       <strong>${esc(c.nome)}</strong>${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
       ${extras.length?`<div style="font-size:12.5px;color:var(--text-muted);">${extras.map(([k,val])=>`${esc(k)}: ${val===true?'✓':esc(String(val))}`).join(' · ')}</div>`:''}
+      ${midiasDrive.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midiasDrive.map(f=>`<a href="${esc(f.driveLink||'#')}" target="_blank" style="display:flex;align-items:center;gap:4px;font-size:12px;padding:4px 8px;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);"><i class="fa-brands fa-google-drive"></i> ${f.tipo==='video'?'Vídeo':'Foto'}</a>`).join('')}</div>`:''}
       ${midias.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midias.map(f=>`<img src="data:image/jpeg;base64,${f}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('data:image/jpeg;base64,${f}','_blank')">`).join('')}</div>`:''}
     </div>`;
   }).join('')||'<div class="text-muted" style="font-size:13px;">Sem detalhes de cômodos registrados.</div>';
