@@ -1,0 +1,4 @@
+# Auto-deploy do ambiente DEV do wecare-onboarding a cada 5 minutos — instalar com:
+#   crontab -u jarvis -e
+# (cole a linha abaixo, sem o comentário)
+*/5 * * * * /home/jarvis/apps/wecare-onboarding-staging/deploy/auto-deploy-staging.sh

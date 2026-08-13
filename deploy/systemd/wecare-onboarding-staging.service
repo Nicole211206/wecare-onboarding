@@ -1,0 +1,15 @@
+[Unit]
+Description=WeCare Onboarding DEV — Backend API (FastAPI, branch develop)
+After=network.target
+
+[Service]
+User=jarvis
+Group=jarvis
+WorkingDirectory=/home/jarvis/apps/wecare-onboarding-staging/backend
+ExecStart=/home/jarvis/.local/bin/uv run uvicorn app.main:app --host 127.0.0.1 --port 18794
+Restart=always
+RestartSec=5
+EnvironmentFile=-/home/jarvis/apps/wecare-onboarding-staging/backend/.env
+
+[Install]
+WantedBy=multi-user.target
