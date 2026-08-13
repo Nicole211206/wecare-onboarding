@@ -145,7 +145,7 @@
     <div id="secoes-container"></div>
 
     <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap;">
-      <button id="btn-save-draft" onclick="salvarRascunho()" style="flex:1;min-width:160px;padding:14px;background:#fff;color:var(--brand);border:2px solid var(--brand);border-radius:var(--r);font-family:var(--font);font-size:.97rem;font-weight:700;cursor:pointer;transition:background .15s;">
+      <button id="btn-save-draft" onclick="salvarRascunho()" style="flex:1;min-width:160px;padding:14px;background:#fff;color:var(--brand-purple);border:2px solid var(--brand-purple);border-radius:var(--r);font-family:var(--font);font-size:.97rem;font-weight:700;cursor:pointer;transition:background .15s;">
         <i class="fa-solid fa-floppy-disk"></i> Salvar progresso
       </button>
       <button class="btn-submit" id="btn-submit" onclick="submitForm()" style="flex:2;min-width:200px;margin-top:0;">Enviar informações</button>
@@ -177,6 +177,41 @@
     return out;
   }
   const _hasSR='SpeechRecognition' in window||'webkitSpeechRecognition' in window;
+
+  // ── Backup local (localStorage) ──────────────────────────────────────
+  // As respostas do proprietário só chegavam ao servidor no autosave de 60s (ou no
+  // "Salvar progresso" manual). Se ele fechasse a aba antes disso, ou se a rede
+  // caísse no meio, o que tinha digitado desde o último save ia embora sem aviso.
+  // Agora TUDO grava local a cada mudança, sem depender de rede — e ao reabrir o
+  // link, se o rascunho local for mais recente que o que está no servidor, ele
+  // é restaurado automaticamente antes do formulário aparecer.
+  let _ultimoSaveServidorOk=0;
+  function _draftKey(){const{id,t}=getParams();return'wc_form_draft_'+id+'_'+t;}
+  let _persistTimer=null;
+  function _persistirLocal(){
+    clearTimeout(_persistTimer);
+    _persistTimer=setTimeout(function(){
+      try{
+        localStorage.setItem(_draftKey(),JSON.stringify({valores:_valores,confirmados:_confirmados,savedAt:Date.now()}));
+      }catch(e){/* localStorage indisponível (modo privado etc.) — segue só com o autosave de rede */}
+    },300);
+  }
+  function _lerDraftLocal(){
+    try{
+      const raw=localStorage.getItem(_draftKey());
+      return raw?JSON.parse(raw):null;
+    }catch(e){return null;}
+  }
+  function _limparDraftLocal(){
+    try{localStorage.removeItem(_draftKey());}catch(e){}
+  }
+  window.addEventListener('beforeunload',function(e){
+    const draft=_lerDraftLocal();
+    if(draft&&draft.savedAt>_ultimoSaveServidorOk){
+      e.preventDefault();
+      e.returnValue='';
+    }
+  });
 
   function _addVoiceBtn(wrap, getEl){
     if(!_hasSR) return;
@@ -272,6 +307,7 @@
                 _valores[p.id]=cur.join(', ');
               }
               if(p.id==='q24') _atualizarCondicionais();
+              _persistirLocal();
             });
             pill.appendChild(inp);
             pill.appendChild(document.createTextNode(op));
@@ -287,8 +323,8 @@
           const valEl=document.createElement('span'); valEl.className='stepper-val'; valEl.textContent=v||'0';
           const btnP=document.createElement('button'); btnP.type='button'; btnP.className='stepper-btn'; btnP.textContent='+';
           _valores[p.id]=v||'0';
-          btnM.addEventListener('click',function(){_tocados[p.id]=true;const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);});
-          btnP.addEventListener('click',function(){_tocados[p.id]=true;const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);});
+          btnM.addEventListener('click',function(){_tocados[p.id]=true;const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);_persistirLocal();});
+          btnP.addEventListener('click',function(){_tocados[p.id]=true;const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);_persistirLocal();});
           stepper.appendChild(btnM); stepper.appendChild(valEl); stepper.appendChild(btnP);
           field.appendChild(stepper);
         }
@@ -299,7 +335,7 @@
           if(p.tipo==='textarea'){input=document.createElement('textarea');}
           else{input=document.createElement('input'); input.type='text';}
           input.value=v; input.placeholder='Digite aqui…';
-          input.addEventListener('input',function(){_tocados[p.id]=true;_valores[p.id]=input.value;});
+          input.addEventListener('input',function(){_tocados[p.id]=true;_valores[p.id]=input.value;_persistirLocal();});
           wrap.appendChild(input);
           _addVoiceBtn(wrap, function(){return input;});
           field.appendChild(wrap);
@@ -316,6 +352,7 @@
           chk.classList.toggle('on',_confirmados[p.id]);
           field.classList.toggle('confirmado',_confirmados[p.id]);
           updateProgress();
+          _persistirLocal();
         });
         row.appendChild(chk);
         if(hasPrefill){const tag=document.createElement('span');tag.className='prefill-tag';tag.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> sugerido';row.appendChild(tag);}
@@ -334,18 +371,29 @@
       const el=document.getElementById('save-status');
       if(el){el.textContent=msg;el.style.color=cor||'#9b8fa8';}
     }
-    function _executarSave(callback){
+    function _executarSave(callback,_tentativa){
       const workerUrl=(window.WC_WORKER_URL||'').replace(/\/$/,'');
       if(!workerUrl||!_asId||!_asT){_mostrarStatus('⚠ Link inválido, não foi possível salvar.','#C0392B');return;}
       const url=workerUrl+'/form-save?id='+encodeURIComponent(_asId)+'&t='+encodeURIComponent(_asT);
       fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados})})
       .then(function(r){if(!r.ok)throw new Error('erro');
+        _ultimoSaveServidorOk=Date.now();
         const h=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
         _mostrarStatus('✓ Salvo às '+h+' — você pode fechar e continuar depois pelo mesmo link.','#6b8f71');
         if(callback)callback();
       })
-      .catch(function(){_mostrarStatus('⚠ Falha ao salvar. Verifique a conexão.','#C0392B');});
+      .catch(function(){
+        // Já está salvo localmente (localStorage) mesmo se isso falhar — mas tenta
+        // de novo automaticamente uma vez antes de só avisar e esperar o próximo ciclo.
+        if(!_tentativa){
+          _mostrarStatus('⚠ Falha ao salvar, tentando de novo…','#C0392B');
+          setTimeout(function(){_executarSave(callback,1);},5000);
+        } else {
+          _mostrarStatus('⚠ Sem conexão. Suas respostas estão salvas neste aparelho e serão enviadas quando a internet voltar.','#C0392B');
+          if(callback)callback();
+        }
+      });
     }
     window.salvarRascunho=function(){
       const btn=document.getElementById('btn-save-draft');
@@ -402,7 +450,7 @@
     fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({respostas:_payloadRespostas(),confirmados:_confirmados,enviado:true})})
     .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Erro ao salvar');});return r.json();})
-    .then(function(){if(window._autoSaveInterval){clearInterval(window._autoSaveInterval);window._autoSaveInterval=null;}hide('form-state');show('success-state');window.scrollTo(0,0);})
+    .then(function(){if(window._autoSaveInterval){clearInterval(window._autoSaveInterval);window._autoSaveInterval=null;}_limparDraftLocal();hide('form-state');show('success-state');window.scrollTo(0,0);})
     .catch(function(err){btn.disabled=false;btn.textContent='Enviar informações';errEl.textContent=err.message||'Erro ao enviar. Tente novamente.';errEl.style.display='block';});
   };
 
@@ -417,7 +465,18 @@
       .then(function(r){if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Token inválido');});return r.json();})
       .then(function(data){
         qs('#imovel-nome').textContent=data.imovelNome||data.nome_imovel||'Seu imóvel';
-        buildForm(secoes, data.rascunho||{}, data.respostas||{}, data.confirmados||{});
+        const servidorEm=data.atualizadoEm?new Date(data.atualizadoEm).getTime():0;
+        _ultimoSaveServidorOk=servidorEm;
+        const draft=_lerDraftLocal();
+        let respostas=data.respostas||{}, confirmados=data.confirmados||{};
+        if(draft&&draft.savedAt>servidorEm){
+          // O que tinha sido digitado neste aparelho é mais recente do que o que está
+          // salvo no servidor (autosave anterior falhou, ou a aba fechou antes de rodar)
+          // — restaura isso automaticamente em vez de perder.
+          respostas=Object.assign({},respostas,draft.valores||{});
+          confirmados=Object.assign({},confirmados,draft.confirmados||{});
+        }
+        buildForm(secoes, data.rascunho||{}, respostas, confirmados);
         hide('loading-state');show('form-state');
       })
       .catch(function(){showError('Link inválido ou expirado. Entre em contato com a equipe WeCare.');});

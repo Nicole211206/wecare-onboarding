@@ -1520,6 +1520,16 @@ function _formUrl(im){
 function _todasPerguntas(){
   return (window.FORM_PERGUNTAS_FLAT||[]);
 }
+function _statusPerguntaFormulario(p,rascunho,respostas,confirmados){
+  const val=rascunho[p.id]||'';
+  const respDada=respostas[p.id];
+  const confirmado=confirmados[p.id];
+  const editado=!confirmado&&respDada!=null&&String(respDada).trim()&&String(respDada)!==String(val);
+  if(confirmado)return'confirmado';
+  if(editado)return'editado';
+  if(String(val).trim())return'rascunho';
+  return'pendente';
+}
 function renderAbaFormulario(im){
   const url=_formUrl(im);
   const secoes=window.FORM_SECOES||[];
@@ -1529,14 +1539,29 @@ function renderAbaFormulario(im){
   const totalPerg=_todasPerguntas().length;
   const preenchidas=Object.values({...rascunho}).filter(v=>String(v||'').trim()).length;
 
+  const contagem={confirmado:0,editado:0,rascunho:0,pendente:0};
+  _todasPerguntas().forEach(p=>{contagem[_statusPerguntaFormulario(p,rascunho,respostas,confirmados)]++;});
+
+  const resumoHtml=`
+    <div class="hint" style="margin-bottom:8px;">
+      <strong>Qual valor vale no final?</strong> Se o proprietário marcou "está correto" ✓ ou digitou uma resposta diferente do rascunho ✏️, a resposta <em>dele</em> é a que vale. Se ele ainda não tocou no campo, o rascunho da equipe abaixo é o que vale por enquanto.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+      <button type="button" class="btn btn-xs form-filtro-btn" data-filtro="todos" onclick="_filtrarFormulario('todos')">Todos (${totalPerg})</button>
+      <button type="button" class="btn btn-xs btn-outline form-filtro-btn" data-filtro="pendente" onclick="_filtrarFormulario('pendente')">Pendentes (${contagem.pendente})</button>
+      <button type="button" class="btn btn-xs btn-outline form-filtro-btn" data-filtro="editado" onclick="_filtrarFormulario('editado')">Editados pelo proprietário (${contagem.editado})</button>
+      <button type="button" class="btn btn-xs btn-outline form-filtro-btn" data-filtro="confirmado" onclick="_filtrarFormulario('confirmado')">Confirmados (${contagem.confirmado})</button>
+    </div>`;
+
   const secoesHtml=secoes.map(sec=>`
-    <div class="form-section-title" style="margin-top:18px;"><i class="fa-solid fa-${sec.icon}"></i> ${sec.secao}</div>
+    <div class="form-section-title form-sec-titulo" style="margin-top:18px;"><i class="fa-solid fa-${sec.icon}"></i> ${sec.secao}</div>
     ${sec.perguntas.map(p=>{
       const val=rascunho[p.id]||'';
       const respDada=respostas[p.id];
       const confirmado=confirmados[p.id];
+      const status=_statusPerguntaFormulario(p,rascunho,respostas,confirmados);
       const statusIcon=confirmado?'<span class="tag tag-sage" title="Confirmado pelo proprietário"><i class="fa-solid fa-check"></i></span>'
-        :(respDada!=null&&String(respDada).trim()?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
+        :(status==='editado'?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
       let campo;
       if(p.tipo==='radio'||p.tipo==='checkbox'){
         const selecionadas=val?val.split(',').map(x=>x.trim()).filter(Boolean):[];
@@ -1549,7 +1574,7 @@ function renderAbaFormulario(im){
       } else {
         campo = `<input class="input form-rascunho" data-qid="${p.id}" type="${p.tipo==='number'?'number':'text'}" placeholder="Pré-preencher (opcional)" value="${esc(val)}">`;
       }
-      return `<div class="form-group">
+      return `<div class="form-group" data-status-form="${status}">
         <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span>${esc(p.label)}</span> ${statusIcon}
         </label>
@@ -1581,12 +1606,32 @@ function renderAbaFormulario(im){
     ${im.formPreenchidoEm?`<button class="btn btn-outline btn-sm" onclick="importarRespostasParaRascunho()"><i class="fa-solid fa-download"></i> Trazer respostas do proprietário</button>`:''}
   </div>
 
+  ${resumoHtml}
   <div id="form-rascunho-secoes">${secoesHtml}</div>
 
   <div style="margin-top:16px;">
     <button class="btn btn-sm btn-primary" onclick="salvarRascunhoForm()"><i class="fa-solid fa-save"></i> Salvar pré-preenchimento</button>
   </div>
   </div>`;
+}
+
+// Filtro puro em DOM (sem re-renderizar a aba) — se recarregasse via renderAba(),
+// qualquer edição de rascunho ainda não salva (botão "Salvar pré-preenchimento" não
+// clicado) seria perdida, porque os campos .form-rascunho só vão pro im quando
+// salvarRascunhoForm() é chamado.
+function _filtrarFormulario(status){
+  document.querySelectorAll('#form-rascunho-secoes [data-status-form]').forEach(el=>{
+    el.style.display=(status==='todos'||el.dataset.statusForm===status)?'':'none';
+  });
+  document.querySelectorAll('.form-sec-titulo').forEach(titulo=>{
+    let temVisivel=false, el=titulo.nextElementSibling;
+    while(el&&!el.classList.contains('form-sec-titulo')){
+      if(el.dataset.statusForm&&el.style.display!=='none')temVisivel=true;
+      el=el.nextElementSibling;
+    }
+    titulo.style.display=temVisivel?'':'none';
+  });
+  document.querySelectorAll('.form-filtro-btn').forEach(b=>b.classList.toggle('btn-outline',b.dataset.filtro!==status));
 }
 
 async function importarDeJarvis(){
