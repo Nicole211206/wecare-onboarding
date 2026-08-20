@@ -1016,7 +1016,7 @@ function _coletarCompras(im){
 
 // ═══════════════════ ABA DADOS ═══════════════════
 function renderAbaDados(im){
-  const plataformas=['Airbnb','Booking','Vrbo','Expedia','Decolar','Site Próprio'];
+  const plataformas=['Airbnb','Booking','Vrbo','Expedia','Decolar','Quinto Andar','Blueground','Site Próprio'];
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-house"></i> Informações do Imóvel</div>
   <div class="form-group"><label>Nome do Imóvel</label><input id="d-nome" class="input" value="${esc(im.nome)}"></div>
