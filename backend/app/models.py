@@ -163,6 +163,15 @@ class TemplateMsg(Base):
     texto: Mapped[str | None] = mapped_column(Text)
 
 
+class CamaTipoCustom(Base):
+    __tablename__ = "cama_tipos_custom"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    nome: Mapped[str | None] = mapped_column(String)
+    componentes: Mapped[list | None] = mapped_column(JSON)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Orcamento(Base):
     __tablename__ = "orcamentos"
 

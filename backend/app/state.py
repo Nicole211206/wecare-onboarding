@@ -217,6 +217,10 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             {"nome": t.nome, "texto": t.texto}
             for t in db.scalars(select(models.TemplateMsg).order_by(models.TemplateMsg.ordem))
         ],
+        "wc_camas_custom": [
+            {"id": c.id, "nome": c.nome, "componentes": c.componentes}
+            for c in db.scalars(select(models.CamaTipoCustom).order_by(models.CamaTipoCustom.ordem))
+        ],
         "wc_orcamentos": [
             {
                 "id": o.id,
@@ -415,6 +419,15 @@ def put_state(db: Session, state: dict) -> None:
                     opcoes=v.get("opcoes"),
                     comodos_tipos=v.get("comodosTipos"),
                     ordem=idx,
+                )
+            )
+
+    if "wc_camas_custom" in state:
+        db.execute(delete(models.CamaTipoCustom))
+        for idx, c in enumerate(state["wc_camas_custom"] or []):
+            db.add(
+                models.CamaTipoCustom(
+                    id=c["id"], nome=c.get("nome"), componentes=c.get("componentes"), ordem=idx
                 )
             )
 

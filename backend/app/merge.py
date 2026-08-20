@@ -152,6 +152,7 @@ LIST_KEYS_ESTRITAS = [
     "wc_templates_msg",
     "wc_orcamentos",
     "wc_estoque_itens",
+    "wc_camas_custom",
 ]
 
 

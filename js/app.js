@@ -163,7 +163,32 @@ const CAMA_TIPO_ENXOVAL={
   'Queen':'Queen','King':'King'
 };
 const CAMA_LEITOS={'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solteiro':1,'Sofá-cama Casal':1,'Beliche':2,'Bicama':2,'Viúva':1};
-function _leitosCama(c){return CAMA_LEITOS[c.tipo]!=null?CAMA_LEITOS[c.tipo]:(+c.leitosEquiv||1);}
+const TIPOS_CAMA_FIXOS=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+// Tipos de cama customizados (definidos em Configurações): cada um tem nome + composição
+// em leitos-base ([{tamanho:'Solteiro'|'Casal'|'Queen'|'King', qtd}]) — ex.: "Beliche Casal e Bicama"
+// = 2 Solteiro + 1 Casal. Persistido em wc_camas_custom.
+let CAMAS_TIPOS_CUSTOM=[];
+function _tiposCamaDisponiveis(){return[...TIPOS_CAMA_FIXOS,...CAMAS_TIPOS_CUSTOM.map(t=>t.nome)];}
+function _camaCustomPorNome(nome){return(CAMAS_TIPOS_CUSTOM||[]).find(t=>t.nome===nome);}
+function _leitosCama(c){return CAMA_LEITOS[c.tipo]!=null?CAMA_LEITOS[c.tipo]:1;}
+// Expande uma linha de cama (im.camas[i], já multiplicada por c.qtd) em unidades por
+// tamanho-base de enxoval — tipo fixo gera 1 unidade só; tipo customizado gera 1 unidade
+// por componente cadastrado em Configurações (ex.: Beliche Casal e Bicama -> 2 Solteiro + 1 Casal).
+function _expandirCama(c){
+  const qtdLinha=+c.qtd||1;
+  const custom=_camaCustomPorNome(c.tipo);
+  if(custom&&Array.isArray(custom.componentes)&&custom.componentes.length){
+    return custom.componentes.map(comp=>({tamanho:comp.tamanho||'Solteiro',qtd:(+comp.qtd||1)*qtdLinha,semSofaCama:false}));
+  }
+  return[{tamanho:CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro',qtd:_leitosCama(c)*qtdLinha,semSofaCama:!!(c.tipo&&c.tipo.startsWith('Sofá-cama'))}];
+}
+// Agrupa todas as camas de um imóvel/orçamento em unidades por tamanho-base de enxoval —
+// substitui o padrão antigo de "porTipo[t].push(c)" duplicado em 4 lugares do arquivo.
+function _unidadesEnxovalPorTamanho(camas){
+  const porTipo={};
+  (camas||[]).forEach(c=>{_expandirCama(c).forEach(u=>{(porTipo[u.tamanho]=porTipo[u.tamanho]||[]).push(u);});});
+  return porTipo;
+}
 
 // Lista livre (empresa, custo, cobrado por qtd. de quartos) — array com `id`, igual PRECOS_LIMPEZA_CHECKOUT,
 // pra permitir mais de uma faixa de preço pra mesma qtd. de quartos sem sobrescrever a anterior.
@@ -317,8 +342,8 @@ function _getComodosImovel(im){
 }
 
 // Cálculo de quantidades
-function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);}
-function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);}
+function totalColchoes(camas){return(camas||[]).flatMap(_expandirCama).reduce((s,u)=>s+u.qtd,0);}
+function totalLeitos(camas){return(camas||[]).flatMap(_expandirCama).reduce((s,u)=>s+u.qtd,0);}
 function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares){
   const rule=item.qtdRule||'1-unidade';const dashIdx=rule.indexOf('-');const n=rule.slice(0,dashIdx);const base=rule.slice(dashIdx+1);
   const q=parseInt(n)||1;
@@ -403,7 +428,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -423,6 +448,7 @@ function saveAll(){
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
+  localStorage.setItem('wc_camas_custom',JSON.stringify(CAMAS_TIPOS_CUSTOM));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -447,6 +473,7 @@ function loadAll(){
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
+  v=g('wc_camas_custom');if(Array.isArray(v))CAMAS_TIPOS_CUSTOM=v;
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -997,15 +1024,9 @@ function _coletarCamas(){
   const rows=document.querySelectorAll('.cama-row');
   const camas=[];
   rows.forEach(r=>{
-    const sel=r.querySelector('.cama-tipo');
-    let tipo=sel?.value;
-    let leitosEquiv;
-    if(tipo==='Outro'){
-      tipo=(r.querySelector('.cama-tipo-custom')?.value||'').trim();
-      leitosEquiv=+r.querySelector('.cama-leitos-custom')?.value||1;
-    }
+    const tipo=r.querySelector('.cama-tipo')?.value;
     const qtd=+r.querySelector('.num-input-wrap input')?.value||1;
-    if(tipo)camas.push(leitosEquiv!=null?{tipo,qtd,leitosEquiv}:{tipo,qtd});
+    if(tipo)camas.push({tipo,qtd});
   });
   return camas;
 }
@@ -1108,41 +1129,21 @@ function renderAbaDados(im){
   </div>
   </div>`;
 }
-function _toggleCamaCustom(sel){
-  const row=sel.closest('.cama-row');
-  const inp=row?.querySelector('.cama-tipo-custom');
-  const leitos=row?.querySelector('.cama-leitos-wrap');
-  if(!inp)return;
-  if(sel.value==='Outro'){inp.style.display='';if(leitos)leitos.style.display='flex';inp.focus();}
-  else{inp.style.display='none';inp.value='';if(leitos)leitos.style.display='none';}
-}
-function _htmlCamaLeitosWrap(value,visible){
-  return`<span class="cama-leitos-wrap" style="flex-basis:100%;align-items:center;gap:4px;font-size:12px;color:var(--text3);display:${visible?'flex':'none'};">
-    Conta como <input type="number" class="input cama-leitos-custom" min="1" value="${value||1}" style="width:48px;padding:4px 6px;text-align:center;"> leito(s) solteiro (enxoval/protetor)
-  </span>`;
-}
 function _htmlCamas(camas){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
-  return camas.map((c,i)=>{
-    const custom=c.tipo&&!tipos.includes(c.tipo);
-    return`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
-    <select class="input cama-tipo" style="flex:2" onchange="_toggleCamaCustom(this)">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}<option value="Outro"${custom?' selected':''}>Outro (digitar)</option></select>
-    <input class="input cama-tipo-custom" placeholder="Ex: Beliche Casal + Bicama" value="${custom?esc(c.tipo):''}" style="flex:2;${custom?'':'display:none;'}">
+  const tipos=_tiposCamaDisponiveis();
+  return camas.map((c,i)=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+    <select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${esc(t)}</option>`).join('')}</select>
     ${numInput({id:`cama-qtd-${i}`,value:c.qtd||1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
-    ${_htmlCamaLeitosWrap(c.leitosEquiv,custom)}
-  </div>`;
-  }).join('');
+  </div>`).join('');
 }
 function adicionarCama(){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  const tipos=_tiposCamaDisponiveis();
   const div=document.createElement('div');div.className='cama-row';
-  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;';
-  div.innerHTML=`<select class="input cama-tipo" style="flex:2" onchange="_toggleCamaCustom(this)">${tipos.map(t=>`<option>${t}</option>`).join('')}<option value="Outro">Outro (digitar)</option></select>
-    <input class="input cama-tipo-custom" placeholder="Ex: Beliche Casal + Bicama" style="flex:2;display:none;">
+  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;';
+  div.innerHTML=`<select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option>${esc(t)}</option>`).join('')}</select>
     ${numInput({value:1,min:1,style:'flex-shrink:0;'})}
-    <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
-    ${_htmlCamaLeitosWrap(1,false)}`;
+    <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
   document.getElementById('camas-list').appendChild(div);
 }
 
@@ -1759,22 +1760,16 @@ function renderAbaCompras(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      // agrupar camas por tipo enxoval
-      const porTipo={};
-      camas.forEach(c=>{
-        const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';
-        porTipo[t]=(porTipo[t]||[]);
-        porTipo[t].push(c);
-      });
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(item.semSofaCama&&!camasParaItem.length)return; // grupo só tem sofá-cama, item não se aplica
+      // agrupar camas (já expandidas por componente) por tamanho-base de enxoval
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(item.semSofaCama&&!unidadesParaItem.length)return; // grupo só tem sofá-cama, item não se aplica
         const [n,base]=(item.qtdRule||'1-colchao').split('-');
         const q=parseInt(n)||1;
         let qtdNec=0;
         // beliche conta como 2 colchões/leitos
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -2194,14 +2189,12 @@ function _rowsComprasFalta(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      const porTipo={};
-      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
         const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
         let qtdNec=0;
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
@@ -2255,15 +2248,13 @@ function _rowsComprasTodos(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      const porTipo={};
-      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(item.semSofaCama&&!camasParaItem.length)return;
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(item.semSofaCama&&!unidadesParaItem.length)return;
         const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
         let qtdNec=0;
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -4350,9 +4341,9 @@ function apagarOrcamento(id){
   showToast('Orçamento apagado.','peach');
 }
 function _htmlCamasOrc(camas){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  const tipos=_tiposCamaDisponiveis();
   return(camas||[]).map(c=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <select class="input cama-tipo" style="flex:2" onchange="_atualizarTotalOrcamentoUI()">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
+    <select class="input cama-tipo" style="flex:2" onchange="_atualizarTotalOrcamentoUI()">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${esc(t)}</option>`).join('')}</select>
     ${numInput({value:c.qtd||1,min:1,style:'flex-shrink:0;',oninput:'_atualizarTotalOrcamentoUI()'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove();_atualizarTotalOrcamentoUI()"><i class="fa-solid fa-trash"></i></button>
   </div>`).join('');
@@ -4482,17 +4473,16 @@ function salvarOrcamento(){
 }
 function _calcEnxovalOrcamento(camas,fornecedor){
   const rows=[];
-  const porTipo={};
-  (camas||[]).forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';(porTipo[t]=porTipo[t]||[]).push(c);});
+  const porTipo=_unidadesEnxovalPorTamanho(camas);
   ITENS_COMPRAS.forEach(item=>{
     if(item.tipoPreco!=='enxoval')return;
     if(!itemValidoParaModalidade(item,fornecedor))return;
-    Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-      const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-      if(item.semSofaCama&&!camasParaItem.length)return;
+    Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+      const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+      if(item.semSofaCama&&!unidadesParaItem.length)return;
       const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
       let qtd=0;
-      if(base==='colchao'||base==='leito')qtd=q*camasParaItem.reduce((s,c)=>s+_leitosCama(c)*(+c.qtd||1),0);
+      if(base==='colchao'||base==='leito')qtd=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
       else qtd=q;
       if(!qtd)return;
       const valorUnit=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -4842,6 +4832,7 @@ function renderConfig(){
   _renderConfigLimpezaCheckout();
   _renderConfigDefPagadoria();
   _renderConfigVistoriaCampos();
+  _renderConfigCamasCustom();
 }
 function _renderConfigLimpezaCheckout(){
   const el=document.getElementById('config-precos-checkout');
@@ -5009,6 +5000,73 @@ function _removerCampoVistoria(i){
   VISTORIA_CAMPOS.splice(i,1);
   saveAll();_renderConfigVistoriaCampos();
   showToast('Campo removido.','peach');
+}
+
+// ═══════════════════ TIPOS DE CAMA CUSTOMIZADOS ═══════════════════
+function _renderConfigCamasCustom(){
+  const el=document.getElementById('config-camas-custom');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Cadastre combinações de cama que não são um tamanho só (ex: beliche de casal com bicama) dizendo de quais tamanhos-base elas são feitas. Isso passa a valer automaticamente pro cálculo de enxoval (jogo de cama, cobertor, edredom, protetor) em qualquer imóvel/orçamento que usar esse tipo.</div>
+    <div style="margin-bottom:12px;">
+      <button class="btn btn-sm btn-sage" onclick="abrirModalNovoTipoCama()"><i class="fa-solid fa-plus"></i> Novo Tipo de Cama</button>
+    </div>
+    ${!CAMAS_TIPOS_CUSTOM.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum tipo customizado cadastrado ainda.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--surface-2);">
+        <th style="padding:7px 10px;text-align:left;">Nome</th>
+        <th style="padding:7px 10px;text-align:left;">Composição (leitos-base)</th>
+        <th style="padding:7px 4px;width:36px;"></th>
+      </tr></thead>
+      <tbody>
+      ${CAMAS_TIPOS_CUSTOM.map((t,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px;">${esc(t.nome)}</td>
+        <td style="padding:7px 10px;">${(t.componentes||[]).map(c=>`${c.qtd}× ${esc(c.tamanho)}`).join(' + ')}</td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerTipoCamaCustom(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}`;
+}
+function _htmlComponenteCama(tamanho,qtd){
+  const tamanhos=['Solteiro','Casal','Queen','King'];
+  return`<div class="componente-cama-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+    ${numInput({value:qtd||1,min:1,style:'flex-shrink:0;'})}
+    <select class="input componente-cama-tamanho" style="flex:1;">${tamanhos.map(t=>`<option${t===tamanho?' selected':''}>${t}</option>`).join('')}</select>
+    <button class="btn btn-xs btn-danger" onclick="this.closest('.componente-cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
+  </div>`;
+}
+function abrirModalNovoTipoCama(){
+  document.getElementById('generico-titulo').textContent='Novo Tipo de Cama Customizado';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group" style="grid-column:1/-1;"><label>Nome do tipo</label><input id="tc-nome" class="input" placeholder="Ex: Beliche Casal e Bicama"></div>
+    <div class="form-group" style="grid-column:1/-1;">
+      <label>De quais tamanhos-base isso é feito?</label>
+      <div id="tc-componentes-list" style="margin-top:6px;">${_htmlComponenteCama('Solteiro',1)}</div>
+      <button type="button" class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="document.getElementById('tc-componentes-list').insertAdjacentHTML('beforeend',_htmlComponenteCama('Solteiro',1))"><i class="fa-solid fa-plus"></i> Adicionar componente</button>
+    </div>
+    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarNovoTipoCama()"><i class="fa-solid fa-save"></i> Salvar Tipo</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarNovoTipoCama(){
+  const nome=(document.getElementById('tc-nome').value||'').trim();
+  if(!nome){showToast('Informe o nome do tipo.','peach');return;}
+  if(TIPOS_CAMA_FIXOS.includes(nome)||CAMAS_TIPOS_CUSTOM.some(t=>t.nome===nome)){showToast('Já existe um tipo com esse nome.','peach');return;}
+  const componentes=[...document.querySelectorAll('#tc-componentes-list .componente-cama-row')].map(r=>({
+    tamanho:r.querySelector('.componente-cama-tamanho')?.value||'Solteiro',
+    qtd:+r.querySelector('.num-input-wrap input')?.value||1
+  }));
+  if(!componentes.length){showToast('Adicione ao menos um componente.','peach');return;}
+  CAMAS_TIPOS_CUSTOM.push({id:'ct_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),nome,componentes});
+  saveAll();closeModal('modal-generico');_renderConfigCamasCustom();
+  showToast('Tipo de cama adicionado!','sage');
+}
+function _removerTipoCamaCustom(i){
+  const t=CAMAS_TIPOS_CUSTOM[i];if(!t)return;
+  if(!confirm(`Remover o tipo "${t.nome}"? Camas já cadastradas com esse tipo passam a contar como 1 leito solteiro no cálculo de enxoval.`))return;
+  CAMAS_TIPOS_CUSTOM.splice(i,1);
+  saveAll();_renderConfigCamasCustom();
+  showToast('Tipo removido.','peach');
 }
 function _lerModalidadesConfig(i){
   const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
