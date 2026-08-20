@@ -1594,8 +1594,9 @@ function renderAbaFormulario(im){
       <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
       <a href="${esc(url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>
       <a href="https://wa.me/?text=${encodeURIComponent('Olá! Para finalizar o cadastro do seu imóvel na WeCare, preencha este formulário (já deixamos algumas respostas prontas, é só confirmar ou ajustar): '+url)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;"><i class="fa-brands fa-whatsapp"></i></a>
+      <button class="btn btn-outline btn-sm" title="Gerar novo link (invalida o link atual)" onclick="regenerarLinkForm()"><i class="fa-solid fa-rotate"></i></button>
     </div>
-    <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>.</div>
+    <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>. Se o link parar de funcionar ("inválido ou expirado"), use o botão <i class="fa-solid fa-rotate"></i> para gerar um novo.</div>
   </div>
   ${im.formEnviadoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Proprietário enviou o formulário em <strong>${fmtDate(im.formEnviadoEm)}</strong></div>`
     :(im.formPreenchidoEm?`<div class="alert-warn"><i class="fa-solid fa-pen"></i> Proprietário está preenchendo, mas ainda <strong>não enviou</strong> — última atividade em ${fmtDate(im.formPreenchidoEm)}.</div>`
@@ -1708,6 +1709,12 @@ function importarRespostasParaRascunho(){
   const im=getImovel(_imovelAtivoId);if(!im||!im.formRespostas)return;
   im.formRascunho={...(im.formRespostas||{}),...(im.formRascunho||{})};
   saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
+}
+function regenerarLinkForm(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Gerar um novo link? O link antigo enviado ao proprietário deixará de funcionar.'))return;
+  im.formToken=uid()+uid();
+  saveAll();renderAba('formulario');showToast('Novo link gerado!','sage');
 }
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
