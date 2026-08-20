@@ -996,7 +996,8 @@ function _coletarCamas(){
   const rows=document.querySelectorAll('.cama-row');
   const camas=[];
   rows.forEach(r=>{
-    const tipo=r.querySelector('.cama-tipo')?.value;
+    let tipo=r.querySelector('.cama-tipo')?.value;
+    if(tipo==='Outro')tipo=(r.querySelector('.cama-tipo-custom')?.value||'').trim();
     const qtd=+r.querySelector('.num-input-wrap input')?.value||1;
     if(tipo)camas.push({tipo,qtd});
   });
@@ -1101,19 +1102,30 @@ function renderAbaDados(im){
   </div>
   </div>`;
 }
+function _toggleCamaCustom(sel){
+  const inp=sel.parentElement.querySelector('.cama-tipo-custom');
+  if(!inp)return;
+  if(sel.value==='Outro'){inp.style.display='';inp.focus();}
+  else{inp.style.display='none';inp.value='';}
+}
 function _htmlCamas(camas){
   const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
-  return camas.map((c,i)=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
+  return camas.map((c,i)=>{
+    const custom=c.tipo&&!tipos.includes(c.tipo);
+    return`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
+    <select class="input cama-tipo" style="flex:2" onchange="_toggleCamaCustom(this)">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}<option value="Outro"${custom?' selected':''}>Outro (digitar)</option></select>
+    <input class="input cama-tipo-custom" placeholder="Ex: Beliche Casal + Bicama" value="${custom?esc(c.tipo):''}" style="flex:2;${custom?'':'display:none;'}">
     ${numInput({id:`cama-qtd-${i}`,value:c.qtd||1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 function adicionarCama(){
   const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
   const div=document.createElement('div');div.className='cama-row';
-  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;';
-  div.innerHTML=`<select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option>${t}</option>`).join('')}</select>
+  div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;';
+  div.innerHTML=`<select class="input cama-tipo" style="flex:2" onchange="_toggleCamaCustom(this)">${tipos.map(t=>`<option>${t}</option>`).join('')}<option value="Outro">Outro (digitar)</option></select>
+    <input class="input cama-tipo-custom" placeholder="Ex: Beliche Casal + Bicama" style="flex:2;display:none;">
     ${numInput({value:1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
   document.getElementById('camas-list').appendChild(div);
