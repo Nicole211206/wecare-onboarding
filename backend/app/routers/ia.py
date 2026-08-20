@@ -124,7 +124,7 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
         except Exception as e:
             return {"ok": False, "error": f"Erro Drive API: {e}", "folderId": folder_id, "folderMeta": folder_meta}
 
-        image_types = {"image/jpeg", "image/png", "image/webp"}
+        image_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
         text_parts: list[str] = []
         image_parts: list[dict] = []
         files_seen = [f"{f['name']} ({f.get('mimeType')})" for f in files]
@@ -179,7 +179,7 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
                 except Exception:
                     pass
                 continue
-            if mime in image_types and images_count < 10:
+            if mime in image_types and images_count < 20:
                 try:
                     img = await google_drive.download_file_base64(client, file["id"], mime, access_token)
                     if img:

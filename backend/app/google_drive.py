@@ -112,7 +112,7 @@ async def export_google_doc(client: httpx.AsyncClient, file_id: str, token: str)
 async def download_file_base64(client: httpx.AsyncClient, file_id: str, mime_type: str, token: str) -> dict | None:
     res = await client.get(
         f"https://www.googleapis.com/drive/v3/files/{file_id}",
-        params={"alt": "media"},
+        params={"alt": "media", "supportsAllDrives": "true"},
         headers={"Authorization": f"Bearer {token}"},
     )
     if res.status_code != 200:
