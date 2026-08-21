@@ -84,6 +84,14 @@ function _migrarCatalogoItens(){
     const item=ITENS_COMPRAS.find(i=>i.nome===nome);
     if(item&&!item.estoqueEnxoval){item.estoqueEnxoval=true;mudou=true;}
   });
+  // Itens de Cozinha são de uso comum às 3 modalidades de enxoval (comprado/Flashee/Intense)
+  // — qualquer restrição de modalidades salva neles é sempre indesejada, limpa sozinho.
+  ITENS_COMPRAS.forEach(item=>{
+    if(item.cat==='Cozinha'&&item.modalidades){
+      delete item.modalidades;
+      mudou=true;
+    }
+  });
   if(mudou)saveAll();
 }
 
@@ -262,6 +270,19 @@ const FLASHEE_PACKAGES=[
   {id:'queen-sol',     label:'Queen + 1 Solteiro (3)',         custo:199.90,cobrado:240,setup:290},
   {id:'queen-2sol',    label:'Queen + 2 Solteiros (4)',        custo:279.90,cobrado:320,setup:290},
 ];
+
+// Bases de cálculo de quantidade pros itens de Compras (item.qtdRule = "<n>-<base>") — fonte
+// única usada tanto no formulário de Novo Item quanto na tabela de regras em Configurações,
+// pra nunca mais desincronizar (achado em 2026-08-21: "por lavabo" já existia na tabela de
+// regras mas faltava no formulário de criação, então dava pra editar mas não pra criar assim).
+const QTD_RULE_BASES=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','andar','hospede','cada2hospede','unidade'];
+const QTD_RULE_LABELS={
+  'colchao':'por colchão','leito':'por leito (cama/beliche)',
+  'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
+  'lavabo':'por lavabo','quarto':'por quarto','andar':'por andar',
+  'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
+  'unidade':'unidade fixa (1 por apê)'
+};
 
 const MODULOS_ONBOARDING=[
   {id:'kanban',label:'Kanban'},{id:'dashboard',label:'Dashboard'},{id:'intel',label:'Intel de Mercado'}
@@ -4702,14 +4723,8 @@ function renderConfig(){
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
-  const baseOpts=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','andar','hospede','cada2hospede','unidade'];
-  const baseLabels={
-    'colchao':'por colchão','leito':'por leito (cama/beliche)',
-    'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
-    'lavabo':'por lavabo','quarto':'por quarto','andar':'por andar',
-    'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
-    'unidade':'unidade fixa (1 por apê)'
-  };
+  const baseOpts=QTD_RULE_BASES;
+  const baseLabels=QTD_RULE_LABELS;
   const modalOpts=[['comprado','Comprado'],['flashee','Flashee'],['intense','Intense']];
   ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
     <thead><tr style="border-bottom:2px solid var(--border);">
@@ -5257,7 +5272,10 @@ function abrirModalItem(){
   document.getElementById('modal-item-title').textContent='Novo Item';
   document.getElementById('it-cat').value='Cama';
   document.getElementById('it-nome').value='';
-  document.getElementById('it-qtd-rule').value='1-unidade';
+  const qtdRuleSel=document.getElementById('it-qtd-rule');
+  qtdRuleSel.innerHTML=QTD_RULE_BASES.map(b=>[1,2,3].map(n=>`<option value="${n}-${b}">${n} ${QTD_RULE_LABELS[b]||b}</option>`).join('')).join('')
+    +'<option value="6-unidade">6 unidade fixa (1 por apê)</option>';
+  qtdRuleSel.value='1-unidade';
   document.getElementById('it-tipo-preco').value='fixo';
   document.getElementById('it-preco').value='';
   document.getElementById('it-link').value='';
