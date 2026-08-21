@@ -1515,15 +1515,16 @@ function renderAbaDefinicoes(im){
   <div class="form-group">
     <label>Fornecedor</label>
     <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
-    <select id="def-enxoval-forn-select" class="input" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
+    <select id="def-enxoval-forn-select" class="input" onchange="_recalcEnxovalValores()" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
       <option value="Flashee"${im.defEnxoval?.fornecedor==='Flashee'?' selected':''}>Flashee</option>
       <option value="Intense Clean"${im.defEnxoval?.fornecedor==='Intense Clean'?' selected':''}>Intense Clean</option>
     </select>
   </div>
-  <div class="form-row">
+  <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
     <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
     <div class="form-group"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
+  <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-clock"></i> Prazo</div>
   <div class="form-group">
@@ -1536,8 +1537,27 @@ function _onEnxovalTipoChange(sel){
   const aluguel=sel.value==='aluguel';
   const txt=document.getElementById('def-enxoval-forn-texto');
   const sel2=document.getElementById('def-enxoval-forn-select');
+  const valoresRow=document.getElementById('def-enxoval-valores-row');
+  const compradoHint=document.getElementById('def-enxoval-comprado-hint');
   if(txt)txt.style.display=aluguel?'none':'';
   if(sel2)sel2.style.display=aluguel?'':'none';
+  if(valoresRow)valoresRow.style.display=aluguel?'':'none';
+  if(compradoHint)compradoHint.style.display=aluguel?'none':'';
+  _recalcEnxovalValores();
+}
+// Enxoval alugado: valor mensal é R$110/hóspede (2h=220, 3h=330, 4h=440...); setup é fixo
+// R$190 na Flashee e R$0 na Intense Clean (não cobra setup); comprado não tem nenhum dos dois.
+function _valorEnxovalAutoMensal(hospedes){const h=+hospedes||0;return h>0?h*110:0;}
+function _valorEnxovalAutoSetup(fornecedor){return fornecedor==='Flashee'?190:0;}
+function _recalcEnxovalValores(){
+  const tipoSel=document.getElementById('def-enxoval-tipo');
+  const mensalEl=document.getElementById('def-enxoval-mensal');
+  const setupEl=document.getElementById('def-enxoval-setup');
+  if(!tipoSel||!mensalEl||!setupEl)return;
+  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
+  const im=getImovel(_imovelAtivoId);
+  mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes);
+  setupEl.value=_valorEnxovalAutoSetup(document.getElementById('def-enxoval-forn-select')?.value);
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
