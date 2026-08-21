@@ -1522,7 +1522,7 @@ function renderAbaDefinicoes(im){
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
     <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
-    <div class="form-group"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
+    <div class="form-group" id="def-enxoval-setup-wrap" style="${im.defEnxoval?.fornecedor==='Intense Clean'?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
 
@@ -1553,8 +1553,11 @@ function _recalcEnxovalValores(){
   const tipoSel=document.getElementById('def-enxoval-tipo');
   const mensalEl=document.getElementById('def-enxoval-mensal');
   const setupEl=document.getElementById('def-enxoval-setup');
+  const setupWrap=document.getElementById('def-enxoval-setup-wrap');
   if(!tipoSel||!mensalEl||!setupEl)return;
   if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
+  const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
+  if(setupWrap)setupWrap.style.display=fornecedor==='Intense Clean'?'none':'';
   const im=getImovel(_imovelAtivoId);
   mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes);
   setupEl.value=_valorEnxovalAutoSetup(document.getElementById('def-enxoval-forn-select')?.value);
