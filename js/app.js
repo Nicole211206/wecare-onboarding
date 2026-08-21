@@ -2818,13 +2818,42 @@ function enviarResumoClaire(){
   }).catch(()=>showToast('Falha de conexão ao enviar.','peach'));
 }
 
+// Antes da fase "Vistoria e Compras" não há gasto/compra real acontecendo ainda —
+// mostrar Contrato/Setup no painel Financeiro só poluía com imóveis sem número nenhum.
+function _faseAtingiuCompras(status){
+  if(status==='ativo')return true;
+  const idx=FASES.indexOf(status);
+  return idx>=FASES.indexOf('vistoria_compras');
+}
+function _svgResumoFinanceiro(totRecebido,totGasto,totMargem){
+  const linhas=[
+    {label:'Recebido',valor:totRecebido,cor:'var(--green)'},
+    {label:'Gasto',valor:totGasto,cor:'var(--rose)'},
+    {label:'Margem',valor:totMargem,cor:totMargem>=0?'var(--sage)':'var(--rose)'},
+  ];
+  const max=Math.max(1,...linhas.map(l=>Math.abs(l.valor)));
+  const barH=26,gap=12,leftLabel=78,trackW=260,valW=110;
+  const w=leftLabel+trackW+valW;
+  const rowH=barH+gap;
+  const rows=linhas.map((l,i)=>{
+    const wpx=Math.max(2,Math.abs(l.valor)/max*trackW);
+    const y=i*rowH;
+    return`<text x="0" y="${y+barH*0.68}" font-size="12" fill="var(--text-muted)">${esc(l.label)}</text>
+      <rect x="${leftLabel}" y="${y}" width="${trackW}" height="${barH}" rx="6" fill="var(--surface-2)"></rect>
+      <rect x="${leftLabel}" y="${y}" width="${wpx}" height="${barH}" rx="6" fill="${l.cor}"></rect>
+      <text x="${leftLabel+trackW+10}" y="${y+barH*0.68}" font-size="12.5" font-weight="700" fill="var(--text)">${esc(fmtMoeda(l.valor))}</text>`;
+  }).join('');
+  return`<svg viewBox="0 0 ${w} ${linhas.length*rowH-gap}" width="100%" style="max-width:460px;height:auto;display:block;margin-bottom:20px;">${rows}</svg>`;
+}
 function renderFinanceiro(){
   const container=document.getElementById('panel-financeiro');if(!container)return;
   const filtroAtual=(document.getElementById('fin-filtro-status')||{}).value||'assinados';
   const lista=imoveis.filter(im=>{
-    if(filtroAtual==='todos')return true;
     if(filtroAtual==='perdidos')return im.status==='perdido';
-    return im.status!=='perdido'&&im.contratoAssinado===true; // 'assinados' — só quem já assinou tem dinheiro real em jogo
+    if(im.status==='perdido')return false;
+    if(!_faseAtingiuCompras(im.status))return false; // só entra em Compras (Vistoria e Compras) ou Concluído/Ativo
+    if(filtroAtual==='todos')return true;
+    return im.contratoAssinado===true; // 'assinados' — só quem já assinou tem dinheiro real em jogo
   });
   const linhas=lista.map(im=>({im,r:_calcResumoFinanceiro(im)}))
     .sort((a,b)=>(a.im.nome||'').localeCompare(b.im.nome||''));
@@ -2832,7 +2861,7 @@ function renderFinanceiro(){
   const totGasto=linhas.reduce((s,x)=>s+x.r.gastoPago,0);
   const totMargem=linhas.reduce((s,x)=>s+x.r.margem,0);
   container.innerHTML=`
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
       <div class="tag tag-gold" style="font-size:14px;padding:10px 18px;">Recebido: <strong>${fmtMoeda(totRecebido)}</strong></div>
       <div class="tag" style="font-size:14px;padding:10px 18px;">Gasto: <strong>${fmtMoeda(totGasto)}</strong></div>
       <div class="tag tag-sage" style="font-size:14px;padding:10px 18px;">Margem: <strong>${fmtMoeda(totMargem)}</strong></div>
@@ -2842,6 +2871,8 @@ function renderFinanceiro(){
         <option value="perdidos"${filtroAtual==='perdidos'?' selected':''}>Só perdidos</option>
       </select>
     </div>
+    <div class="hint" style="margin-bottom:12px;">Mostrando imóveis a partir da fase "Vistoria e Compras" (antes disso ainda não há gasto real).</div>
+    ${_svgResumoFinanceiro(totRecebido,totGasto,totMargem)}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
       ${linhas.map(({im,r})=>{
         const faseLabel=im.status==='ativo'?'Ativo':im.status==='perdido'?'Perdido':(FASE_LABEL[im.status]||im.status);
