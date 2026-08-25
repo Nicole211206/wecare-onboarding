@@ -4277,13 +4277,14 @@ function copiarTemplateMsg(idx){
 function editorRicoHTML(campo,valorHtml){
   return `
   <div class="card">
-    <div class="rich-editor-toolbar">
+    <div class="rich-editor-toolbar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','bold')" title="Negrito"><i class="fa-solid fa-bold"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','italic')" title="Itálico"><i class="fa-solid fa-italic"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','H3')" title="Título"><i class="fa-solid fa-heading"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertUnorderedList')" title="Lista"><i class="fa-solid fa-list-ul"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertOrderedList')" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','P')" title="Parágrafo normal">¶</button>
+      <span id="rich-status-${campo}" style="margin-left:auto;font-size:11px;color:var(--text-muted);"></span>
     </div>
     <div class="rich-editor-body" id="rich-${campo}" contenteditable="true" oninput="richSalvar('${campo}')">${valorHtml||''}</div>
   </div>`;
@@ -4298,8 +4299,14 @@ function richSalvar(campo){
   const html=document.getElementById('rich-'+campo).innerHTML;
   if(campo==='processo')processoTexto=html;
   else if(campo==='anotacoes')anotacoesTexto=html;
+  const statusEl=document.getElementById('rich-status-'+campo);
+  if(statusEl)statusEl.textContent='Salvando...';
   clearTimeout(_richSalvarTimer);
-  _richSalvarTimer=setTimeout(saveAll,600);
+  _richSalvarTimer=setTimeout(()=>{
+    saveAll();
+    const el=document.getElementById('rich-status-'+campo);
+    if(el)el.textContent='Salvo às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  },600);
 }
 
 // ═══════════════════ ORÇAMENTOS ═══════════════════
