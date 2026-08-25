@@ -3752,10 +3752,9 @@ const INTEL_TIPOS=[
 ];
 
 function renderIntel(){
-  // O panel-intel tem HTML estático no index — só atualiza o container de prestadores
-  const lista=document.getElementById('intel-prestadores-lista');
-  if(lista)lista.innerHTML=_renderPrestadoresList();
-  // Sincroniza endereço salvo com o campo
+  // O panel-intel tem HTML estático no index — Intel de Mercado é só pra pesquisar
+  // fornecedores novos (Google Maps); o banco já cadastrado fica na aba Fornecedores,
+  // pra não duplicar a mesma lista em dois lugares.
   const endEl=document.getElementById('intel-endereco');
   if(endEl&&_intelEndereco)endEl.value=_intelEndereco;
 }
@@ -3772,25 +3771,6 @@ function _buscarEmbeddedMapa(query){
     el.innerHTML=`<iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed" width="100%" height="380" frameborder="0" style="border:0;border-radius:10px;" allowfullscreen loading="lazy"></iframe>`;
     el.scrollIntoView({behavior:'smooth',block:'start'});
   }
-}
-function _renderPrestadoresList(){
-  if(!prestadores.length)return`<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum prestador cadastrado ainda.</div>`;
-  return`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-    <thead><tr style="border-bottom:2px solid var(--border)">
-      <th style="text-align:left;padding:7px 6px;">Nome</th><th>Tipo</th><th>Telefone</th><th>Cidade</th><th>Nota</th><th></th>
-    </tr></thead>
-    <tbody>${prestadores.map((p,i)=>`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:7px 6px;font-weight:600;">${esc(p.nome)}</td>
-      <td><span class="tag tag-lav">${esc(p.tipo)}</span></td>
-      <td>${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}" target="_blank">${esc(p.telefone)}</a>`:'—'}</td>
-      <td>${esc(p.cidade||'—')}</td>
-      <td>${p.nota?'⭐'.repeat(Math.min(+p.nota,5)):'—'}</td>
-      <td style="white-space:nowrap;">
-        <button class="btn btn-xs btn-outline" onclick="editarPrestador(${i})"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn btn-xs btn-danger" onclick="apagarPrestador(${i})"><i class="fa-solid fa-trash"></i></button>
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
 }
 const TIPOS_PRESTADOR_BASE=['Limpeza','Fotógrafo','Hidráulica','Elétrica','Vistoria','Fechadura','Internet','Reforma','Outros'];
 function _tiposPrestadorDisponiveis(){
@@ -4130,9 +4110,13 @@ function renderFornecedores(){
   const tipos=_tiposPrestadorDisponiveis();
   const filtroTipo=document.getElementById('forn-filtro-tipo')?.value||'';
   const filtroCidade=document.getElementById('forn-filtro-cidade')?.value?.toLowerCase()||'';
+  const filtroNome=document.getElementById('forn-filtro-nome')?.value?.toLowerCase().trim()||'';
+  const filtroNota=+(document.getElementById('forn-filtro-nota')?.value||0);
   const lista=prestadores.filter(p=>
     (!filtroTipo||p.tipo===filtroTipo)&&
-    (!filtroCidade||((p.cidade||'').toLowerCase().includes(filtroCidade)))
+    (!filtroCidade||((p.cidade||'').toLowerCase().includes(filtroCidade)))&&
+    (!filtroNome||(p.nome||'').toLowerCase().includes(filtroNome))&&
+    (!filtroNota||(+p.nota||0)>=filtroNota)
   );
   const wrap=document.getElementById('fornecedores-wrap');
   if(!wrap)return;
@@ -4150,12 +4134,21 @@ function renderFornecedores(){
   <div class="card">
     <div class="card-header">
       <span class="card-title"><i class="fa-solid fa-filter" style="color:var(--text3)"></i> Filtros</span>
-      <div style="margin-left:auto;display:flex;gap:8px;">
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+        <input class="form-input" id="forn-filtro-nome" placeholder="Buscar por nome..." style="width:150px;padding:4px 8px;font-size:12px;" oninput="renderFornecedores()" value="${esc(filtroNome)}">
         <select class="form-select" id="forn-filtro-tipo" onchange="renderFornecedores()" style="width:140px;padding:4px 8px;font-size:12px;">
           <option value="">Todos os tipos</option>
           ${tipos.map(t=>`<option${filtroTipo===t?' selected':''}>${t}</option>`).join('')}
         </select>
         <input class="form-input" id="forn-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderFornecedores()" value="${filtroCidade}">
+        <select class="form-select" id="forn-filtro-nota" onchange="renderFornecedores()" style="width:130px;padding:4px 8px;font-size:12px;">
+          <option value="0"${!filtroNota?' selected':''}>Qualquer nota</option>
+          <option value="5"${filtroNota===5?' selected':''}>⭐⭐⭐⭐⭐</option>
+          <option value="4"${filtroNota===4?' selected':''}>⭐⭐⭐⭐+</option>
+          <option value="3"${filtroNota===3?' selected':''}>⭐⭐⭐+</option>
+          <option value="2"${filtroNota===2?' selected':''}>⭐⭐+</option>
+          <option value="1"${filtroNota===1?' selected':''}>⭐+</option>
+        </select>
       </div>
     </div>
     <div class="card-body" style="overflow-x:auto;">
@@ -5254,7 +5247,6 @@ function buscarNoMaps(){
   if(end){_intelEndereco=end;renderIntel();_buscarEmbeddedMapa(end);}
 }
 function abrirMaps(query){_buscarEmbeddedMapa(query);}
-function renderPrestadores(){renderIntel();}
 // ── Membros ──
 function abrirModalMembro(){
   document.getElementById('mb-nome').value='';

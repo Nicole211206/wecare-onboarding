@@ -200,22 +200,7 @@
           <div id="intel-mapa-embed" style="margin-top:14px;"></div>
         </div>
       </div>
-
-      <!-- Tabela de prestadores -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fa-solid fa-address-book" style="color:var(--lavender)"></i> Prestadores Cadastrados</span>
-          <div style="margin-left:auto;display:flex;gap:8px;">
-            <select class="form-select" id="intel-filtro-tipo" onchange="renderPrestadores()" style="width:140px;padding:4px 8px;font-size:12px;">
-              <option value="">Todos os tipos</option>
-              <option>Limpeza</option><option>Fotógrafo</option><option>Hidráulica</option>
-              <option>Elétrica</option><option>Vistoria</option><option>Fechadura</option><option>Outros</option>
-            </select>
-            <input class="form-input" id="intel-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderPrestadores()">
-          </div>
-        </div>
-        <div class="card-body" id="intel-prestadores-lista" style="overflow-x:auto;"></div>
-      </div>
+      <div class="hint">Fornecedores já cadastrados ficam na aba <strong>Fornecedores</strong> — aqui é só pra pesquisar e achar novos.</div>
     </div>
 
     <!-- ── FORNECEDORES ── -->
@@ -688,6 +673,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=77"></script>
+<script src="js/app.js?v=78"></script>
 </body>
 </html>
