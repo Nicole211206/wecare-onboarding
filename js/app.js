@@ -4216,12 +4216,25 @@ function renderInfoTabContent(){
 }
 
 // ── Mensagens (templates) ──
+let _templatesMsgBusca='';
+function _filtrarTemplatesMsg(v){
+  _templatesMsgBusca=v;
+  const c=document.getElementById('info-tab-content');
+  if(!c)return;
+  c.innerHTML=renderInfoMensagensHTML();
+  const el=document.getElementById('tpl-busca');
+  if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}
+}
 function renderInfoMensagensHTML(){
+  const busca=_templatesMsgBusca.toLowerCase().trim();
+  const lista=templatesMsg.map((t,i)=>({t,i}))
+    .filter(({t})=>!busca||(t.nome||'').toLowerCase().includes(busca)||(t.texto||'').toLowerCase().includes(busca));
   return `
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <input class="form-input" id="tpl-busca" placeholder="Buscar template por nome ou texto..." style="max-width:280px;flex:1;" oninput="_filtrarTemplatesMsg(this.value)" value="${esc(_templatesMsgBusca)}">
     <button class="btn btn-rose btn-sm" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Novo Template</button>
   </div>
-  ${templatesMsg.length?templatesMsg.map((t,i)=>`
+  ${lista.length?lista.map(({t,i})=>`
     <div class="card" style="margin-bottom:12px;">
       <div class="card-header">
         <span class="card-title">${esc(t.nome)}</span>
@@ -4234,7 +4247,7 @@ function renderInfoMensagensHTML(){
       <div class="card-body" style="white-space:pre-wrap;font-size:13px;color:var(--text-2);">${esc(t.texto)}</div>
     </div>
   `).join(''):`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
-    Nenhum template cadastrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Adicionar primeiro template</button>
+    ${busca?'Nenhum template encontrado para essa busca.':`Nenhum template cadastrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Adicionar primeiro template</button>`}
   </div>`}`;
 }
 function abrirNovoTemplateMsg(){
