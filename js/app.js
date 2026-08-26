@@ -4691,13 +4691,14 @@ function _estoquePrecoCatalogo(nome,tamanho){
   }
   return null;
 }
-function _estoqueAutoPreco(){
-  const item=document.getElementById('est-item')?.value.trim();
-  const tamanho=document.getElementById('est-tamanho')?.value.trim();
+function _estoqueAutoPreco(prefixo){
+  prefixo=prefixo||'est';
+  const item=document.getElementById(prefixo+'-item')?.value.trim();
+  const tamanho=document.getElementById(prefixo+'-tamanho')?.value.trim();
   const preco=_estoquePrecoCatalogo(item,tamanho);
   if(preco==null)return;
-  const usado=document.getElementById('est-usado')?.checked;
-  const valorEl=document.getElementById('est-valor');
+  const usado=document.getElementById(prefixo+'-usado')?.checked;
+  const valorEl=document.getElementById(prefixo+'-valor');
   if(valorEl)valorEl.value=+(preco*(usado?0.6:1)).toFixed(2);
 }
 function renderEstoque(){
@@ -4884,7 +4885,10 @@ function abrirModalRenomearGrupo(item,tamanho,cor){
     <div class="form-group"><label>Item</label><input id="rg-item" class="input" value="${esc(item)}"></div>
     <div class="form-group"><label>Tamanho</label><input id="rg-tamanho" class="input" value="${esc(tamanho||'')}"></div>
     <div class="form-group"><label>Cor</label><input id="rg-cor" class="input" value="${esc(cor||'')}"></div>
-    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarRenomearGrupo('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-save"></i> Renomear tudo</button></div>
+    <div style="margin-top:12px;grid-column:1/-1;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_salvarRenomearGrupo('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-save"></i> Renomear tudo</button>
+      <button class="btn btn-sm btn-danger" onclick="_apagarGrupoEstoque('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-trash"></i> Apagar grupo inteiro</button>
+    </div>
   </div>`;
   document.getElementById('modal-generico').classList.add('open');
 }
@@ -4902,17 +4906,27 @@ function _salvarRenomearGrupo(itemAntigo,tamanhoAntigo,corAntigo){
   saveAll();closeModal('modal-generico');renderEstoque();
   showToast(`${n} lançamento(s) renomeado(s).`,'sage');
 }
+function _apagarGrupoEstoque(item,tamanho,cor){
+  const n=estoqueItens.filter(i=>(i.item||'')===item&&(i.tamanho||'')===tamanho&&(i.cor||'')===cor).length;
+  if(!confirm(`Apagar ${n} lançamento(s) de "${[item,tamanho,cor].filter(Boolean).join(' · ')}"? Não dá pra desfazer.`))return;
+  estoqueItens=estoqueItens.filter(i=>!((i.item||'')===item&&(i.tamanho||'')===tamanho&&(i.cor||'')===cor));
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast(`${n} lançamento(s) apagado(s).`,'peach');
+}
 function abrirModalEditarEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
   document.getElementById('generico-titulo').textContent='Editar Item do Estoque';
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
-    <div class="form-group"><label>Item</label><input id="este-item" class="input" list="este-item-list" value="${esc(it.item)}"><datalist id="este-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-    <div class="form-group"><label>Tamanho</label><input id="este-tamanho" class="input" list="este-tamanho-list" value="${esc(it.tamanho||'')}"><datalist id="este-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Item</label><input id="este-item" class="input" list="este-item-list" value="${esc(it.item)}" onchange="_estoqueAutoPreco('este')"><datalist id="este-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Tamanho</label><input id="este-tamanho" class="input" list="este-tamanho-list" value="${esc(it.tamanho||'')}" onchange="_estoqueAutoPreco('este')"><datalist id="este-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
     <div class="form-group"><label>Cor</label><input id="este-cor" class="input" list="este-cor-edit-list" value="${esc(it.cor||'')}"><datalist id="este-cor-edit-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
     <div class="form-group"><label>Qtd.</label>${numInput({id:'este-qtd',value:it.qtd||1,min:1})}</div>
     <div class="form-group"><label>Valor unit. (R$)</label>${numInput({id:'este-valor',value:it.valor||0,min:0,step:10})}</div>
-    <div class="form-group"><label class="checkbox-label" style="display:inline-flex;"><input type="checkbox" id="este-usado"${it.usado?' checked':''}> Usado</label></div>
-    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarEdicaoEstoqueItem('${esc(id)}')"><i class="fa-solid fa-save"></i> Salvar</button></div>
+    <div class="form-group"><label class="checkbox-label" style="display:inline-flex;"><input type="checkbox" id="este-usado"${it.usado?' checked':''} onchange="_estoqueAutoPreco('este')"> Usado</label></div>
+    <div style="margin-top:12px;grid-column:1/-1;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_salvarEdicaoEstoqueItem('${esc(id)}')"><i class="fa-solid fa-save"></i> Salvar</button>
+      <button class="btn btn-sm btn-danger" onclick="apagarEstoqueItem('${esc(id)}');closeModal('modal-generico')"><i class="fa-solid fa-trash"></i> Apagar item</button>
+    </div>
   </div>`;
   document.getElementById('modal-generico').classList.add('open');
 }
