@@ -4773,7 +4773,7 @@ function renderEstoque(){
               <tbody>${linhasGrupo.map(i=>`<tr style="border-top:1px solid var(--border);">
                 <td style="padding:6px 10px 6px 30px;">${fmtDate(i.dataEntrada)}</td>
                 <td style="padding:6px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
-                <td style="padding:6px;text-align:center;">${+i.qtd||1}</td>
+                <td style="padding:6px;text-align:center;" onclick="event.stopPropagation();"><input type="number" class="input" min="0" value="${+i.qtd||1}" style="width:56px;padding:3px 4px;text-align:center;font-size:12px;" onchange="_estoqueEditarQtd('${esc(i.id)}',this.value)"></td>
                 <td style="padding:6px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
                 <td style="padding:6px;white-space:nowrap;text-align:right;">
                   <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();abrirModalEditarEstoqueItem('${esc(i.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
@@ -4977,6 +4977,23 @@ function _salvarEdicaoEstoqueItem(id){
   it.usado=document.getElementById('este-usado').checked;
   saveAll();closeModal('modal-generico');renderEstoque();
   showToast('Item atualizado.','sage');
+}
+function _estoqueEditarQtd(id,novaQtd){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  const qtd=+novaQtd;
+  if(!qtd||qtd<=0){
+    if(confirm('Quantidade zero — apagar este lançamento (ex: era duplicado)?')){
+      estoqueItens=estoqueItens.filter(x=>x.id!==id);
+      saveAll();renderEstoque();
+      showToast('Lançamento apagado.','peach');
+    }else{
+      renderEstoque(); // desfaz visualmente, volta pro valor salvo
+    }
+    return;
+  }
+  it.qtd=qtd;
+  saveAll();renderEstoque();
+  showToast('Quantidade atualizada.','sage');
 }
 function marcarSaidaEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
