@@ -4665,8 +4665,37 @@ function _estoqueSugestoes(campo){
   return[...new Set([...base,...usados])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
 let _estoqueBusca='';
+let _estoqueAbaForm='unico';
 function _filtrarEstoque(v){_estoqueBusca=v;renderEstoque();}
 function _estoqueChave(i){return[i.item,i.tamanho,i.cor].filter(Boolean).join(' · ');}
+function _estoqueMostrarAbaForm(aba){_estoqueAbaForm=aba;renderEstoque();}
+// Puxa o preço do catálogo de Compras (ITENS_COMPRAS) pelo nome do item — evita
+// digitar o valor na mão quando o item já tem preço cadastrado lá. Itens de preço
+// fixo usam o preço direto; itens de enxoval (varia por tamanho de cama) usam
+// PRECOS_ENXOVAL[nome][tamanho] — só funciona se o tamanho informado for um dos
+// 4 tamanhos-base (Solteiro/Casal/Queen/King). Retorna null se não achar.
+function _estoquePrecoCatalogo(nome,tamanho){
+  const nomeNorm=(nome||'').trim().toLowerCase();
+  if(!nomeNorm)return null;
+  const item=ITENS_COMPRAS.find(it=>it.nome.toLowerCase()===nomeNorm);
+  if(!item)return null;
+  if(item.tipoPreco==='fixo')return item.preco||0;
+  if(item.tipoPreco==='enxoval'){
+    const tamEnx=CAMA_TIPO_ENXOVAL[tamanho]||(['Solteiro','Casal','Queen','King'].includes(tamanho)?tamanho:null);
+    if(!tamEnx)return null;
+    return(PRECOS_ENXOVAL[item.nome]||{})[tamEnx]||0;
+  }
+  return null;
+}
+function _estoqueAutoPreco(){
+  const item=document.getElementById('est-item')?.value.trim();
+  const tamanho=document.getElementById('est-tamanho')?.value.trim();
+  const preco=_estoquePrecoCatalogo(item,tamanho);
+  if(preco==null)return;
+  const usado=document.getElementById('est-usado')?.checked;
+  const valorEl=document.getElementById('est-valor');
+  if(valorEl)valorEl.value=+(preco*(usado?0.6:1)).toFixed(2);
+}
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
@@ -4684,47 +4713,18 @@ function renderEstoque(){
   wrap.innerHTML=`
   <div style="margin-bottom:16px;">
     <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
-    <div class="text-muted">Item + tamanho + cor + quantidade — o resumo abaixo é calculado a partir das datas de entrada/saída</div>
+    <div class="text-muted">Valor puxa sozinho do catálogo de Compras quando o nome bate; "Usado" desconta 40% automaticamente.</div>
   </div>
 
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus" style="color:var(--sage)"></i> Adicionar item</span></div>
-    <div class="card-body" style="padding:12px;">
-      <div class="form-row" style="flex-wrap:wrap;gap:12px;">
-        <div class="form-group" style="flex:2;min-width:170px;"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:130px;"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:130px;"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:90px;"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
-        <div class="form-group" style="min-width:130px;"><label>Valor unitário (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
-        <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
-      </div>
-      <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-paste" style="color:var(--peach)"></i> Colar lista (vários itens de uma vez)</span></div>
-    <div class="card-body" style="padding:12px;">
-      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code>. Sem número no início conta como 1.</div>
-      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 cobertores" oninput="_estoquePreviewColar()"></textarea>
-      <div class="form-row" style="margin-top:8px;flex-wrap:wrap;gap:12px;">
-        <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
-        <div class="form-group" style="min-width:130px;"><label>Valor unitário (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10})}</div>
-      </div>
-      <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
-      <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Resumo — em estoque hoje</span></div>
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Em estoque hoje</span></div>
     <div class="card-body" style="padding:12px;">
       <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
         <div><div class="text-muted" style="font-size:12px;">Unidades em estoque</div><div style="font-size:20px;font-weight:700;">${totalUnidEstoque}</div></div>
         <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
       </div>
       ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd. em estoque</th></tr></thead>
+        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd.</th></tr></thead>
         <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([nome,qtd])=>`<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px;">${esc(nome)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${qtd}</td>
         </tr>`).join('')}</tbody>
@@ -4732,23 +4732,53 @@ function renderEstoque(){
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header" style="padding:0;">
+      <div class="tabs-bar" style="padding:0;border:none;">
+        <button class="tab-btn${_estoqueAbaForm==='unico'?' active':''}" onclick="_estoqueMostrarAbaForm('unico')"><i class="fa-solid fa-plus"></i> Um item</button>
+        <button class="tab-btn${_estoqueAbaForm==='colar'?' active':''}" onclick="_estoqueMostrarAbaForm('colar')"><i class="fa-solid fa-paste"></i> Colar vários</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:12px;">
+      ${_estoqueAbaForm==='unico'?`
+      <div class="form-row" style="flex-wrap:wrap;gap:12px;">
+        <div class="form-group" style="flex:2;min-width:170px;"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol" onchange="_estoqueAutoPreco()"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:130px;"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen" onchange="_estoqueAutoPreco()"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:130px;"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:80px;"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
+        <div class="form-group" style="min-width:130px;"><label>Valor unit. (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
+        <div class="form-group" style="min-width:140px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
+      </div>
+      <label class="checkbox-label" style="margin:8px 0;display:inline-flex;"><input type="checkbox" id="est-usado" onchange="_estoqueAutoPreco()"> Usado (desconta 40% do valor)</label><br>
+      <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      `:`
+      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>. O valor de cada linha puxa sozinho do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
+      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 cobertores" oninput="_estoquePreviewColar()"></textarea>
+      <div class="form-row" style="margin-top:8px;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <div class="form-group" style="min-width:140px;"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
+        <div class="form-group" style="min-width:150px;"><label>Valor manual — se não achar no catálogo (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10,onchange:'_estoquePreviewColar()'})}</div>
+        <label class="checkbox-label" style="margin-bottom:8px;"><input type="checkbox" id="est-colar-usado" onchange="_estoquePreviewColar()"> Usado (desconta 40%)</label>
+      </div>
+      <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
+      <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
+      `}
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header">
       <span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span>
-      <input class="form-input" id="est-busca" placeholder="Buscar item/tamanho/cor..." style="margin-left:auto;width:200px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
+      <input class="form-input" id="est-busca" placeholder="Buscar..." style="margin-left:auto;width:170px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
     </div>
     <div class="card-body" style="overflow-x:auto;padding:0;">
       ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
-          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:left;padding:8px;">Tamanho</th><th style="text-align:left;padding:8px;">Cor</th><th style="text-align:center;padding:8px;">Qtd.</th><th style="text-align:left;padding:8px;">Entrada</th><th style="text-align:left;padding:8px;">Saída</th><th style="text-align:right;padding:8px;">Valor unit.</th><th style="padding:8px;width:120px;"></th>
+          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:center;padding:8px;">Qtd.</th><th style="text-align:left;padding:8px;">Situação</th><th style="text-align:right;padding:8px;">Valor unit.</th><th style="padding:8px;width:120px;"></th>
         </tr></thead>
         <tbody>${lista.map(i=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px;font-weight:600;">${esc(i.item)}</td>
-          <td style="padding:8px;">${esc(i.tamanho||'—')}</td>
-          <td style="padding:8px;">${esc(i.cor||'—')}</td>
+          <td style="padding:8px;font-weight:600;">${esc(_estoqueChave(i))}<div class="text-muted" style="font-weight:400;font-size:11px;">entrada ${fmtDate(i.dataEntrada)}</div></td>
           <td style="padding:8px;text-align:center;">${+i.qtd||1}</td>
-          <td style="padding:8px;">${fmtDate(i.dataEntrada)}</td>
-          <td style="padding:8px;">${i.dataSaida?fmtDate(i.dataSaida):`<span class="tag tag-sage">em estoque</span>`}</td>
+          <td style="padding:8px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
           <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
           <td style="padding:8px;white-space:nowrap;text-align:right;">
             ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
@@ -4765,6 +4795,11 @@ function _estoqueParseColados(texto){
     return m?{qtd:parseInt(m[1])||1,nome:m[2].trim()}:{qtd:1,nome:linha};
   }).filter(l=>l.nome);
 }
+function _estoqueLinhaValor(nome,valorManual,usado){
+  const preco=_estoquePrecoCatalogo(nome,'');
+  const base=preco!=null?preco:(+valorManual||0);
+  return usado?+(base*0.6).toFixed(2):base;
+}
 function _estoquePreviewColar(){
   const texto=document.getElementById('est-colar-texto')?.value||'';
   const itens=_estoqueParseColados(texto);
@@ -4773,6 +4808,8 @@ function _estoquePreviewColar(){
   if(btn)btn.disabled=!itens.length;
   if(!prevEl)return;
   if(!itens.length){prevEl.innerHTML='';return;}
+  const valorManual=document.getElementById('est-colar-valor')?.value||0;
+  const usado=document.getElementById('est-colar-usado')?.checked;
   const contagemNome={};
   itens.forEach(l=>{contagemNome[l.nome.toLowerCase()]=(contagemNome[l.nome.toLowerCase()]||0)+1;});
   const totalUnidades=itens.reduce((s,l)=>s+l.qtd,0);
@@ -4780,7 +4817,9 @@ function _estoquePreviewColar(){
     <ul style="margin:0;padding-left:18px;">
     ${itens.map(l=>{
       const repetido=contagemNome[l.nome.toLowerCase()]>1;
-      return`<li>${l.qtd}× ${esc(l.nome)}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
+      const achouCatalogo=_estoquePrecoCatalogo(l.nome,'')!=null;
+      const valor=_estoqueLinhaValor(l.nome,valorManual,usado);
+      return`<li>${l.qtd}× ${esc(l.nome)} — <strong>${fmtMoeda(valor)}</strong>/un. ${achouCatalogo?'<span class="text-muted">(do catálogo)</span>':'<span class="text-muted">(valor manual)</span>'}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
     }).join('')}
     </ul>`;
 }
@@ -4789,9 +4828,11 @@ function _estoqueImportarColados(){
   const itens=_estoqueParseColados(texto);
   if(!itens.length)return;
   const dataEntrada=document.getElementById('est-colar-entrada').value||hoje();
-  const valor=+document.getElementById('est-colar-valor').value||0;
+  const valorManual=document.getElementById('est-colar-valor')?.value||0;
+  const usado=document.getElementById('est-colar-usado')?.checked||false;
   itens.forEach(l=>{
-    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:'',cor:'',qtd:l.qtd,dataEntrada,dataSaida:null,valor});
+    const valor=_estoqueLinhaValor(l.nome,valorManual,usado);
+    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:'',cor:'',qtd:l.qtd,dataEntrada,dataSaida:null,valor,usado});
   });
   saveAll();renderEstoque();
   showToast(`${itens.length} item(ns) lançado(s) no estoque!`,'sage');
@@ -4803,8 +4844,9 @@ function adicionarEstoqueItem(){
   const qtd=+document.getElementById('est-qtd').value||1;
   const dataEntrada=document.getElementById('est-entrada').value||hoje();
   const valor=+document.getElementById('est-valor').value||0;
+  const usado=document.getElementById('est-usado')?.checked||false;
   if(!item){showToast('Informe o nome do item.','peach');return;}
-  estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor});
+  estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor,usado});
   saveAll();renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
 }
