@@ -290,6 +290,10 @@ const MODULOS_ONBOARDING=[
 
 // ═══════════════════ UTILITÁRIOS ═══════════════════
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Escapa pra embutir dentro de um literal JS de aspas simples ('...') que por sua vez
+// vai dentro de um atributo onclick="" — precisa rodar ANTES do esc() de cima (que
+// escapa o que sobra pro atributo HTML em volta).
+function _escJs(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function fmtDate(iso){if(!iso)return'–';return new Date(iso+'T12:00:00').toLocaleDateString('pt-BR');}
 function fmtMoeda(v){return'R$ '+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -4705,7 +4709,11 @@ function renderEstoque(){
   const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0)*(+i.qtd||1),0);
   const totalUnidEstoque=emEstoque.reduce((s,i)=>s+(+i.qtd||1),0);
   const porItem={};
-  emEstoque.forEach(i=>{const k=_estoqueChave(i);porItem[k]=(porItem[k]||0)+(+i.qtd||1);});
+  emEstoque.forEach(i=>{
+    const k=_estoqueChave(i);
+    if(!porItem[k])porItem[k]={item:i.item,tamanho:i.tamanho||'',cor:i.cor||'',qtd:0};
+    porItem[k].qtd+=(+i.qtd||1);
+  });
   const busca=_estoqueBusca.toLowerCase().trim();
   const lista=[...estoqueItens]
     .filter(i=>!busca||_estoqueChave(i).toLowerCase().includes(busca))
@@ -4724,11 +4732,13 @@ function renderEstoque(){
         <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
       </div>
       ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd.</th></tr></thead>
-        <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([nome,qtd])=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:6px 4px;">${esc(nome)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${qtd}</td>
+        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:80px;">Qtd.</th><th style="width:36px;"></th></tr></thead>
+        <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([chave,g])=>`<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 4px;">${esc(chave)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${g.qtd}</td>
+          <td style="padding:4px;text-align:right;"><button class="btn btn-xs btn-outline" onclick="abrirModalRenomearGrupo('${esc(_escJs(g.item))}','${esc(_escJs(g.tamanho))}','${esc(_escJs(g.cor))}')" title="Renomear / mesclar com outro grupo"><i class="fa-solid fa-pen"></i></button></td>
         </tr>`).join('')}</tbody>
-      </table>`:''}
+      </table>
+      <div class="hint" style="margin-top:8px;">Dois nomes parecidos (ex: "capa de edredom" e "capas de edredom")? Clique no lápis e digite o mesmo nome nos dois — eles se juntam num grupo só.</div>`:''}
     </div>
   </div>
 
@@ -4866,6 +4876,31 @@ function adicionarEstoqueItem(){
   estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor,usado});
   saveAll();renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
+}
+function abrirModalRenomearGrupo(item,tamanho,cor){
+  document.getElementById('generico-titulo').textContent='Renomear / mesclar grupo';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="grid-column:1/-1;">Atualiza TODOS os lançamentos que hoje aparecem como "${esc([item,tamanho,cor].filter(Boolean).join(' · '))}". Pra juntar com outro grupo, digite exatamente o mesmo nome/tamanho/cor dele.</div>
+    <div class="form-group"><label>Item</label><input id="rg-item" class="input" value="${esc(item)}"></div>
+    <div class="form-group"><label>Tamanho</label><input id="rg-tamanho" class="input" value="${esc(tamanho||'')}"></div>
+    <div class="form-group"><label>Cor</label><input id="rg-cor" class="input" value="${esc(cor||'')}"></div>
+    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarRenomearGrupo('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-save"></i> Renomear tudo</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarRenomearGrupo(itemAntigo,tamanhoAntigo,corAntigo){
+  const item=document.getElementById('rg-item').value.trim();
+  if(!item){showToast('Informe o nome do item.','peach');return;}
+  const tamanho=document.getElementById('rg-tamanho').value.trim();
+  const cor=document.getElementById('rg-cor').value.trim();
+  let n=0;
+  estoqueItens.forEach(i=>{
+    if((i.item||'')===itemAntigo&&(i.tamanho||'')===tamanhoAntigo&&(i.cor||'')===corAntigo){
+      i.item=item;i.tamanho=tamanho;i.cor=cor;n++;
+    }
+  });
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast(`${n} lançamento(s) renomeado(s).`,'sage');
 }
 function abrirModalEditarEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
