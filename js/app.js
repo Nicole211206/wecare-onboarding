@@ -4751,6 +4751,7 @@ function renderEstoque(){
     <div class="card-header">
       <span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Itens (${grupos.length})</span>
       <input class="form-input" id="est-busca" placeholder="Buscar..." style="margin-left:auto;width:170px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
+      ${estoqueItens.length?`<button class="btn btn-xs btn-outline" style="margin-left:8px;color:var(--rose);" onclick="_estoqueApagarTudo()" title="Apagar todos os lançamentos"><i class="fa-solid fa-trash"></i> Apagar tudo</button>`:''}
     </div>
     <div class="card-body" style="overflow-x:auto;padding:0;">
       ${grupos.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
@@ -4994,6 +4995,13 @@ function _estoqueEditarQtd(id,novaQtd){
   it.qtd=qtd;
   saveAll();renderEstoque();
   showToast('Quantidade atualizada.','sage');
+}
+function _estoqueApagarTudo(){
+  if(!estoqueItens.length)return;
+  if(!confirm(`Apagar TODOS os ${estoqueItens.length} lançamento(s) de estoque? Não dá pra desfazer.`))return;
+  estoqueItens=[];
+  saveAll();renderEstoque();
+  showToast('Todos os lançamentos de estoque foram apagados.','peach');
 }
 function marcarSaidaEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
