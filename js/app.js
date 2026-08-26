@@ -4657,30 +4657,46 @@ async function gerarPDFOrcamentoAvulso(id){
 }
 
 // ═══════════════════ ESTOQUE ═══════════════════
+const ESTOQUE_ITENS_SUGESTOES=['Lençol','Fronha Basic Percalle c/ Abas','Travesseiro Sanomed','Travesseiro Toque de Pluma','Protetor de Travesseiro','Protetor de Colchão','Toalha de Banho Lory Hotel','Toalha de Rosto Lory Hotel','Tapete Piso Luxor Hotel','Cobertor Aspen II','Edredom Premier Hotel'];
+const ESTOQUE_TAMANHOS_SUGESTOES=['Solteiro','Casal','Queen','King','Banho','Rosto','Piso','Único'];
+function _estoqueSugestoes(campo){
+  const usados=[...new Set(estoqueItens.map(i=>i[campo]).filter(Boolean))];
+  const base=campo==='item'?ESTOQUE_ITENS_SUGESTOES:campo==='tamanho'?ESTOQUE_TAMANHOS_SUGESTOES:[];
+  return[...new Set([...base,...usados])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+let _estoqueBusca='';
+function _filtrarEstoque(v){_estoqueBusca=v;renderEstoque();}
+function _estoqueChave(i){return[i.item,i.tamanho,i.cor].filter(Boolean).join(' · ');}
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
   const h=hoje();
   // "em estoque hoje" = já deu entrada e (nunca saiu OU a saída registrada é no futuro)
   const emEstoque=estoqueItens.filter(i=>i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h));
-  const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0),0);
+  const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0)*(+i.qtd||1),0);
+  const totalUnidEstoque=emEstoque.reduce((s,i)=>s+(+i.qtd||1),0);
   const porItem={};
-  emEstoque.forEach(i=>{porItem[i.item]=(porItem[i.item]||0)+1;});
-  const lista=[...estoqueItens].sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
+  emEstoque.forEach(i=>{const k=_estoqueChave(i);porItem[k]=(porItem[k]||0)+(+i.qtd||1);});
+  const busca=_estoqueBusca.toLowerCase().trim();
+  const lista=[...estoqueItens]
+    .filter(i=>!busca||_estoqueChave(i).toLowerCase().includes(busca))
+    .sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
   wrap.innerHTML=`
   <div style="margin-bottom:16px;">
     <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
-    <div class="text-muted">Item, data de entrada/saída e valor — o resumo abaixo é calculado a partir das datas</div>
+    <div class="text-muted">Item + tamanho + cor + quantidade — o resumo abaixo é calculado a partir das datas de entrada/saída</div>
   </div>
 
   <div class="card" style="margin-bottom:16px;">
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus" style="color:var(--sage)"></i> Adicionar item</span></div>
     <div class="card-body" style="padding:12px;">
       <div class="form-row" style="flex-wrap:wrap;gap:12px;">
-        <div class="form-group" style="flex:2;min-width:180px;"><label>Item</label><input id="est-item" class="input" placeholder="Ex: Travesseiro Sanomed"></div>
+        <div class="form-group" style="flex:2;min-width:170px;"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:130px;"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:130px;"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="form-group" style="min-width:90px;"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
+        <div class="form-group" style="min-width:130px;"><label>Valor unitário (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
         <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
-        <div class="form-group" style="min-width:150px;"><label>Data de saída</label><input id="est-saida" type="date" class="input"></div>
-        <div class="form-group" style="min-width:130px;"><label>Valor (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
       </div>
       <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>
@@ -4690,11 +4706,11 @@ function renderEstoque(){
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Resumo — em estoque hoje</span></div>
     <div class="card-body" style="padding:12px;">
       <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
-        <div><div class="text-muted" style="font-size:12px;">Itens em estoque</div><div style="font-size:20px;font-weight:700;">${emEstoque.length}</div></div>
+        <div><div class="text-muted" style="font-size:12px;">Unidades em estoque</div><div style="font-size:20px;font-weight:700;">${totalUnidEstoque}</div></div>
         <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
       </div>
       ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd. em estoque</th></tr></thead>
+        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd. em estoque</th></tr></thead>
         <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([nome,qtd])=>`<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px;">${esc(nome)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${qtd}</td>
         </tr>`).join('')}</tbody>
@@ -4703,14 +4719,20 @@ function renderEstoque(){
   </div>
 
   <div class="card">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span></div>
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span>
+      <input class="form-input" id="est-busca" placeholder="Buscar item/tamanho/cor..." style="margin-left:auto;width:200px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
+    </div>
     <div class="card-body" style="overflow-x:auto;padding:0;">
       ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
-          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:left;padding:8px;">Entrada</th><th style="text-align:left;padding:8px;">Saída</th><th style="text-align:right;padding:8px;">Valor</th><th style="padding:8px;width:120px;"></th>
+          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:left;padding:8px;">Tamanho</th><th style="text-align:left;padding:8px;">Cor</th><th style="text-align:center;padding:8px;">Qtd.</th><th style="text-align:left;padding:8px;">Entrada</th><th style="text-align:left;padding:8px;">Saída</th><th style="text-align:right;padding:8px;">Valor unit.</th><th style="padding:8px;width:120px;"></th>
         </tr></thead>
         <tbody>${lista.map(i=>`<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:8px;font-weight:600;">${esc(i.item)}</td>
+          <td style="padding:8px;">${esc(i.tamanho||'—')}</td>
+          <td style="padding:8px;">${esc(i.cor||'—')}</td>
+          <td style="padding:8px;text-align:center;">${+i.qtd||1}</td>
           <td style="padding:8px;">${fmtDate(i.dataEntrada)}</td>
           <td style="padding:8px;">${i.dataSaida?fmtDate(i.dataSaida):`<span class="tag tag-sage">em estoque</span>`}</td>
           <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
@@ -4719,17 +4741,19 @@ function renderEstoque(){
             <button class="btn btn-xs btn-danger" onclick="apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum item cadastrado ainda.</div>`}
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">${busca?'Nenhum item encontrado para essa busca.':'Nenhum item cadastrado ainda.'}</div>`}
     </div>
   </div>`;
 }
 function adicionarEstoqueItem(){
   const item=document.getElementById('est-item').value.trim();
+  const tamanho=document.getElementById('est-tamanho').value.trim();
+  const cor=document.getElementById('est-cor').value.trim();
+  const qtd=+document.getElementById('est-qtd').value||1;
   const dataEntrada=document.getElementById('est-entrada').value||hoje();
-  const dataSaida=document.getElementById('est-saida').value||null;
   const valor=+document.getElementById('est-valor').value||0;
   if(!item){showToast('Informe o nome do item.','peach');return;}
-  estoqueItens.push({id:'est_'+uid()+uid(),item,dataEntrada,dataSaida,valor});
+  estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor});
   saveAll();renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
 }
