@@ -299,6 +299,28 @@ function fmtDate(iso){if(!iso)return'–';return new Date(iso+'T12:00:00').toLoc
 function fmtMoeda(v){return'R$ '+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function diasEntre(a,b){if(!a||!b)return null;return Math.round((new Date(b)-new Date(a))/86400000);}
 function hoje(){return new Date().toISOString().split('T')[0];}
+// 5º dia útil de um mês (conta seg-sex, não desconta feriado — não temos calendário
+// de feriados no sistema). ano/mesIdx = mesIdx 0-indexado (0=janeiro), igual Date nativo.
+function _quintoDiaUtil(ano,mesIdx){
+  const d=new Date(ano,mesIdx,1);
+  let count=0;
+  while(count<5){
+    if(d.getDay()!==0&&d.getDay()!==6){count++;if(count===5)break;}
+    d.setDate(d.getDate()+1);
+  }
+  return d;
+}
+function _repasseHintTexto(regra){
+  const hj=new Date();
+  const data=regra==='5util'?_quintoDiaUtil(hj.getFullYear(),hj.getMonth()):new Date(hj.getFullYear(),hj.getMonth(),15);
+  const mesNome=data.toLocaleDateString('pt-BR',{month:'long'});
+  return`Esse mês (${mesNome}): dia ${String(data.getDate()).padStart(2,'0')}. Não considera feriado.`;
+}
+function _atualizarHintRepasse(){
+  const regra=document.getElementById('d-data-repasse-regra')?.value;
+  const el=document.getElementById('hint-data-repasse');
+  if(el)el.textContent=_repasseHintTexto(regra);
+}
 function showToast(msg,tipo=''){
   const c=document.getElementById('toast-container');
   const t=document.createElement('div');t.className='toast '+(tipo||'');t.textContent=msg;
@@ -963,7 +985,7 @@ function _coletarDadosAba(aba,im){
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
-    im.dataRepasse=g('d-data-repasse');
+    im.dataRepasseRegra=g('d-data-repasse-regra');
     im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0; im.minimoNoites=gn('d-min-noites')||1;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
@@ -1101,7 +1123,13 @@ function renderAbaDados(im){
       <option value="bruta"${im.comissaoBase==='bruta'?' selected':''}>Bruta</option>
     </select></div>
     <div class="form-group"><label>Expectativa de Faturamento Mensal (R$)</label>${numInput({id:'d-faturamento-esperado',value:im.expectativaFaturamentoMensal||0,min:0,step:100})}</div>
-    <div class="form-group"><label>Data de Repasse</label><input id="d-data-repasse" type="date" class="input" value="${im.dataRepasse||''}"></div>
+    <div class="form-group"><label>Dia de Repasse</label>
+      <select id="d-data-repasse-regra" class="input" onchange="_atualizarHintRepasse()">
+        <option value="dia15"${(im.dataRepasseRegra||'dia15')==='dia15'?' selected':''}>Dia 15</option>
+        <option value="5util"${im.dataRepasseRegra==='5util'?' selected':''}>5º dia útil do mês</option>
+      </select>
+      <div class="hint" id="hint-data-repasse" style="margin-top:4px;">${esc(_repasseHintTexto(im.dataRepasseRegra||'dia15'))}</div>
+    </div>
   </div>
 
   <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
