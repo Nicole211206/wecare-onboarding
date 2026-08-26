@@ -4703,6 +4703,20 @@ function renderEstoque(){
   </div>
 
   <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title"><i class="fa-solid fa-paste" style="color:var(--peach)"></i> Colar lista (vários itens de uma vez)</span></div>
+    <div class="card-body" style="padding:12px;">
+      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code>. Sem número no início conta como 1.</div>
+      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 cobertores" oninput="_estoquePreviewColar()"></textarea>
+      <div class="form-row" style="margin-top:8px;flex-wrap:wrap;gap:12px;">
+        <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
+        <div class="form-group" style="min-width:130px;"><label>Valor unitário (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10})}</div>
+      </div>
+      <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
+      <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
     <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Resumo — em estoque hoje</span></div>
     <div class="card-body" style="padding:12px;">
       <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
@@ -4744,6 +4758,43 @@ function renderEstoque(){
       </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">${busca?'Nenhum item encontrado para essa busca.':'Nenhum item cadastrado ainda.'}</div>`}
     </div>
   </div>`;
+}
+function _estoqueParseColados(texto){
+  return(texto||'').split('\n').map(l=>l.trim()).filter(Boolean).map(linha=>{
+    const m=/^(\d+)\s*[xX×]?\s*(.+)$/.exec(linha);
+    return m?{qtd:parseInt(m[1])||1,nome:m[2].trim()}:{qtd:1,nome:linha};
+  }).filter(l=>l.nome);
+}
+function _estoquePreviewColar(){
+  const texto=document.getElementById('est-colar-texto')?.value||'';
+  const itens=_estoqueParseColados(texto);
+  const prevEl=document.getElementById('est-colar-preview');
+  const btn=document.getElementById('est-colar-btn');
+  if(btn)btn.disabled=!itens.length;
+  if(!prevEl)return;
+  if(!itens.length){prevEl.innerHTML='';return;}
+  const contagemNome={};
+  itens.forEach(l=>{contagemNome[l.nome.toLowerCase()]=(contagemNome[l.nome.toLowerCase()]||0)+1;});
+  const totalUnidades=itens.reduce((s,l)=>s+l.qtd,0);
+  prevEl.innerHTML=`<div class="hint" style="margin-bottom:6px;">Prévia — ${itens.length} linha(s), ${totalUnidades} unidade(s) no total:</div>
+    <ul style="margin:0;padding-left:18px;">
+    ${itens.map(l=>{
+      const repetido=contagemNome[l.nome.toLowerCase()]>1;
+      return`<li>${l.qtd}× ${esc(l.nome)}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
+    }).join('')}
+    </ul>`;
+}
+function _estoqueImportarColados(){
+  const texto=document.getElementById('est-colar-texto')?.value||'';
+  const itens=_estoqueParseColados(texto);
+  if(!itens.length)return;
+  const dataEntrada=document.getElementById('est-colar-entrada').value||hoje();
+  const valor=+document.getElementById('est-colar-valor').value||0;
+  itens.forEach(l=>{
+    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:'',cor:'',qtd:l.qtd,dataEntrada,dataSaida:null,valor});
+  });
+  saveAll();renderEstoque();
+  showToast(`${itens.length} item(ns) lançado(s) no estoque!`,'sage');
 }
 function adicionarEstoqueItem(){
   const item=document.getElementById('est-item').value.trim();
