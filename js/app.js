@@ -4670,9 +4670,14 @@ function _estoqueSugestoes(campo){
 }
 let _estoqueBusca='';
 let _estoqueAbaForm='unico';
+let _estoqueGruposAbertos=new Set();
 function _filtrarEstoque(v){_estoqueBusca=v;renderEstoque();}
 function _estoqueChave(i){return[i.item,i.tamanho,i.cor].filter(Boolean).join(' · ');}
-function _estoqueMostrarAbaForm(aba){_estoqueAbaForm=aba;renderEstoque();}
+function _estoqueToggleGrupo(chave){
+  if(_estoqueGruposAbertos.has(chave))_estoqueGruposAbertos.delete(chave);
+  else _estoqueGruposAbertos.add(chave);
+  renderEstoque();
+}
 // Puxa o preço do catálogo de Compras (ITENS_COMPRAS) pelo nome do item — evita
 // digitar o valor na mão quando o item já tem preço cadastrado lá. Itens de preço
 // fixo usam o preço direto; itens de enxoval (varia por tamanho de cama) usam
@@ -4701,6 +4706,12 @@ function _estoqueAutoPreco(prefixo){
   const valorEl=document.getElementById(prefixo+'-valor');
   if(valorEl)valorEl.value=+(preco*(usado?0.6:1)).toFixed(2);
 }
+function _estoqueStatTile(label,valor){
+  return`<div style="background:var(--surface-2);border-radius:12px;padding:12px 18px;">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${esc(label)}</div>
+    <div style="font-size:19px;font-weight:700;">${valor}</div>
+  </div>`;
+}
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
@@ -4709,98 +4720,122 @@ function renderEstoque(){
   const emEstoque=estoqueItens.filter(i=>i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h));
   const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0)*(+i.qtd||1),0);
   const totalUnidEstoque=emEstoque.reduce((s,i)=>s+(+i.qtd||1),0);
+  // Grupos vêm de TODOS os lançamentos (não só o que está em estoque hoje) — assim um
+  // item que já saiu inteiro do estoque continua aparecendo pra dar pra ver o histórico
+  // ou apagar; qtdEstoque conta só a parte ainda em estoque.
   const porItem={};
-  emEstoque.forEach(i=>{
+  estoqueItens.forEach(i=>{
     const k=_estoqueChave(i);
-    if(!porItem[k])porItem[k]={item:i.item,tamanho:i.tamanho||'',cor:i.cor||'',qtd:0};
-    porItem[k].qtd+=(+i.qtd||1);
+    if(!porItem[k])porItem[k]={item:i.item,tamanho:i.tamanho||'',cor:i.cor||'',qtdEstoque:0};
+    if(i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h))porItem[k].qtdEstoque+=(+i.qtd||1);
   });
   const busca=_estoqueBusca.toLowerCase().trim();
-  const lista=[...estoqueItens]
-    .filter(i=>!busca||_estoqueChave(i).toLowerCase().includes(busca))
-    .sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
+  const grupos=Object.entries(porItem)
+    .filter(([chave])=>!busca||chave.toLowerCase().includes(busca))
+    .sort((a,b)=>a[0].localeCompare(b[0]));
   wrap.innerHTML=`
-  <div style="margin-bottom:16px;">
-    <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
-    <div class="text-muted">Valor puxa sozinho do catálogo de Compras quando o nome bate; "Usado" desconta 40% automaticamente.</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
+      <div class="text-muted" style="font-size:12px;">Valor puxa do catálogo de Compras quando o nome bate; "Usado" desconta 40%.</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirModalAdicionarEstoque()"><i class="fa-solid fa-plus"></i> Adicionar ao estoque</button>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Em estoque hoje</span></div>
-    <div class="card-body" style="padding:12px;">
-      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
-        <div><div class="text-muted" style="font-size:12px;">Unidades em estoque</div><div style="font-size:20px;font-weight:700;">${totalUnidEstoque}</div></div>
-        <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
-      </div>
-      ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:6px 4px;width:80px;">Qtd.</th><th style="width:36px;"></th></tr></thead>
-        <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([chave,g])=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:6px 4px;">${esc(chave)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${g.qtd}</td>
-          <td style="padding:4px;text-align:right;"><button class="btn btn-xs btn-outline" onclick="abrirModalRenomearGrupo('${esc(_escJs(g.item))}','${esc(_escJs(g.tamanho))}','${esc(_escJs(g.cor))}')" title="Renomear / mesclar com outro grupo"><i class="fa-solid fa-pen"></i></button></td>
-        </tr>`).join('')}</tbody>
-      </table>
-      <div class="hint" style="margin-top:8px;">Dois nomes parecidos (ex: "capa de edredom" e "capas de edredom")? Clique no lápis e digite o mesmo nome nos dois — eles se juntam num grupo só.</div>`:''}
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header" style="padding:0;">
-      <div class="tabs-bar" style="padding:0;border:none;">
-        <button class="tab-btn${_estoqueAbaForm==='unico'?' active':''}" onclick="_estoqueMostrarAbaForm('unico')"><i class="fa-solid fa-plus"></i> Um item</button>
-        <button class="tab-btn${_estoqueAbaForm==='colar'?' active':''}" onclick="_estoqueMostrarAbaForm('colar')"><i class="fa-solid fa-paste"></i> Colar vários</button>
-      </div>
-    </div>
-    <div class="card-body" style="padding:12px;">
-      ${_estoqueAbaForm==='unico'?`
-      <div class="form-row" style="flex-wrap:wrap;gap:12px;">
-        <div class="form-group" style="flex:2;min-width:170px;"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol" onchange="_estoqueAutoPreco()"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:130px;"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen" onchange="_estoqueAutoPreco()"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:130px;"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:80px;"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
-        <div class="form-group" style="min-width:130px;"><label>Valor unit. (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
-        <div class="form-group" style="min-width:140px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
-      </div>
-      <label class="checkbox-label" style="margin:8px 0;display:inline-flex;"><input type="checkbox" id="est-usado" onchange="_estoqueAutoPreco()"> Usado (desconta 40% do valor)</label><br>
-      <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
-      `:`
-      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code> (tamanho no nome é detectado sozinho). O valor de cada linha puxa do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
-      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 jogos de casal" oninput="_estoquePreviewColar()"></textarea>
-      <div class="form-row" style="margin-top:8px;flex-wrap:wrap;gap:12px;align-items:flex-end;">
-        <div class="form-group" style="min-width:140px;"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
-        <div class="form-group" style="min-width:120px;"><label>Cor (todo o lote)</label><input id="est-colar-cor" class="input" list="est-cor-list" placeholder="Ex: Branco" oninput="_estoquePreviewColar()"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-        <div class="form-group" style="min-width:150px;"><label>Valor manual — se não achar no catálogo (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10,onchange:'_estoquePreviewColar()'})}</div>
-        <label class="checkbox-label" style="margin-bottom:8px;"><input type="checkbox" id="est-colar-usado" onchange="_estoquePreviewColar()"> Usado (desconta 40%)</label>
-      </div>
-      <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
-      <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
-      `}
-    </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    ${_estoqueStatTile('Unidades em estoque',totalUnidEstoque)}
+    ${_estoqueStatTile('Valor total em estoque',fmtMoeda(totalValorEstoque))}
   </div>
 
   <div class="card">
     <div class="card-header">
-      <span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span>
+      <span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Itens (${grupos.length})</span>
       <input class="form-input" id="est-busca" placeholder="Buscar..." style="margin-left:auto;width:170px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
     </div>
     <div class="card-body" style="overflow-x:auto;padding:0;">
-      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+      ${grupos.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
-          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:center;padding:8px;">Qtd.</th><th style="text-align:left;padding:8px;">Situação</th><th style="text-align:right;padding:8px;">Valor unit.</th><th style="padding:8px;width:120px;"></th>
+          <th style="text-align:left;padding:8px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:8px;width:90px;">Em estoque</th><th style="padding:8px;width:80px;"></th>
         </tr></thead>
-        <tbody>${lista.map(i=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px;font-weight:600;">${esc(_estoqueChave(i))}<div class="text-muted" style="font-weight:400;font-size:11px;">entrada ${fmtDate(i.dataEntrada)}</div></td>
-          <td style="padding:8px;text-align:center;">${+i.qtd||1}</td>
-          <td style="padding:8px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
-          <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
-          <td style="padding:8px;white-space:nowrap;text-align:right;">
-            <button class="btn btn-xs btn-outline" onclick="abrirModalEditarEstoqueItem('${esc(i.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
-            ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
-            <button class="btn btn-xs btn-danger" onclick="apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
-          </td>
-        </tr>`).join('')}</tbody>
-      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">${busca?'Nenhum item encontrado para essa busca.':'Nenhum item cadastrado ainda.'}</div>`}
+        <tbody>${grupos.map(([chave,g])=>{
+          const aberto=_estoqueGruposAbertos.has(chave);
+          const linhasGrupo=estoqueItens.filter(i=>_estoqueChave(i)===chave).sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
+          return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_estoqueToggleGrupo('${esc(_escJs(chave))}')">
+            <td style="padding:8px;font-weight:600;"><i class="fa-solid fa-chevron-${aberto?'down':'right'}" style="width:12px;color:var(--text-muted);margin-right:8px;font-size:11px;"></i>${esc(chave)}</td>
+            <td style="padding:8px;text-align:center;font-weight:600;">${g.qtdEstoque}</td>
+            <td style="padding:4px;text-align:right;" onclick="event.stopPropagation();">
+              <button class="btn btn-xs btn-outline" onclick="abrirModalRenomearGrupo('${esc(_escJs(g.item))}','${esc(_escJs(g.tamanho))}','${esc(_escJs(g.cor))}')" title="Renomear / mesclar com outro grupo"><i class="fa-solid fa-pen"></i></button>
+            </td>
+          </tr>
+          ${aberto?`<tr><td colspan="3" style="padding:0;background:var(--surface-2);">
+            <table style="width:100%;font-size:12px;border-collapse:collapse;">
+              <thead><tr style="color:var(--text-muted);"><th style="text-align:left;padding:6px 10px 6px 30px;font-weight:400;">Entrada</th><th style="text-align:left;padding:6px;font-weight:400;">Situação</th><th style="text-align:center;padding:6px;font-weight:400;">Qtd.</th><th style="text-align:right;padding:6px;font-weight:400;">Valor unit.</th><th style="width:110px;"></th></tr></thead>
+              <tbody>${linhasGrupo.map(i=>`<tr style="border-top:1px solid var(--border);">
+                <td style="padding:6px 10px 6px 30px;">${fmtDate(i.dataEntrada)}</td>
+                <td style="padding:6px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
+                <td style="padding:6px;text-align:center;">${+i.qtd||1}</td>
+                <td style="padding:6px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
+                <td style="padding:6px;white-space:nowrap;text-align:right;">
+                  <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();abrirModalEditarEstoqueItem('${esc(i.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                  ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="event.stopPropagation();marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
+                  <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+                </td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </td></tr>`:''}`;
+        }).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">${busca?'Nenhum item encontrado para essa busca.':'Nenhum item cadastrado ainda. Clique em "Adicionar ao estoque" pra começar.'}</div>`}
     </div>
   </div>`;
+}
+function abrirModalAdicionarEstoque(){
+  document.getElementById('generico-titulo').textContent='Adicionar ao Estoque';
+  document.getElementById('generico-body').innerHTML=_estoqueFormModalHTML();
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _estoqueMostrarAbaForm(aba){
+  _estoqueAbaForm=aba;
+  const body=document.getElementById('generico-body');
+  if(body)body.innerHTML=_estoqueFormModalHTML();
+}
+function _estoqueFormModalHTML(){
+  const h=hoje();
+  return`
+  <div class="tabs-bar" style="padding:0;margin-bottom:14px;">
+    <button class="tab-btn${_estoqueAbaForm==='unico'?' active':''}" onclick="_estoqueMostrarAbaForm('unico')"><i class="fa-solid fa-plus"></i> Um item</button>
+    <button class="tab-btn${_estoqueAbaForm==='colar'?' active':''}" onclick="_estoqueMostrarAbaForm('colar')"><i class="fa-solid fa-paste"></i> Colar vários</button>
+  </div>
+  ${_estoqueAbaForm==='unico'?`
+  <div class="form-grid">
+    <div class="form-group"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol" onchange="_estoqueAutoPreco()"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-row">
+      <div class="form-group"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen" onchange="_estoqueAutoPreco()"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <div class="form-group"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
+      <div class="form-group"><label>Valor unit. (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><label class="checkbox-label"><input type="checkbox" id="est-usado" onchange="_estoqueAutoPreco()"> Usado (desconta 40%)</label></div>
+    </div>
+  </div>
+  <button class="btn btn-rose btn-sm" style="margin-top:8px;" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+  `:`
+  <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code> (tamanho no nome é detectado sozinho). O valor de cada linha puxa do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
+  <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 jogos de casal" oninput="_estoquePreviewColar()"></textarea>
+  <div class="form-row" style="margin-top:8px;">
+    <div class="form-group"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
+    <div class="form-group"><label>Cor (todo o lote)</label><input id="est-colar-cor" class="input" list="est-cor-list" placeholder="Ex: Branco" oninput="_estoquePreviewColar()"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Valor manual — se não achar no catálogo (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10,onchange:'_estoquePreviewColar()'})}</div>
+    <div class="form-group" style="display:flex;align-items:flex-end;"><label class="checkbox-label"><input type="checkbox" id="est-colar-usado" onchange="_estoquePreviewColar()"> Usado (desconta 40%)</label></div>
+  </div>
+  <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
+  <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
+  `}`;
 }
 const ESTOQUE_TAMANHOS_REGEX=/\b(casal|solteiro|queen|king)\b/i;
 // Detecta tamanho embutido no nome digitado (ex: "2 jogos de casal") e separa em
@@ -4862,7 +4897,7 @@ function _estoqueImportarColados(){
     const valor=_estoqueLinhaValor(l.nome,l.tamanho,valorManual,usado);
     estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:l.tamanho,cor,qtd:l.qtd,dataEntrada,dataSaida:null,valor,usado});
   });
-  saveAll();renderEstoque();
+  saveAll();closeModal('modal-generico');renderEstoque();
   showToast(`${itens.length} item(ns) lançado(s) no estoque!`,'sage');
 }
 function adicionarEstoqueItem(){
@@ -4875,7 +4910,7 @@ function adicionarEstoqueItem(){
   const usado=document.getElementById('est-usado')?.checked||false;
   if(!item){showToast('Informe o nome do item.','peach');return;}
   estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor,usado});
-  saveAll();renderEstoque();
+  saveAll();closeModal('modal-generico');renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
 }
 function abrirModalRenomearGrupo(item,tamanho,cor){
