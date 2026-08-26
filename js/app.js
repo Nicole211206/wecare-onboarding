@@ -4752,10 +4752,11 @@ function renderEstoque(){
       <label class="checkbox-label" style="margin:8px 0;display:inline-flex;"><input type="checkbox" id="est-usado" onchange="_estoqueAutoPreco()"> Usado (desconta 40% do valor)</label><br>
       <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
       `:`
-      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>. O valor de cada linha puxa sozinho do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
-      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 cobertores" oninput="_estoquePreviewColar()"></textarea>
+      <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code> (tamanho no nome é detectado sozinho). O valor de cada linha puxa do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
+      <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 jogos de casal" oninput="_estoquePreviewColar()"></textarea>
       <div class="form-row" style="margin-top:8px;flex-wrap:wrap;gap:12px;align-items:flex-end;">
         <div class="form-group" style="min-width:140px;"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
+        <div class="form-group" style="min-width:120px;"><label>Cor (todo o lote)</label><input id="est-colar-cor" class="input" list="est-cor-list" placeholder="Ex: Branco" oninput="_estoquePreviewColar()"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
         <div class="form-group" style="min-width:150px;"><label>Valor manual — se não achar no catálogo (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10,onchange:'_estoquePreviewColar()'})}</div>
         <label class="checkbox-label" style="margin-bottom:8px;"><input type="checkbox" id="est-colar-usado" onchange="_estoquePreviewColar()"> Usado (desconta 40%)</label>
       </div>
@@ -4781,6 +4782,7 @@ function renderEstoque(){
           <td style="padding:8px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
           <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
           <td style="padding:8px;white-space:nowrap;text-align:right;">
+            <button class="btn btn-xs btn-outline" onclick="abrirModalEditarEstoqueItem('${esc(i.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
             ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
             <button class="btn btn-xs btn-danger" onclick="apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
           </td>
@@ -4789,14 +4791,27 @@ function renderEstoque(){
     </div>
   </div>`;
 }
+const ESTOQUE_TAMANHOS_REGEX=/\b(casal|solteiro|queen|king)\b/i;
+// Detecta tamanho embutido no nome digitado (ex: "2 jogos de casal") e separa em
+// campo próprio, tirando a sobra "de" que fica pendurada (achado em 2026-08-21:
+// itens colados em lista viravam nome bagunçado tipo "jogos de casal" inteiro,
+// sem tamanho separado, porque o parser antigo não tentava reconhecer isso).
 function _estoqueParseColados(texto){
   return(texto||'').split('\n').map(l=>l.trim()).filter(Boolean).map(linha=>{
     const m=/^(\d+)\s*[xX×]?\s*(.+)$/.exec(linha);
-    return m?{qtd:parseInt(m[1])||1,nome:m[2].trim()}:{qtd:1,nome:linha};
+    let qtd=1,nome=linha;
+    if(m){qtd=parseInt(m[1])||1;nome=m[2].trim();}
+    let tamanho='';
+    const tm=ESTOQUE_TAMANHOS_REGEX.exec(nome);
+    if(tm){
+      tamanho=tm[1][0].toUpperCase()+tm[1].slice(1).toLowerCase();
+      nome=nome.replace(ESTOQUE_TAMANHOS_REGEX,'').replace(/\bde\b\s*$/i,'').replace(/\s{2,}/g,' ').trim();
+    }
+    return{qtd,nome,tamanho};
   }).filter(l=>l.nome);
 }
-function _estoqueLinhaValor(nome,valorManual,usado){
-  const preco=_estoquePrecoCatalogo(nome,'');
+function _estoqueLinhaValor(nome,tamanho,valorManual,usado){
+  const preco=_estoquePrecoCatalogo(nome,tamanho);
   const base=preco!=null?preco:(+valorManual||0);
   return usado?+(base*0.6).toFixed(2):base;
 }
@@ -4810,6 +4825,7 @@ function _estoquePreviewColar(){
   if(!itens.length){prevEl.innerHTML='';return;}
   const valorManual=document.getElementById('est-colar-valor')?.value||0;
   const usado=document.getElementById('est-colar-usado')?.checked;
+  const cor=document.getElementById('est-colar-cor')?.value.trim()||'';
   const contagemNome={};
   itens.forEach(l=>{contagemNome[l.nome.toLowerCase()]=(contagemNome[l.nome.toLowerCase()]||0)+1;});
   const totalUnidades=itens.reduce((s,l)=>s+l.qtd,0);
@@ -4817,9 +4833,9 @@ function _estoquePreviewColar(){
     <ul style="margin:0;padding-left:18px;">
     ${itens.map(l=>{
       const repetido=contagemNome[l.nome.toLowerCase()]>1;
-      const achouCatalogo=_estoquePrecoCatalogo(l.nome,'')!=null;
-      const valor=_estoqueLinhaValor(l.nome,valorManual,usado);
-      return`<li>${l.qtd}× ${esc(l.nome)} — <strong>${fmtMoeda(valor)}</strong>/un. ${achouCatalogo?'<span class="text-muted">(do catálogo)</span>':'<span class="text-muted">(valor manual)</span>'}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
+      const achouCatalogo=_estoquePrecoCatalogo(l.nome,l.tamanho)!=null;
+      const valor=_estoqueLinhaValor(l.nome,l.tamanho,valorManual,usado);
+      return`<li>${l.qtd}× ${esc(l.nome)}${l.tamanho?` <span class="tag tag-lav" style="font-size:10px;">${esc(l.tamanho)}</span>`:''}${cor?` <span class="tag" style="font-size:10px;">${esc(cor)}</span>`:''} — <strong>${fmtMoeda(valor)}</strong>/un. ${achouCatalogo?'<span class="text-muted">(do catálogo)</span>':'<span class="text-muted">(valor manual)</span>'}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
     }).join('')}
     </ul>`;
 }
@@ -4830,9 +4846,10 @@ function _estoqueImportarColados(){
   const dataEntrada=document.getElementById('est-colar-entrada').value||hoje();
   const valorManual=document.getElementById('est-colar-valor')?.value||0;
   const usado=document.getElementById('est-colar-usado')?.checked||false;
+  const cor=document.getElementById('est-colar-cor')?.value.trim()||'';
   itens.forEach(l=>{
-    const valor=_estoqueLinhaValor(l.nome,valorManual,usado);
-    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:'',cor:'',qtd:l.qtd,dataEntrada,dataSaida:null,valor,usado});
+    const valor=_estoqueLinhaValor(l.nome,l.tamanho,valorManual,usado);
+    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:l.tamanho,cor,qtd:l.qtd,dataEntrada,dataSaida:null,valor,usado});
   });
   saveAll();renderEstoque();
   showToast(`${itens.length} item(ns) lançado(s) no estoque!`,'sage');
@@ -4849,6 +4866,33 @@ function adicionarEstoqueItem(){
   estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor,usado});
   saveAll();renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
+}
+function abrirModalEditarEstoqueItem(id){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  document.getElementById('generico-titulo').textContent='Editar Item do Estoque';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Item</label><input id="este-item" class="input" list="este-item-list" value="${esc(it.item)}"><datalist id="este-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Tamanho</label><input id="este-tamanho" class="input" list="este-tamanho-list" value="${esc(it.tamanho||'')}"><datalist id="este-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Cor</label><input id="este-cor" class="input" list="este-cor-edit-list" value="${esc(it.cor||'')}"><datalist id="este-cor-edit-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Qtd.</label>${numInput({id:'este-qtd',value:it.qtd||1,min:1})}</div>
+    <div class="form-group"><label>Valor unit. (R$)</label>${numInput({id:'este-valor',value:it.valor||0,min:0,step:10})}</div>
+    <div class="form-group"><label class="checkbox-label" style="display:inline-flex;"><input type="checkbox" id="este-usado"${it.usado?' checked':''}> Usado</label></div>
+    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarEdicaoEstoqueItem('${esc(id)}')"><i class="fa-solid fa-save"></i> Salvar</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarEdicaoEstoqueItem(id){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  const item=document.getElementById('este-item').value.trim();
+  if(!item){showToast('Informe o nome do item.','peach');return;}
+  it.item=item;
+  it.tamanho=document.getElementById('este-tamanho').value.trim();
+  it.cor=document.getElementById('este-cor').value.trim();
+  it.qtd=+document.getElementById('este-qtd').value||1;
+  it.valor=+document.getElementById('este-valor').value||0;
+  it.usado=document.getElementById('este-usado').checked;
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast('Item atualizado.','sage');
 }
 function marcarSaidaEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
