@@ -4421,8 +4421,9 @@ function renderProprietarios(){
             <td style="padding:8px;">${esc(p.email||'—')}</td>
             <td style="padding:8px;text-align:center;">${qtdImoveis}</td>
             <td style="padding:8px;white-space:nowrap;text-align:right;" onclick="event.stopPropagation();">
-              <button class="btn btn-xs btn-outline" onclick="editarProprietario(${idx})"><i class="fa-solid fa-pen"></i></button>
-              <button class="btn btn-xs btn-danger" onclick="apagarProprietario(${idx})"><i class="fa-solid fa-trash"></i></button>
+              <button class="btn btn-xs btn-sage" onclick="abrirDetalheProprietario('${esc(p.id)}')" title="Ver imóveis e compras compartilhadas"><i class="fa-solid fa-eye"></i> Ver imóveis</button>
+              <button class="btn btn-xs btn-outline" onclick="editarProprietario(${idx})" title="Editar dados"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="apagarProprietario(${idx})" title="Apagar"><i class="fa-solid fa-trash"></i></button>
             </td>
           </tr>`;
         }).join('')}</tbody>
@@ -4530,34 +4531,55 @@ function abrirDetalheProprietario(id){
 }
 
 // ═══════════════════ COMPRA/GASTO COMPARTILHADO ═══════════════════
+function _htmlBlocoImovelCompraCompartilhada(im){
+  const pendentes=_rowsComprasRelevantes(im).filter(x=>!x.comprado&&!x.loteId);
+  const propNome=proprietarios.find(p=>p.id===im.proprietarioId)?.nome||'sem proprietário';
+  return`<div class="cc-imovel-bloco" data-imovel-id="${esc(im.id)}" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <label class="checkbox-label" style="font-weight:700;"><input type="checkbox" class="cc-imovel-check" data-imovel-id="${esc(im.id)}" checked> ${esc(im.nome)} <span class="text-muted" style="font-weight:400;font-size:11px;">(${esc(propNome)})</span></label>
+      <button type="button" class="btn btn-xs btn-outline" onclick="this.closest('.cc-imovel-bloco').remove()" title="Remover da divisão"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="margin-top:6px;margin-left:22px;max-height:160px;overflow:auto;">
+      ${pendentes.length?pendentes.map(x=>`<label class="checkbox-label" style="display:flex;font-size:12.5px;padding:2px 0;"><input type="checkbox" class="cc-item-check" data-imovel-id="${esc(im.id)}" data-subkey="${esc(x.subKey)}"> ${esc(x.label)} <span class="text-muted" style="margin-left:4px;">(${esc(x.cat)})</span></label>`).join(''):'<div class="hint">Nenhum item pendente nesse imóvel.</div>'}
+    </div>
+  </div>`;
+}
 function abrirModalCompraCompartilhada(proprietarioId){
-  const imoveisDele=imoveis.filter(im=>im.proprietarioId===proprietarioId);
+  const imoveisIniciais=imoveis.filter(im=>im.proprietarioId===proprietarioId);
+  const idsIniciais=new Set(imoveisIniciais.map(im=>im.id));
+  const outrosImoveis=imoveis.filter(im=>!idsIniciais.has(im.id));
   document.getElementById('generico-titulo').textContent='Nova Compra Compartilhada';
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
-    <div class="hint" style="margin-bottom:8px;">Marque em quais imóveis entra a divisão e, dentro de cada um, quais itens desse imóvel foram comprados nessa compra. O valor total é dividido igualmente pelo número de imóveis marcados — reflete no financeiro e na lista de Compras de cada imóvel.</div>
+    <div class="hint" style="margin-bottom:8px;">Marque em quais imóveis entra a divisão e, dentro de cada um, quais itens desse imóvel foram comprados nessa compra. Dá pra incluir imóvel de outro proprietário também (ex: casal com cadastros separados, compra junta). Valor total sempre dividido igual entre os imóveis marcados.</div>
     <div class="form-group"><label>Descrição</label><input id="cc-descricao" class="input" placeholder="Ex: Setup Belas Cintras 101+102"></div>
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="cc-data" type="date" class="input" value="${hoje()}"></div>
       <div class="form-group"><label>Valor total do lote (R$)</label>${numInput({id:'cc-valor',value:0,min:0,step:10})}</div>
     </div>
+    <div class="form-group">
+      <label>Incluir imóvel de outro proprietário</label>
+      <select id="cc-add-imovel" class="input" onchange="_ccAdicionarImovelBloco(this)">
+        <option value="">— selecionar —</option>
+        ${outrosImoveis.map(im=>`<option value="${esc(im.id)}">${esc(im.nome)} (${esc(proprietarios.find(p=>p.id===im.proprietarioId)?.nome||'sem proprietário')})</option>`).join('')}
+      </select>
+    </div>
     <div id="cc-imoveis-wrap" style="margin-top:8px;">
-      ${imoveisDele.map(im=>{
-        const pendentes=_rowsComprasRelevantes(im).filter(x=>!x.comprado&&!x.loteId);
-        return`<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
-          <label class="checkbox-label" style="font-weight:700;"><input type="checkbox" class="cc-imovel-check" data-imovel-id="${esc(im.id)}" checked> ${esc(im.nome)}</label>
-          <div style="margin-top:6px;margin-left:22px;max-height:160px;overflow:auto;">
-            ${pendentes.length?pendentes.map(x=>`<label class="checkbox-label" style="display:flex;font-size:12.5px;padding:2px 0;"><input type="checkbox" class="cc-item-check" data-imovel-id="${esc(im.id)}" data-subkey="${esc(x.subKey)}"> ${esc(x.label)} <span class="text-muted" style="margin-left:4px;">(${esc(x.cat)})</span></label>`).join(''):'<div class="hint">Nenhum item pendente nesse imóvel.</div>'}
-          </div>
-        </div>`;
-      }).join('')}
+      ${imoveisIniciais.map(_htmlBlocoImovelCompraCompartilhada).join('')}
     </div>
     <div style="margin-top:8px;display:flex;gap:8px;">
-      <button class="btn btn-sm btn-sage" onclick="_confirmarCompraCompartilhada('${esc(proprietarioId)}')"><i class="fa-solid fa-check"></i> Confirmar e dividir</button>
+      <button class="btn btn-sm btn-sage" onclick="_confirmarCompraCompartilhada()"><i class="fa-solid fa-check"></i> Confirmar e dividir</button>
       <button class="btn btn-sm btn-outline" onclick="abrirDetalheProprietario('${esc(proprietarioId)}')"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
     </div>
   </div>`;
 }
-function _confirmarCompraCompartilhada(proprietarioId){
+function _ccAdicionarImovelBloco(sel){
+  const id=sel.value;if(!id)return;
+  const im=getImovel(id);if(!im)return;
+  if(document.querySelector(`.cc-imovel-bloco[data-imovel-id="${id}"]`)){sel.value='';return;}
+  document.getElementById('cc-imoveis-wrap').insertAdjacentHTML('beforeend',_htmlBlocoImovelCompraCompartilhada(im));
+  sel.value='';
+}
+function _confirmarCompraCompartilhada(){
   const descricao=document.getElementById('cc-descricao').value.trim()||'Compra compartilhada';
   const data=document.getElementById('cc-data').value||hoje();
   const valorTotal=+document.getElementById('cc-valor').value||0;
