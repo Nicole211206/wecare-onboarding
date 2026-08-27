@@ -284,6 +284,10 @@
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-list-check" style="color:var(--sage)"></i> Modelos de Negócio (checklist)</span></div>
           <div class="card-body" id="config-modelos-negocio"></div>
         </div>
+        <div class="card" style="grid-column:1/-1;">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-truck" style="color:var(--gold)"></i> Fornecedores de Enxoval Alugado (modalidades)</span></div>
+          <div class="card-body" id="config-modalidades-enxoval"></div>
+        </div>
       </div>
     </div>
 
@@ -628,11 +632,7 @@
         <option value="sim">Sim</option>
       </select></div>
     <div class="form-group" style="margin-bottom:0;"><label class="form-label">Aparece em quais modalidades de enxoval? (deixe tudo desmarcado para item obrigatório, sempre aparece)</label>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:4px;">
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-comprado"> Comprado</label>
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-flashee"> Alugado — Flashee</label>
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-intense"> Alugado — Intense</label>
-      </div>
+      <div id="it-modal-checks" style="display:flex;gap:14px;flex-wrap:wrap;padding-top:4px;"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="closeModal('modal-item')">Cancelar</button>
@@ -685,6 +685,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=94"></script>
+<script src="js/app.js?v=95"></script>
 </body>
 </html>

@@ -192,6 +192,14 @@ class Proprietario(Base):
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ModalidadeEnxoval(Base):
+    __tablename__ = "modalidades_enxoval"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    nome: Mapped[str | None] = mapped_column(String)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Orcamento(Base):
     __tablename__ = "orcamentos"
 

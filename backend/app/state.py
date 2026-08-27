@@ -229,6 +229,10 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             {"id": p.id, "nome": p.nome, "telefone": p.telefone, "email": p.email, "obs": p.obs}
             for p in db.scalars(select(models.Proprietario).order_by(models.Proprietario.ordem))
         ],
+        "wc_modalidades_enxoval": [
+            {"id": m.id, "nome": m.nome}
+            for m in db.scalars(select(models.ModalidadeEnxoval).order_by(models.ModalidadeEnxoval.ordem))
+        ],
         "wc_orcamentos": [
             {
                 "id": o.id,
@@ -457,6 +461,11 @@ def put_state(db: Session, state: dict) -> None:
                     email=p.get("email"), obs=p.get("obs"), ordem=idx,
                 )
             )
+
+    if "wc_modalidades_enxoval" in state:
+        db.execute(delete(models.ModalidadeEnxoval))
+        for idx, m in enumerate(state["wc_modalidades_enxoval"] or []):
+            db.add(models.ModalidadeEnxoval(id=m["id"], nome=m.get("nome"), ordem=idx))
 
     if "wc_templates_msg" in state:
         db.execute(delete(models.TemplateMsg))

@@ -13,6 +13,12 @@ let _editOrcamentoId=null, _orcItensSoltosTemp=[];
 // im.checklistEtapas — a partir daí o imóvel tem sua própria cópia editável
 // (excluir/remanejar/adicionar etapa), sem afetar o modelo original nem outros imóveis.
 let MODELOS_NEGOCIO=[];
+// Fornecedores de enxoval alugado (além de "Comprado", que é fixo/embutido) — cada
+// {id,nome}. Alimenta: checkboxes de modalidade no catálogo de Compras, o seletor de
+// Fornecedor na aba Contrato (Enxoval), e a leitura de qual modalidade um imóvel está em
+// (modalidadeEnxovalAtual, casando pelo nome exato do fornecedor escolhido).
+let MODALIDADES_ENXOVAL=[];
+function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome])];}
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -117,6 +123,10 @@ function _migrarProprietarios(){
     mudou=true;
   });
   if(mudou)saveAll();
+}
+function _seedModalidadesEnxoval(){
+  if(MODALIDADES_ENXOVAL.length)return;
+  MODALIDADES_ENXOVAL=[{id:'flashee',nome:'Flashee'},{id:'intense',nome:'Intense Clean'}];
 }
 function _migrarCatalogoItens(){
   let mudou=false;
@@ -477,11 +487,15 @@ function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes
   if(base==='cada2hospede')return q*Math.ceil((+hospedes||1)/2);
   return q;
 }
-// 'comprado' | 'flashee' | 'intense' — deriva a modalidade ativa de enxoval do imóvel
+// 'comprado' | id de MODALIDADES_ENXOVAL (ex: 'flashee'/'intense'/novo) — deriva a
+// modalidade ativa de enxoval do imóvel casando o fornecedor salvo (nome) com o catálogo.
 function modalidadeEnxovalAtual(im){
   const def=im.defEnxoval||{};
   if((def.tipo||'comprado')!=='aluguel')return'comprado';
-  return(def.fornecedor||'').toLowerCase().includes('intense')?'intense':'flashee';
+  const forn=(def.fornecedor||'').trim().toLowerCase();
+  const match=MODALIDADES_ENXOVAL.find(m=>m.nome.toLowerCase()===forn);
+  if(match)return match.id;
+  return forn.includes('intense')?'intense':'flashee'; // fallback p/ dado antigo fora do catálogo
 }
 // item.modalidades ausente = obrigatório, sempre aparece. Presente = só aparece nas modalidades listadas.
 function itemValidoParaModalidade(item,modalidade){
@@ -547,7 +561,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -570,6 +584,7 @@ function saveAll(){
   localStorage.setItem('wc_camas_custom',JSON.stringify(CAMAS_TIPOS_CUSTOM));
   localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
   localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
+  localStorage.setItem('wc_modalidades_enxoval',JSON.stringify(MODALIDADES_ENXOVAL));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -597,7 +612,9 @@ function loadAll(){
   v=g('wc_camas_custom');if(Array.isArray(v))CAMAS_TIPOS_CUSTOM=v;
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
   v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
+  v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
   _seedModelosNegocio();
+  _seedModalidadesEnxoval();
   _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
@@ -1733,8 +1750,7 @@ function renderAbaDefinicoes(im){
     <label>Fornecedor</label>
     <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
     <select id="def-enxoval-forn-select" class="input" onchange="_recalcEnxovalValores()" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
-      <option value="Flashee"${im.defEnxoval?.fornecedor==='Flashee'?' selected':''}>Flashee</option>
-      <option value="Intense Clean"${im.defEnxoval?.fornecedor==='Intense Clean'?' selected':''}>Intense Clean</option>
+      ${MODALIDADES_ENXOVAL.map(m=>`<option value="${esc(m.nome)}"${im.defEnxoval?.fornecedor===m.nome?' selected':''}>${esc(m.nome)}</option>`).join('')}
     </select>
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
@@ -2816,6 +2832,10 @@ function renderAbaGastos(im){
     </div>`);
 
   return`<div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-sm btn-outline" onclick="gerarPDFGastos()"><i class="fa-solid fa-file-pdf"></i> Exportar PDF</button>
+      <button class="btn btn-sm btn-outline" onclick="exportarGastosCSV()"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
+    </div>
     ${setupHtml}
     ${comprasHtml}
     ${manutHtml}
@@ -2823,6 +2843,105 @@ function renderAbaGastos(im){
     ${gastosAvulsosHtml}
     ${resumoHtml}
   </div>`;
+}
+// Achata todas as fontes de gasto do imovel (setup, compras avulsas, lotes, manutencoes,
+// itens extras, gastos avulsos) numa lista so, pra usar tanto no PDF quanto no Excel/CSV
+// de Gastos sem duplicar a logica de leitura de cada campo.
+function _linhasRelatorioGastos(im){
+  const linhas=[];
+  const ops=im.ops||{};
+  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'};
+  ['fotos','limpeza','vistoria'].forEach(k=>{
+    const custo=+ops[k]?.custo||0;
+    if(!custo)return;
+    linhas.push({categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
+  });
+  (im.eventosExtras||[]).filter(e=>e.gastoSetup).forEach(ev=>{
+    const custo=+ev.custo||0;
+    linhas.push({categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
+  });
+  _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
+    linhas.push({categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
+  });
+  (im.comprasLotes||[]).forEach(l=>{
+    linhas.push({categoria:'Compras (lote)',item:l.local||'Compra em lote',previsto:l.valorTotal,pago:l.valorTotal});
+  });
+  (im.manutencoes||[]).forEach(m=>{
+    const previsto=+(m.valor??m.custo??0);
+    const label=m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||'Manutenção');
+    linhas.push({categoria:'Manutenção',item:label,previsto,pago:_valorPagoOuPrevisto(m.pago,previsto,m.valorPago)});
+  });
+  (im.itensExtras||[]).forEach(x=>{
+    const previsto=(+x.precoUn||0)*(+x.qtd||1);
+    linhas.push({categoria:'Item Extra',item:x.nome||'Item extra',previsto,pago:_valorPagoOuPrevisto(x.pago,previsto,x.valorPago)});
+  });
+  (im.gastosAvulsos||[]).forEach(g=>{
+    const previsto=+g.valor||0;
+    linhas.push({categoria:g.categoria?`Gasto Avulso — ${g.categoria}`:'Gasto Avulso',item:g.descricao||'Gasto avulso',previsto,pago:_valorPagoOuPrevisto(g.pago,previsto,g.valorPago)});
+  });
+  return linhas;
+}
+async function gerarPDFGastos(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const linhas=_linhasRelatorioGastos(im);
+  const r=_calcResumoFinanceiro(im);
+  const win=window.open('','_blank');
+  const headerHtml=await _pdfHeaderHtml(im,'Relatório de Gastos');
+  const linhasHtml=linhas.map(l=>`<tr>
+    <td style="padding:6px 10px;">${esc(l.categoria)}</td>
+    <td style="padding:6px 10px;">${esc(l.item)}</td>
+    <td style="text-align:right;padding:6px 10px;color:#888;">${fmtMoeda(l.previsto)}</td>
+    <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.pago)}</td>
+  </tr>`).join('');
+  win.document.write(`<html><head><meta charset="utf-8"><title>Gastos — ${esc(im.nome)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px;}
+    th{background:#132030;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    tr:nth-child(even){background:#fafafa;}
+    td{border-bottom:1px solid #EFE7D6;vertical-align:middle;}
+    .summary{background:#132030;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;display:flex;gap:24px;}
+    .summary div{flex:1;}
+    .summary .lbl{font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;}
+    .summary .val{font-size:18px;font-weight:800;margin-top:2px;}
+    @media print{body{padding:16px;}@page{margin:1cm;}}
+  </style></head><body>
+  ${headerHtml}
+  <div class="summary">
+    <div><div class="lbl">Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
+    <div><div class="lbl">Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
+    <div><div class="lbl">Margem</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
+  </div>
+  <div style="height:16px;"></div>
+  <table>
+    <thead><tr><th>Categoria</th><th>Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
+    <tbody>${linhasHtml||'<tr><td colspan="4" style="padding:16px;text-align:center;color:#888;">Nenhum gasto registrado.</td></tr>'}</tbody>
+  </table>
+  </body></html>`);
+  win.document.close();win.print();
+}
+function exportarGastosCSV(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const linhas=_linhasRelatorioGastos(im);
+  const r=_calcResumoFinanceiro(im);
+  const fmtNum=v=>(+v||0).toFixed(2).replace('.',',');
+  const csvEsc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const linhasCsv=[
+    ['Categoria','Item','Previsto (R$)','Pago (R$)'].map(csvEsc).join(';'),
+    ...linhas.map(l=>[l.categoria,l.item,fmtNum(l.previsto),fmtNum(l.pago)].map(csvEsc).join(';')),
+    '',
+    [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
+    [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
+    [csvEsc('Margem'),'','',csvEsc(fmtNum(r.margem))].join(';'),
+  ];
+  // BOM no início — sem isso o Excel abre acentuação (ç, ã, é) quebrada num CSV UTF-8.
+  const blob=new Blob(['﻿'+linhasCsv.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`gastos_${(im.nome||'imovel').replace(/[^a-z0-9]+/gi,'_').toLowerCase()}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function _onGastoSetupPago(cb,key){
@@ -5451,7 +5570,7 @@ function renderConfig(){
   if(!ci)return;
   const baseOpts=QTD_RULE_BASES;
   const baseLabels=QTD_RULE_LABELS;
-  const modalOpts=[['comprado','Comprado'],['flashee','Flashee'],['intense','Intense']];
+  const modalOpts=_opcoesModalidades();
   ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
     <thead><tr style="border-bottom:2px solid var(--border);">
       <th style="text-align:left;padding:6px 4px;">Item</th>
@@ -5466,7 +5585,7 @@ function renderConfig(){
       const base=item.qtdRule.slice(dash+1);
       const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br>${esc(item.nome)}</td>
+        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;"></td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
         <td style="padding:5px 4px;">
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
@@ -5598,6 +5717,7 @@ function renderConfig(){
   _renderConfigVistoriaCampos();
   _renderConfigCamasCustom();
   _renderConfigModelosNegocio();
+  _renderConfigModalidadesEnxoval();
 }
 function _renderConfigLimpezaCheckout(){
   const el=document.getElementById('config-precos-checkout');
@@ -5910,12 +6030,66 @@ function _adicionarEtapaModelo(mi){
   m.etapas.push({id:'etp_'+uid()+uid(),texto});
   saveAll();_renderConfigModelosNegocio();
 }
+
+// ═══════════════════ FORNECEDORES DE ENXOVAL ALUGADO (MODALIDADES) ═══════════════════
+function _renderConfigModalidadesEnxoval(){
+  const el=document.getElementById('config-modalidades-enxoval');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada linha aqui é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato) e como modalidade pra marcar quais itens de Compras se aplicam a ele.</div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:10px;">
+      <thead><tr style="background:var(--surface-2);"><th style="text-align:left;padding:7px 6px;">Fornecedor</th><th style="width:36px;"></th></tr></thead>
+      <tbody>${MODALIDADES_ENXOVAL.map((m,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 6px;"><input class="input" value="${esc(m.nome)}" style="font-size:12.5px;padding:4px 8px;" onchange="_renomearModalidadeEnxoval(${i},this.value)"></td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_apagarModalidadeEnxoval(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <div style="display:flex;gap:6px;">
+      <input class="input" id="nova-modalidade-nome" placeholder="Nome do novo fornecedor (ex: Lavanderia Prime)" style="flex:1;max-width:320px;" onkeydown="if(event.key==='Enter'){_adicionarModalidadeEnxoval();event.preventDefault();}">
+      <button class="btn btn-sm btn-sage" onclick="_adicionarModalidadeEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>`;
+}
+function _adicionarModalidadeEnxoval(){
+  const inp=document.getElementById('nova-modalidade-nome');
+  const nome=(inp?.value||'').trim();
+  if(!nome){showToast('Informe o nome do fornecedor.','peach');return;}
+  if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
+  const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
+  MODALIDADES_ENXOVAL.push({id,nome});
+  saveAll();_renderConfigModalidadesEnxoval();
+  showToast('Fornecedor adicionado!','sage');
+}
+function _renomearModalidadeEnxoval(i,nome){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  m.nome=nome.trim()||m.nome;
+  saveAll();_renderConfigModalidadesEnxoval();
+}
+function _apagarModalidadeEnxoval(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  if(!confirm(`Apagar "${m.nome}"? Itens já marcados com essa modalidade deixam de aparecer nela (a marcação some, mas o item continua existindo).`))return;
+  MODALIDADES_ENXOVAL.splice(i,1);
+  saveAll();_renderConfigModalidadesEnxoval();
+  showToast('Removido.','peach');
+}
 function _lerModalidadesConfig(i){
   const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
   return modalidades.length?modalidades:undefined;
 }
+// Renomear um item precisa migrar a chave em PRECOS_ENXOVAL junto (ela é indexada pelo
+// nome do item, não por índice) — senão o preço por tamanho de cama fica "órfão" no nome
+// antigo e o item renomeado perde o preço.
+function _renomearItemCompra(item,novoNome){
+  const nomeAntigo=item.nome;
+  if(!novoNome||novoNome===nomeAntigo)return;
+  item.nome=novoNome;
+  if(PRECOS_ENXOVAL[nomeAntigo]){
+    PRECOS_ENXOVAL[novoNome]=PRECOS_ENXOVAL[nomeAntigo];
+    delete PRECOS_ENXOVAL[nomeAntigo];
+  }
+}
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
+  _renomearItemCompra(item,document.getElementById(`ci-nome-${i}`)?.value.trim());
   const n=document.getElementById(`ci-n-${i}`)?.value||'1';
   const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
   item.qtdRule=`${n}-${base}`;
@@ -5923,11 +6097,12 @@ function salvarRegra(i){
   saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
 }
 function salvarTodasRegras(){
-  ITENS_COMPRAS.forEach((_,i)=>{
+  ITENS_COMPRAS.forEach((item,i)=>{
+    _renomearItemCompra(item,document.getElementById(`ci-nome-${i}`)?.value.trim());
     const n=document.getElementById(`ci-n-${i}`)?.value||'1';
     const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
-    ITENS_COMPRAS[i].qtdRule=`${n}-${base}`;
-    ITENS_COMPRAS[i].modalidades=_lerModalidadesConfig(i);
+    item.qtdRule=`${n}-${base}`;
+    item.modalidades=_lerModalidadesConfig(i);
   });
   saveAll();showToast('Todas as regras salvas!','sage');
 }
@@ -6083,9 +6258,8 @@ function abrirModalItem(){
   document.getElementById('it-preco').value='';
   document.getElementById('it-link').value='';
   document.getElementById('it-enxoval-dep').value='';
-  document.getElementById('it-modal-comprado').checked=false;
-  document.getElementById('it-modal-flashee').checked=false;
-  document.getElementById('it-modal-intense').checked=false;
+  document.getElementById('it-modal-checks').innerHTML=_opcoesModalidades().map(([id,nome])=>
+    `<label class="checkbox-label"><input type="checkbox" class="it-modal-check" data-modal-id="${esc(id)}"> ${esc(nome)}</label>`).join('');
   renderItTipoPreco();
   document.getElementById('modal-item').classList.add('open');
   setTimeout(()=>document.getElementById('it-nome').focus(),100);
@@ -6105,9 +6279,7 @@ function salvarItem(){
   const link=document.getElementById('it-link').value.trim();
   const enxovalDep=document.getElementById('it-enxoval-dep').value==='sim';
   const modalidades=[];
-  if(document.getElementById('it-modal-comprado').checked)modalidades.push('comprado');
-  if(document.getElementById('it-modal-flashee').checked)modalidades.push('flashee');
-  if(document.getElementById('it-modal-intense').checked)modalidades.push('intense');
+  [...document.querySelectorAll('.it-modal-check:checked')].forEach(cb=>modalidades.push(cb.dataset.modalId));
   ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link,modalidades:modalidades.length?modalidades:undefined});
   saveAll();closeModal('modal-item');renderConfig();showToast(`"${nome}" adicionado!`,'sage');
 }

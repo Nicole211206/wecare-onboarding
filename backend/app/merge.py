@@ -155,6 +155,7 @@ LIST_KEYS_ESTRITAS = [
     "wc_camas_custom",
     "wc_modelos_negocio",
     "wc_proprietarios",
+    "wc_modalidades_enxoval",
 ]
 
 
