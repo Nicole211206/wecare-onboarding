@@ -4523,9 +4523,9 @@ function abrirDetalheProprietario(id){
     ${imoveisDele.length?`<div style="margin-bottom:14px;">${imoveisDele.map(im=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="closeModal('modal-generico');showPanel('kanban',document.querySelector('.nav-item[onclick*=kanban]'));abrirDetalhe('${esc(im.id)}');"><strong>${esc(im.nome)}</strong> <span class="tag tag-${im.status==='ativo'?'sage':'gold'}" style="font-size:10px;margin-left:6px;">${esc(im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status))}</span></div>`).join('')}</div>`:`<div class="hint" style="margin-bottom:14px;">Nenhum imóvel vinculado ainda — vincule em Dados de um imóvel.</div>`}
 
     <div class="form-section-title"><i class="fa-solid fa-people-arrows"></i> Compras/Gastos Compartilhados</div>
-    <div class="hint" style="margin-bottom:8px;">Um pagamento só que cobre 2+ imóveis desse proprietário — divide o valor igualmente e marca os itens comprados em cada imóvel.</div>
+    <div class="hint" style="margin-bottom:8px;">Um pagamento só que cobre 2+ imóveis (desse proprietário e/ou de outro, ex: casal com cadastros separados) — divide o valor igualmente e marca os itens comprados em cada imóvel.</div>
     ${lotesCompartilhados.length?`<div style="margin-bottom:10px;">${lotesCompartilhados.map(l=>`<div style="font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--border);">${esc(l.local||'Compra compartilhada')} — ${fmtDate(l.data)} — <strong>${fmtMoeda(l.valorTotal)}</strong> por imóvel (${esc(l.imovelNome)} e outro(s))</div>`).join('')}</div>`:''}
-    ${imoveisDele.length>=2?`<button class="btn btn-sm btn-sage" onclick="abrirModalCompraCompartilhada('${esc(id)}')"><i class="fa-solid fa-plus"></i> Nova Compra Compartilhada</button>`:`<div class="hint">Precisa de pelo menos 2 imóveis vinculados a esse proprietário.</div>`}
+    ${imoveisDele.length>=1?`<button class="btn btn-sm btn-sage" onclick="abrirModalCompraCompartilhada('${esc(id)}')"><i class="fa-solid fa-plus"></i> Nova Compra Compartilhada</button>`:`<div class="hint">Esse proprietário não tem imóvel vinculado ainda.</div>`}
   </div>`;
   document.getElementById('modal-generico').classList.add('open');
 }
