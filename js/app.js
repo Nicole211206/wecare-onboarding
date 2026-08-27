@@ -1176,6 +1176,9 @@ function _coletarDadosAba(aba,im){
   if(aba==='final'){
     im.responsavelCriacao=g('fn-resp-criacao'); im.dataEnvioParaCriacao=g('fn-data-envio');
     im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
+    im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
+    im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
+    im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -3771,6 +3774,15 @@ function renderAbaFinal(im){
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
   <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
+
+  <div class="form-group" style="margin-top:8px;">
+    <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
+  </div>
+  <div class="form-row" id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
+    <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
+    <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+  </div>
+
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
     <button class="btn btn-primary btn-sm" onclick="criarTarefaClaire()">
       <i class="fa-solid fa-circle-plus"></i> Criar tarefa na Claire para <span id="fn-resp-label">${esc(resp)}</span>
@@ -3782,6 +3794,10 @@ function renderAbaFinal(im){
     <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
   </div>`:''}
   </div>`;
+}
+function _toggleAnuncioConjunto(cb){
+  const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
+  if(wrap)wrap.style.display=cb.checked?'':'none';
 }
 function _onRespCriacaoChange(inp){
   const v=inp.value.trim();
