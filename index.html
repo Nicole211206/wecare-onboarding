@@ -68,6 +68,9 @@
       <i class="fa-solid fa-file-invoice-dollar"></i> Orçamentos
     </button>
     <div class="nav-section">Operação</div>
+    <button class="nav-item" onclick="showPanel('proprietarios',this)">
+      <i class="fa-solid fa-user-tie"></i> Proprietários
+    </button>
     <button class="nav-item" onclick="showPanel('vistoria',this)">
       <i class="fa-solid fa-clipboard-list"></i> Vistoria
     </button>
@@ -206,6 +209,11 @@
     <!-- ── FORNECEDORES ── -->
     <div class="panel" id="panel-fornecedores">
       <div id="fornecedores-wrap"></div>
+    </div>
+
+    <!-- ── PROPRIETÁRIOS ── -->
+    <div class="panel" id="panel-proprietarios">
+      <div id="proprietarios-wrap"></div>
     </div>
 
     <!-- ── INFORMAÇÕES ── -->
@@ -677,6 +685,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=91"></script>
+<script src="js/app.js?v=92"></script>
 </body>
 </html>

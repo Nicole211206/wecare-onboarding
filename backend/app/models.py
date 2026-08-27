@@ -181,6 +181,17 @@ class ModeloNegocio(Base):
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class Proprietario(Base):
+    __tablename__ = "proprietarios"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    nome: Mapped[str | None] = mapped_column(String)
+    telefone: Mapped[str | None] = mapped_column(String)
+    email: Mapped[str | None] = mapped_column(String)
+    obs: Mapped[str | None] = mapped_column(String)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Orcamento(Base):
     __tablename__ = "orcamentos"
 

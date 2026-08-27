@@ -1,5 +1,6 @@
 // ═══════════════════ ESTADO ═══════════════════
-let imoveis=[], membros=[], usuarios=[], prestadores=[];
+let imoveis=[], membros=[], usuarios=[], prestadores=[], proprietarios=[];
+let _editProprietarioIdx=null, _novoProprietarioParaImovelId=null;
 let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
@@ -94,6 +95,28 @@ function _seedModelosNegocio(){
       'Finalizado o anúncio, enviar para o proprietário aprovar',
     ].map(etapa)},
   ];
+}
+// Cria registros em `proprietarios[]` a partir dos campos soltos que já existiam em
+// cada imóvel (im.proprietarioNome/Tel/Email) e liga im.proprietarioId — roda toda vez
+// no load, mas só age em imóveis que ainda não têm proprietarioId, então é seguro
+// rodar de novo (idempotente). Casa por nome+telefone pra não duplicar o mesmo dono
+// em 2 registros diferentes quando ele já tem mais de um imóvel cadastrado.
+function _migrarProprietarios(){
+  let mudou=false;
+  imoveis.forEach(im=>{
+    if(im.proprietarioId)return;
+    const nome=(im.proprietarioNome||'').trim();
+    if(!nome)return;
+    const tel=(im.proprietarioTel||'').trim();
+    let prop=proprietarios.find(p=>p.nome===nome&&(p.telefone||'')===tel);
+    if(!prop){
+      prop={id:'prop_'+uid()+uid(),nome,telefone:tel,email:(im.proprietarioEmail||'').trim(),obs:''};
+      proprietarios.push(prop);
+    }
+    im.proprietarioId=prop.id;
+    mudou=true;
+  });
+  if(mudou)saveAll();
 }
 function _migrarCatalogoItens(){
   let mudou=false;
@@ -380,13 +403,14 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',financeiro:'Financeiro',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',financeiro:'Financeiro',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',proprietarios:'Proprietários',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
   if(id==='financeiro')renderFinanceiro();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
+  if(id==='proprietarios')renderProprietarios();
   if(id==='vistoria')renderVistoria();
   if(id==='calendario')renderCalendario();
   if(id==='config')renderConfig();
@@ -523,7 +547,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -545,6 +569,7 @@ function saveAll(){
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
   localStorage.setItem('wc_camas_custom',JSON.stringify(CAMAS_TIPOS_CUSTOM));
   localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
+  localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -571,7 +596,9 @@ function loadAll(){
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
   v=g('wc_camas_custom');if(Array.isArray(v))CAMAS_TIPOS_CUSTOM=v;
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
+  v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
   _seedModelosNegocio();
+  _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -1034,6 +1061,10 @@ function _coletarDadosAba(aba,im){
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
+    if(im.proprietarioId){
+      const propVinculado=proprietarios.find(pr=>pr.id===im.proprietarioId);
+      if(propVinculado){propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;}
+    }
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
     im.dataRepasseRegra=g('d-data-repasse-regra');
@@ -1162,6 +1193,15 @@ function renderAbaDados(im){
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
+  <div class="form-group" style="max-width:420px;">
+    <label>Proprietário (cadastro central)</label>
+    <select id="d-prop-select" class="input" onchange="_onProprietarioSelectChange(this,'${im.id}')">
+      <option value="">— avulso (sem vincular) —</option>
+      ${proprietarios.map(p=>`<option value="${esc(p.id)}"${im.proprietarioId===p.id?' selected':''}>${esc(p.nome)}</option>`).join('')}
+      <option value="__novo__">+ Novo proprietário…</option>
+    </select>
+    <div class="hint" style="margin-top:4px;">Selecionar preenche nome/telefone/e-mail automaticamente — se ele já tem outro imóvel, dá pra dividir compras entre os dois. Editar os campos abaixo também atualiza o cadastro central.</div>
+  </div>
   <div class="form-row">
     <div class="form-group"><label>Nome</label><input id="d-prop-nome" class="input" value="${esc(im.proprietarioNome||'')}"></div>
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
@@ -4342,6 +4382,210 @@ function salvarManualFornecedores(){
   saveAll();
   closeModal('modal-manual-fornecedores');
   showToast('Manual salvo.');
+}
+
+// ═══════════════════ PROPRIETÁRIOS ═══════════════════
+// Cadastro central dos proprietários — cada imóvel referencia um pelo id
+// (im.proprietarioId) em vez de repetir nome/telefone/email soltos. Permite
+// reaproveitar o cadastro num imóvel novo do mesmo dono e agrupar imóveis do
+// mesmo proprietário pra dividir gasto/compra compartilhada entre eles.
+function renderProprietarios(){
+  const wrap=document.getElementById('proprietarios-wrap');
+  if(!wrap)return;
+  const filtro=(document.getElementById('prop-filtro-nome')?.value||'').toLowerCase().trim();
+  const lista=proprietarios.filter(p=>!filtro||(p.nome||'').toLowerCase().includes(filtro));
+  wrap.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Proprietários</div>
+      <div class="text-muted">Cadastro central (${proprietarios.length}) — reaproveite num imóvel novo do mesmo dono</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirNovoProprietario()"><i class="fa-solid fa-plus"></i> Novo Proprietário</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-filter" style="color:var(--text3)"></i> Filtro</span>
+      <input class="form-input" id="prop-filtro-nome" placeholder="Buscar por nome..." style="margin-left:auto;width:200px;padding:4px 8px;font-size:12px;" oninput="renderProprietarios()" value="${esc(filtro)}">
+    </div>
+    <div class="card-body" style="overflow-x:auto;padding:0;">
+      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
+          <th style="text-align:left;padding:8px;">Nome</th><th style="text-align:left;padding:8px;">Telefone</th><th style="text-align:left;padding:8px;">E-mail</th><th style="text-align:center;padding:8px;">Imóveis</th><th style="width:100px;"></th>
+        </tr></thead>
+        <tbody>${lista.map(p=>{
+          const idx=proprietarios.indexOf(p);
+          const qtdImoveis=imoveis.filter(im=>im.proprietarioId===p.id).length;
+          return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="abrirDetalheProprietario('${esc(p.id)}')">
+            <td style="padding:8px;font-weight:600;">${esc(p.nome)}</td>
+            <td style="padding:8px;">${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}" target="_blank" onclick="event.stopPropagation();" style="color:var(--sage);"><i class="fa-brands fa-whatsapp"></i> ${esc(p.telefone)}</a>`:'—'}</td>
+            <td style="padding:8px;">${esc(p.email||'—')}</td>
+            <td style="padding:8px;text-align:center;">${qtdImoveis}</td>
+            <td style="padding:8px;white-space:nowrap;text-align:right;" onclick="event.stopPropagation();">
+              <button class="btn btn-xs btn-outline" onclick="editarProprietario(${idx})"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="apagarProprietario(${idx})"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
+        Nenhum proprietário encontrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoProprietario()"><i class="fa-solid fa-plus"></i> Adicionar primeiro proprietário</button>
+      </div>`}
+    </div>
+  </div>`;
+}
+function _onProprietarioSelectChange(sel,imId){
+  const im=getImovel(imId);if(!im)return;
+  if(sel.value==='__novo__'){
+    sel.value=im.proprietarioId||'';
+    _novoProprietarioParaImovelId=imId;
+    abrirNovoProprietario();
+    return;
+  }
+  im.proprietarioId=sel.value||null;
+  if(im.proprietarioId){
+    const prop=proprietarios.find(p=>p.id===im.proprietarioId);
+    if(prop){im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';}
+  }
+  saveAll();renderAba('dados');
+}
+function abrirNovoProprietario(){
+  _editProprietarioIdx=null;
+  document.getElementById('generico-titulo').textContent='Novo Proprietário';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Nome</label><input id="prop-nome" class="input"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input"></div>
+      <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2"></textarea></div>
+    <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function editarProprietario(idx){
+  _editProprietarioIdx=idx;
+  const p=proprietarios[idx];if(!p)return;
+  document.getElementById('generico-titulo').textContent='Editar Proprietário';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Nome</label><input id="prop-nome" class="input" value="${esc(p.nome)}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input" value="${esc(p.telefone||'')}"></div>
+      <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input" value="${esc(p.email||'')}"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2">${esc(p.obs||'')}</textarea></div>
+    <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarProprietario(){
+  const nome=document.getElementById('prop-nome').value.trim();
+  if(!nome){showToast('Informe o nome.','peach');return;}
+  const p={nome,
+    telefone:document.getElementById('prop-tel')?.value.trim()||'',
+    email:document.getElementById('prop-email')?.value.trim()||'',
+    obs:document.getElementById('prop-obs')?.value.trim()||''};
+  if(_editProprietarioIdx!=null){
+    p.id=proprietarios[_editProprietarioIdx].id;
+    proprietarios[_editProprietarioIdx]=p;
+  }else{
+    p.id='prop_'+uid()+uid();
+    proprietarios.push(p);
+  }
+  if(_novoProprietarioParaImovelId){
+    const im=getImovel(_novoProprietarioParaImovelId);
+    if(im){im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;}
+    _novoProprietarioParaImovelId=null;
+    saveAll();closeModal('modal-generico');renderAba('dados');showToast('Proprietário criado e vinculado!','sage');
+    return;
+  }
+  saveAll();closeModal('modal-generico');renderProprietarios();showToast('Proprietário salvo!','sage');
+}
+function apagarProprietario(idx){
+  const p=proprietarios[idx];if(!p)return;
+  const qtdImoveis=imoveis.filter(im=>im.proprietarioId===p.id).length;
+  if(qtdImoveis){showToast(`"${p.nome}" tem ${qtdImoveis} imóvel(is) vinculado(s) — desvincule antes de apagar.`,'peach');return;}
+  if(!confirm(`Apagar "${p.nome}"?`))return;
+  proprietarios.splice(idx,1);
+  saveAll();renderProprietarios();showToast('Removido.','peach');
+}
+function abrirDetalheProprietario(id){
+  const p=proprietarios.find(x=>x.id===id);if(!p)return;
+  const imoveisDele=imoveis.filter(im=>im.proprietarioId===id);
+  const lotesCompartilhados=[];
+  imoveisDele.forEach(im=>(im.comprasLotes||[]).filter(l=>l.loteCompartilhadoId).forEach(l=>{
+    if(!lotesCompartilhados.some(x=>x.loteCompartilhadoId===l.loteCompartilhadoId))lotesCompartilhados.push({...l,imovelNome:im.nome});
+  }));
+  document.getElementById('generico-titulo').textContent=p.nome;
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="margin-bottom:6px;">${esc(p.telefone||'sem telefone')} · ${esc(p.email||'sem e-mail')} <button class="btn btn-xs btn-outline" style="margin-left:8px;" onclick="editarProprietario(${proprietarios.indexOf(p)})"><i class="fa-solid fa-pen"></i> Editar dados</button></div>
+
+    <div class="form-section-title" style="margin-top:10px;"><i class="fa-solid fa-house"></i> Imóveis (${imoveisDele.length})</div>
+    ${imoveisDele.length?`<div style="margin-bottom:14px;">${imoveisDele.map(im=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="closeModal('modal-generico');showPanel('kanban',document.querySelector('.nav-item[onclick*=kanban]'));abrirDetalhe('${esc(im.id)}');"><strong>${esc(im.nome)}</strong> <span class="tag tag-${im.status==='ativo'?'sage':'gold'}" style="font-size:10px;margin-left:6px;">${esc(im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status))}</span></div>`).join('')}</div>`:`<div class="hint" style="margin-bottom:14px;">Nenhum imóvel vinculado ainda — vincule em Dados de um imóvel.</div>`}
+
+    <div class="form-section-title"><i class="fa-solid fa-people-arrows"></i> Compras/Gastos Compartilhados</div>
+    <div class="hint" style="margin-bottom:8px;">Um pagamento só que cobre 2+ imóveis desse proprietário — divide o valor igualmente e marca os itens comprados em cada imóvel.</div>
+    ${lotesCompartilhados.length?`<div style="margin-bottom:10px;">${lotesCompartilhados.map(l=>`<div style="font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--border);">${esc(l.local||'Compra compartilhada')} — ${fmtDate(l.data)} — <strong>${fmtMoeda(l.valorTotal)}</strong> por imóvel (${esc(l.imovelNome)} e outro(s))</div>`).join('')}</div>`:''}
+    ${imoveisDele.length>=2?`<button class="btn btn-sm btn-sage" onclick="abrirModalCompraCompartilhada('${esc(id)}')"><i class="fa-solid fa-plus"></i> Nova Compra Compartilhada</button>`:`<div class="hint">Precisa de pelo menos 2 imóveis vinculados a esse proprietário.</div>`}
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+
+// ═══════════════════ COMPRA/GASTO COMPARTILHADO ═══════════════════
+function abrirModalCompraCompartilhada(proprietarioId){
+  const imoveisDele=imoveis.filter(im=>im.proprietarioId===proprietarioId);
+  document.getElementById('generico-titulo').textContent='Nova Compra Compartilhada';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="margin-bottom:8px;">Marque em quais imóveis entra a divisão e, dentro de cada um, quais itens desse imóvel foram comprados nessa compra. O valor total é dividido igualmente pelo número de imóveis marcados — reflete no financeiro e na lista de Compras de cada imóvel.</div>
+    <div class="form-group"><label>Descrição</label><input id="cc-descricao" class="input" placeholder="Ex: Setup Belas Cintras 101+102"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Data</label><input id="cc-data" type="date" class="input" value="${hoje()}"></div>
+      <div class="form-group"><label>Valor total do lote (R$)</label>${numInput({id:'cc-valor',value:0,min:0,step:10})}</div>
+    </div>
+    <div id="cc-imoveis-wrap" style="margin-top:8px;">
+      ${imoveisDele.map(im=>{
+        const pendentes=_rowsComprasRelevantes(im).filter(x=>!x.comprado&&!x.loteId);
+        return`<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+          <label class="checkbox-label" style="font-weight:700;"><input type="checkbox" class="cc-imovel-check" data-imovel-id="${esc(im.id)}" checked> ${esc(im.nome)}</label>
+          <div style="margin-top:6px;margin-left:22px;max-height:160px;overflow:auto;">
+            ${pendentes.length?pendentes.map(x=>`<label class="checkbox-label" style="display:flex;font-size:12.5px;padding:2px 0;"><input type="checkbox" class="cc-item-check" data-imovel-id="${esc(im.id)}" data-subkey="${esc(x.subKey)}"> ${esc(x.label)} <span class="text-muted" style="margin-left:4px;">(${esc(x.cat)})</span></label>`).join(''):'<div class="hint">Nenhum item pendente nesse imóvel.</div>'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_confirmarCompraCompartilhada('${esc(proprietarioId)}')"><i class="fa-solid fa-check"></i> Confirmar e dividir</button>
+      <button class="btn btn-sm btn-outline" onclick="abrirDetalheProprietario('${esc(proprietarioId)}')"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+    </div>
+  </div>`;
+}
+function _confirmarCompraCompartilhada(proprietarioId){
+  const descricao=document.getElementById('cc-descricao').value.trim()||'Compra compartilhada';
+  const data=document.getElementById('cc-data').value||hoje();
+  const valorTotal=+document.getElementById('cc-valor').value||0;
+  const imovelIdsIncluidos=[...document.querySelectorAll('.cc-imovel-check:checked')].map(cb=>cb.dataset.imovelId);
+  if(imovelIdsIncluidos.length<2){showToast('Marque pelo menos 2 imóveis pra dividir.','peach');return;}
+  if(!valorTotal){showToast('Informe o valor total do lote.','peach');return;}
+  const valorPorImovel=+(valorTotal/imovelIdsIncluidos.length).toFixed(2);
+  const loteCompartilhadoId='cc_'+uid()+uid();
+  const nomesImoveis=imovelIdsIncluidos.map(id=>imoveis.find(im=>im.id===id)?.nome||'?');
+  imovelIdsIncluidos.forEach(imId=>{
+    const im=imoveis.find(x=>x.id===imId);if(!im)return;
+    const subKeys=[...document.querySelectorAll(`.cc-item-check[data-imovel-id="${imId}"]:checked`)].map(cb=>cb.dataset.subkey);
+    const valorPorItem=subKeys.length?+(valorPorImovel/subKeys.length).toFixed(2):0;
+    const valoresPorItem={};subKeys.forEach(sk=>valoresPorItem[sk]=valorPorItem);
+    if(!im.comprasLotes)im.comprasLotes=[];
+    im.comprasLotes.push({
+      id:'lote_'+uid()+uid(),data,local:descricao,valorTotal:valorPorImovel,valoresPorItem,itensVinculados:subKeys,
+      criadoEm:new Date().toISOString(),loteCompartilhadoId,imoveisCompartilhados:nomesImoveis,
+    });
+    if(!im.compras)im.compras={};
+    subKeys.forEach(sk=>{
+      if(!im.compras[sk])im.compras[sk]={};
+      im.compras[sk].comprado=true;im.compras[sk].pago=true;im.compras[sk].loteId=im.comprasLotes[im.comprasLotes.length-1].id;
+    });
+  });
+  saveAll();closeModal('modal-generico');
+  if(_imovelAtivoId&&imovelIdsIncluidos.includes(_imovelAtivoId))renderAba(_abaAtiva);
+  showToast(`Compra dividida entre ${imovelIdsIncluidos.length} imóveis — ${fmtMoeda(valorPorImovel)} cada.`,'sage');
 }
 
 // ═══════════════════ INFORMAÇÕES ═══════════════════
