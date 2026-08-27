@@ -125,8 +125,22 @@ function _migrarProprietarios(){
   if(mudou)saveAll();
 }
 function _seedModalidadesEnxoval(){
-  if(MODALIDADES_ENXOVAL.length)return;
-  MODALIDADES_ENXOVAL=[{id:'flashee',nome:'Flashee'},{id:'intense',nome:'Intense Clean'}];
+  if(MODALIDADES_ENXOVAL.length){
+    // migração leve: catálogo já existia de antes desses campos existirem — completa com o
+    // comportamento hardcoded original (Flashee cobra R$190 de setup, Intense não cobra nada).
+    let mudou=false;
+    MODALIDADES_ENXOVAL.forEach(m=>{
+      if(m.valorPorHospede==null){m.valorPorHospede=110;mudou=true;}
+      if(m.temSetup==null){m.temSetup=m.nome==='Flashee';mudou=true;}
+      if(m.valorSetup==null){m.valorSetup=m.nome==='Flashee'?190:0;mudou=true;}
+    });
+    if(mudou)saveAll();
+    return;
+  }
+  MODALIDADES_ENXOVAL=[
+    {id:'flashee',nome:'Flashee',temSetup:true,valorSetup:190,valorPorHospede:110},
+    {id:'intense',nome:'Intense Clean',temSetup:false,valorSetup:0,valorPorHospede:110},
+  ];
 }
 function _migrarCatalogoItens(){
   let mudou=false;
@@ -1755,7 +1769,7 @@ function renderAbaDefinicoes(im){
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
     <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
-    <div class="form-group" id="def-enxoval-setup-wrap" style="${im.defEnxoval?.fornecedor==='Intense Clean'?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
+    <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
 
@@ -1778,10 +1792,19 @@ function _onEnxovalTipoChange(sel){
   if(compradoHint)compradoHint.style.display=aluguel?'none':'';
   _recalcEnxovalValores();
 }
-// Enxoval alugado: valor mensal é R$110/hóspede (2h=220, 3h=330, 4h=440...); setup é fixo
-// R$190 na Flashee e R$0 na Intense Clean (não cobra setup); comprado não tem nenhum dos dois.
-function _valorEnxovalAutoMensal(hospedes){const h=+hospedes||0;return h>0?h*110:0;}
-function _valorEnxovalAutoSetup(fornecedor){return fornecedor==='Flashee'?190:0;}
+// Enxoval alugado: valor mensal é R$/hóspede (padrão 110 — configurável por fornecedor em
+// Configurações) e setup é o valor cadastrado no fornecedor (0 se ele não cobrar setup);
+// comprado não tem nenhum dos dois. Ambos vêm de MODALIDADES_ENXOVAL, não mais fixos no código.
+function _valorEnxovalAutoMensal(hospedes,fornecedorNome){
+  const h=+hospedes||0;if(h<=0)return 0;
+  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedorNome);
+  return h*(entry?.valorPorHospede??110);
+}
+function _valorEnxovalAutoSetup(fornecedorNome){
+  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedorNome);
+  if(!entry)return fornecedorNome==='Flashee'?190:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
+  return entry.temSetup?(entry.valorSetup||0):0;
+}
 function _recalcEnxovalValores(){
   const tipoSel=document.getElementById('def-enxoval-tipo');
   const mensalEl=document.getElementById('def-enxoval-mensal');
@@ -1790,10 +1813,11 @@ function _recalcEnxovalValores(){
   if(!tipoSel||!mensalEl||!setupEl)return;
   if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
   const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
-  if(setupWrap)setupWrap.style.display=fornecedor==='Intense Clean'?'none':'';
+  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
+  if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
   const im=getImovel(_imovelAtivoId);
-  mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes);
-  setupEl.value=_valorEnxovalAutoSetup(document.getElementById('def-enxoval-forn-select')?.value);
+  mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
+  setupEl.value=_valorEnxovalAutoSetup(fornecedor);
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -2854,30 +2878,30 @@ function _linhasRelatorioGastos(im){
   ['fotos','limpeza','vistoria'].forEach(k=>{
     const custo=+ops[k]?.custo||0;
     if(!custo)return;
-    linhas.push({categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
+    linhas.push({grupo:'setup',categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
   });
   (im.eventosExtras||[]).filter(e=>e.gastoSetup).forEach(ev=>{
     const custo=+ev.custo||0;
-    linhas.push({categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
+    linhas.push({grupo:'setup',categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
   });
   _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
-    linhas.push({categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
+    linhas.push({grupo:'outros',categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
   });
   (im.comprasLotes||[]).forEach(l=>{
-    linhas.push({categoria:'Compras (lote)',item:l.local||'Compra em lote',previsto:l.valorTotal,pago:l.valorTotal});
+    linhas.push({grupo:'outros',categoria:'Compras (lote)',item:l.local||'Compra em lote',previsto:l.valorTotal,pago:l.valorTotal});
   });
   (im.manutencoes||[]).forEach(m=>{
     const previsto=+(m.valor??m.custo??0);
     const label=m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||'Manutenção');
-    linhas.push({categoria:'Manutenção',item:label,previsto,pago:_valorPagoOuPrevisto(m.pago,previsto,m.valorPago)});
+    linhas.push({grupo:'outros',categoria:'Manutenção',item:label,previsto,pago:_valorPagoOuPrevisto(m.pago,previsto,m.valorPago)});
   });
   (im.itensExtras||[]).forEach(x=>{
     const previsto=(+x.precoUn||0)*(+x.qtd||1);
-    linhas.push({categoria:'Item Extra',item:x.nome||'Item extra',previsto,pago:_valorPagoOuPrevisto(x.pago,previsto,x.valorPago)});
+    linhas.push({grupo:'outros',categoria:'Item Extra',item:x.nome||'Item extra',previsto,pago:_valorPagoOuPrevisto(x.pago,previsto,x.valorPago)});
   });
   (im.gastosAvulsos||[]).forEach(g=>{
     const previsto=+g.valor||0;
-    linhas.push({categoria:g.categoria?`Gasto Avulso — ${g.categoria}`:'Gasto Avulso',item:g.descricao||'Gasto avulso',previsto,pago:_valorPagoOuPrevisto(g.pago,previsto,g.valorPago)});
+    linhas.push({grupo:'outros',categoria:g.categoria?`Gasto Avulso — ${g.categoria}`:'Gasto Avulso',item:g.descricao||'Gasto avulso',previsto,pago:_valorPagoOuPrevisto(g.pago,previsto,g.valorPago)});
   });
   return linhas;
 }
@@ -2887,37 +2911,46 @@ async function gerarPDFGastos(){
   const r=_calcResumoFinanceiro(im);
   const win=window.open('','_blank');
   const headerHtml=await _pdfHeaderHtml(im,'Relatório de Gastos');
-  const linhasHtml=linhas.map(l=>`<tr>
-    <td style="padding:6px 10px;">${esc(l.categoria)}</td>
-    <td style="padding:6px 10px;">${esc(l.item)}</td>
-    <td style="text-align:right;padding:6px 10px;color:#888;">${fmtMoeda(l.previsto)}</td>
-    <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.pago)}</td>
-  </tr>`).join('');
+  const tabela=(titulo,lista,r2)=>{
+    const corpo=lista.map(l=>`<tr>
+      <td style="padding:6px 10px;">${esc(l.categoria)}</td>
+      <td style="padding:6px 10px;">${esc(l.item)}</td>
+      <td style="text-align:right;padding:6px 10px;color:#888;">${fmtMoeda(l.previsto)}</td>
+      <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.pago)}</td>
+    </tr>`).join('');
+    return`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">${titulo}</div>
+    <div style="display:flex;gap:20px;margin-bottom:10px;">
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Recebido</span><br><strong>${fmtMoeda(r2.recebido)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Gasto</span><br><strong>${fmtMoeda(r2.gastoPago)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Margem</span><br><strong>${fmtMoeda(r2.margem)}</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Categoria</th><th>Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
+      <tbody>${corpo||'<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">Nada nessa categoria.</td></tr>'}</tbody>
+    </table>`;
+  };
   win.document.write(`<html><head><meta charset="utf-8"><title>Gastos — ${esc(im.nome)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12.5px;}
     th{background:#132030;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
     tr:nth-child(even){background:#fafafa;}
     td{border-bottom:1px solid #EFE7D6;vertical-align:middle;}
-    .summary{background:#132030;color:#fff;border-radius:12px;padding:16px 20px;margin-top:8px;display:flex;gap:24px;}
+    .summary{background:#132030;color:#fff;border-radius:12px;padding:16px 20px;margin-top:12px;display:flex;gap:24px;}
     .summary div{flex:1;}
     .summary .lbl{font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;}
     .summary .val{font-size:18px;font-weight:800;margin-top:2px;}
     @media print{body{padding:16px;}@page{margin:1cm;}}
   </style></head><body>
   ${headerHtml}
+  ${tabela('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup)}
+  ${tabela('Itens (Compras, Manutenções, Avulsos)',linhas.filter(l=>l.grupo==='outros'),r.outros)}
   <div class="summary">
-    <div><div class="lbl">Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
-    <div><div class="lbl">Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
-    <div><div class="lbl">Margem</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
+    <div><div class="lbl">Total Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
+    <div><div class="lbl">Total Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
+    <div><div class="lbl">Margem Total</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
   </div>
-  <div style="height:16px;"></div>
-  <table>
-    <thead><tr><th>Categoria</th><th>Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
-    <tbody>${linhasHtml||'<tr><td colspan="4" style="padding:16px;text-align:center;color:#888;">Nenhum gasto registrado.</td></tr>'}</tbody>
-  </table>
   </body></html>`);
   win.document.close();win.print();
 }
@@ -2927,10 +2960,19 @@ function exportarGastosCSV(){
   const r=_calcResumoFinanceiro(im);
   const fmtNum=v=>(+v||0).toFixed(2).replace('.',',');
   const csvEsc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const linhasCsv=[
+  const bloco=(titulo,lista,r2)=>[
+    [csvEsc(titulo)].join(';'),
     ['Categoria','Item','Previsto (R$)','Pago (R$)'].map(csvEsc).join(';'),
-    ...linhas.map(l=>[l.categoria,l.item,fmtNum(l.previsto),fmtNum(l.pago)].map(csvEsc).join(';')),
+    ...lista.map(l=>[l.categoria,l.item,fmtNum(l.previsto),fmtNum(l.pago)].map(csvEsc).join(';')),
+    [csvEsc('Subtotal '+titulo),'','',csvEsc(fmtNum(r2.gastoPago))].join(';'),
+    [csvEsc('Recebido '+titulo),'','',csvEsc(fmtNum(r2.recebido))].join(';'),
+    [csvEsc('Margem '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
     '',
+  ];
+  const linhasCsv=[
+    ...bloco('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup),
+    ...bloco('Itens',linhas.filter(l=>l.grupo==='outros'),r.outros),
+    [csvEsc('TOTAL GERAL'),'','',''].join(';'),
     [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
     [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
     [csvEsc('Margem'),'','',csvEsc(fmtNum(r.margem))].join(';'),
@@ -6036,18 +6078,38 @@ function _renderConfigModalidadesEnxoval(){
   const el=document.getElementById('config-modalidades-enxoval');
   if(!el)return;
   el.innerHTML=`
-    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada linha aqui é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato) e como modalidade pra marcar quais itens de Compras se aplicam a ele.</div>
-    <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:10px;">
-      <thead><tr style="background:var(--surface-2);"><th style="text-align:left;padding:7px 6px;">Fornecedor</th><th style="width:36px;"></th></tr></thead>
+    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada linha aqui é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato), nos checkboxes de modalidade das Compras e no formulário de Novo Item. Setup e valor mensal alimentam o preenchimento automático da aba Contrato.</div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:10px;">
+      <thead><tr style="background:var(--surface-2);">
+        <th style="text-align:left;padding:7px 6px;">Fornecedor</th>
+        <th style="text-align:center;padding:7px 6px;width:80px;">Tem setup?</th>
+        <th style="text-align:right;padding:7px 6px;width:120px;">Valor Setup (R$)</th>
+        <th style="text-align:right;padding:7px 6px;width:130px;">R$/hóspede/mês</th>
+        <th style="width:36px;"></th>
+      </tr></thead>
       <tbody>${MODALIDADES_ENXOVAL.map((m,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 6px;"><input class="input" value="${esc(m.nome)}" style="font-size:12.5px;padding:4px 8px;" onchange="_renomearModalidadeEnxoval(${i},this.value)"></td>
+        <td style="padding:5px 6px;"><input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-size:12.5px;padding:4px 8px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
+        <td style="padding:5px 6px;text-align:center;"><input type="checkbox" id="me-setup-${i}"${m.temSetup?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"></td>
+        <td style="padding:5px 6px;text-align:right;"><input type="number" id="me-valorsetup-${i}" class="input" min="0" step="10" value="${m.valorSetup||0}" style="width:90px;text-align:right;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
+        <td style="padding:5px 6px;text-align:right;"><input type="number" id="me-hospede-${i}" class="input" min="0" step="10" value="${m.valorPorHospede??110}" style="width:90px;text-align:right;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
         <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_apagarModalidadeEnxoval(${i})"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}</tbody>
     </table>
+    </div>
     <div style="display:flex;gap:6px;">
       <input class="input" id="nova-modalidade-nome" placeholder="Nome do novo fornecedor (ex: Lavanderia Prime)" style="flex:1;max-width:320px;" onkeydown="if(event.key==='Enter'){_adicionarModalidadeEnxoval();event.preventDefault();}">
       <button class="btn btn-sm btn-sage" onclick="_adicionarModalidadeEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>`;
+}
+function _atualizarModalidadeEnxoval(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  const nome=document.getElementById(`me-nome-${i}`)?.value.trim();
+  if(nome)m.nome=nome;
+  m.temSetup=document.getElementById(`me-setup-${i}`)?.checked||false;
+  m.valorSetup=+document.getElementById(`me-valorsetup-${i}`)?.value||0;
+  m.valorPorHospede=+document.getElementById(`me-hospede-${i}`)?.value||0;
+  saveAll();renderConfig(); // refaz Configurações inteira — a tabela de itens depende dessa lista pros checkboxes de modalidade
 }
 function _adicionarModalidadeEnxoval(){
   const inp=document.getElementById('nova-modalidade-nome');
@@ -6055,24 +6117,19 @@ function _adicionarModalidadeEnxoval(){
   if(!nome){showToast('Informe o nome do fornecedor.','peach');return;}
   if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
   const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
-  MODALIDADES_ENXOVAL.push({id,nome});
-  saveAll();_renderConfigModalidadesEnxoval();
-  showToast('Fornecedor adicionado!','sage');
-}
-function _renomearModalidadeEnxoval(i,nome){
-  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
-  m.nome=nome.trim()||m.nome;
-  saveAll();_renderConfigModalidadesEnxoval();
+  MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,valorSetup:0,valorPorHospede:110});
+  saveAll();renderConfig();
+  showToast('Fornecedor adicionado! Configure setup e valor mensal na linha nova.','sage');
 }
 function _apagarModalidadeEnxoval(i){
   const m=MODALIDADES_ENXOVAL[i];if(!m)return;
   if(!confirm(`Apagar "${m.nome}"? Itens já marcados com essa modalidade deixam de aparecer nela (a marcação some, mas o item continua existindo).`))return;
   MODALIDADES_ENXOVAL.splice(i,1);
-  saveAll();_renderConfigModalidadesEnxoval();
+  saveAll();renderConfig();
   showToast('Removido.','peach');
 }
 function _lerModalidadesConfig(i){
-  const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
+  const modalidades=_opcoesModalidades().map(([v])=>v).filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
   return modalidades.length?modalidades:undefined;
 }
 // Renomear um item precisa migrar a chave em PRECOS_ENXOVAL junto (ela é indexada pelo

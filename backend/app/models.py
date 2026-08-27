@@ -197,6 +197,9 @@ class ModalidadeEnxoval(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     nome: Mapped[str | None] = mapped_column(String)
+    tem_setup: Mapped[bool] = mapped_column(Boolean, default=False)
+    valor_setup: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    valor_por_hospede: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 

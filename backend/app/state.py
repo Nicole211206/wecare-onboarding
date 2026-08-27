@@ -230,7 +230,10 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             for p in db.scalars(select(models.Proprietario).order_by(models.Proprietario.ordem))
         ],
         "wc_modalidades_enxoval": [
-            {"id": m.id, "nome": m.nome}
+            {
+                "id": m.id, "nome": m.nome, "temSetup": m.tem_setup,
+                "valorSetup": m.valor_setup, "valorPorHospede": m.valor_por_hospede,
+            }
             for m in db.scalars(select(models.ModalidadeEnxoval).order_by(models.ModalidadeEnxoval.ordem))
         ],
         "wc_orcamentos": [
@@ -465,7 +468,13 @@ def put_state(db: Session, state: dict) -> None:
     if "wc_modalidades_enxoval" in state:
         db.execute(delete(models.ModalidadeEnxoval))
         for idx, m in enumerate(state["wc_modalidades_enxoval"] or []):
-            db.add(models.ModalidadeEnxoval(id=m["id"], nome=m.get("nome"), ordem=idx))
+            db.add(
+                models.ModalidadeEnxoval(
+                    id=m["id"], nome=m.get("nome"), tem_setup=bool(m.get("temSetup")),
+                    valor_setup=m.get("valorSetup"), valor_por_hospede=m.get("valorPorHospede"),
+                    ordem=idx,
+                )
+            )
 
     if "wc_templates_msg" in state:
         db.execute(delete(models.TemplateMsg))
