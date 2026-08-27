@@ -233,6 +233,11 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             {
                 "id": m.id, "nome": m.nome, "temSetup": m.tem_setup,
                 "valorSetup": m.valor_setup, "valorPorHospede": m.valor_por_hospede,
+                "setupCusto": m.setup_custo, "setupCobrado": m.setup_cobrado,
+                "precificacaoMensal": m.precificacao_mensal, "hospedesBase": m.hospedes_base,
+                "mensalBaseCusto": m.mensal_base_custo, "mensalBaseCobrado": m.mensal_base_cobrado,
+                "mensalExtraCusto": m.mensal_extra_custo, "mensalExtraCobrado": m.mensal_extra_cobrado,
+                "mensalTabela": m.mensal_tabela,
             }
             for m in db.scalars(select(models.ModalidadeEnxoval).order_by(models.ModalidadeEnxoval.ordem))
         ],
@@ -472,6 +477,11 @@ def put_state(db: Session, state: dict) -> None:
                 models.ModalidadeEnxoval(
                     id=m["id"], nome=m.get("nome"), tem_setup=bool(m.get("temSetup")),
                     valor_setup=m.get("valorSetup"), valor_por_hospede=m.get("valorPorHospede"),
+                    setup_custo=m.get("setupCusto"), setup_cobrado=m.get("setupCobrado"),
+                    precificacao_mensal=m.get("precificacaoMensal"), hospedes_base=m.get("hospedesBase"),
+                    mensal_base_custo=m.get("mensalBaseCusto"), mensal_base_cobrado=m.get("mensalBaseCobrado"),
+                    mensal_extra_custo=m.get("mensalExtraCusto"), mensal_extra_cobrado=m.get("mensalExtraCobrado"),
+                    mensal_tabela=m.get("mensalTabela"),
                     ordem=idx,
                 )
             )

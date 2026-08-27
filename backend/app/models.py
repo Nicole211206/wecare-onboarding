@@ -198,8 +198,20 @@ class ModalidadeEnxoval(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     nome: Mapped[str | None] = mapped_column(String)
     tem_setup: Mapped[bool] = mapped_column(Boolean, default=False)
+    # valor_setup/valor_por_hospede: formato intermediário (2026-08-21, mesmo dia) - não usados
+    # mais no código, mantidos só pra não perder dado de quem já tinha salvo nesse formato;
+    # a migração em app.js lê esses 2 campos uma vez e preenche os novos abaixo.
     valor_setup: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     valor_por_hospede: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    setup_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    setup_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    precificacao_mensal: Mapped[str | None] = mapped_column(String)
+    hospedes_base: Mapped[int | None] = mapped_column(Integer)
+    mensal_base_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    mensal_base_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    mensal_extra_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    mensal_extra_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    mensal_tabela: Mapped[list | None] = mapped_column(JSON)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 

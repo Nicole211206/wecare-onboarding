@@ -19,6 +19,15 @@ _COLUNAS_NOVAS = [
     "ALTER TABLE modalidades_enxoval ADD COLUMN tem_setup BOOLEAN",
     "ALTER TABLE modalidades_enxoval ADD COLUMN valor_setup NUMERIC",
     "ALTER TABLE modalidades_enxoval ADD COLUMN valor_por_hospede NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN setup_custo NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN setup_cobrado NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN precificacao_mensal VARCHAR",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN hospedes_base INTEGER",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_base_custo NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_base_cobrado NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_extra_custo NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_extra_cobrado NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_tabela JSON",
 ]
 for _sql in _COLUNAS_NOVAS:
     try:

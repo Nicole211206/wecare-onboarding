@@ -126,20 +126,36 @@ function _migrarProprietarios(){
 }
 function _seedModalidadesEnxoval(){
   if(MODALIDADES_ENXOVAL.length){
-    // migração leve: catálogo já existia de antes desses campos existirem — completa com o
-    // comportamento hardcoded original (Flashee cobra R$190 de setup, Intense não cobra nada).
+    // migração leve: catálogo pode vir de 2 formatos anteriores — o hardcoded original
+    // (sem nenhum campo de preço) ou o intermediário de uma sessão anterior (valorPorHospede/
+    // valorSetup, um valor só sem custo x cobrado). Completa pro formato atual (fórmula/tabela
+    // + custo/cobrado) preservando o comportamento equivalente, sem perder nada.
     let mudou=false;
     MODALIDADES_ENXOVAL.forEach(m=>{
-      if(m.valorPorHospede==null){m.valorPorHospede=110;mudou=true;}
-      if(m.temSetup==null){m.temSetup=m.nome==='Flashee';mudou=true;}
-      if(m.valorSetup==null){m.valorSetup=m.nome==='Flashee'?190:0;mudou=true;}
+      if(m.precificacaoMensal==null){
+        const porHospede=m.valorPorHospede??110;
+        m.precificacaoMensal='formula';
+        m.hospedesBase=2;
+        m.mensalBaseCusto=0;m.mensalBaseCobrado=porHospede*2;
+        m.mensalExtraCusto=0;m.mensalExtraCobrado=porHospede;
+        m.mensalTabela=m.mensalTabela||[];
+        mudou=true;
+      }
+      if(m.setupCobrado==null){
+        const legado=m.valorSetup??(m.nome==='Flashee'?190:0);
+        if(m.temSetup==null)m.temSetup=m.nome==='Flashee';
+        m.setupCusto=legado;m.setupCobrado=legado;
+        mudou=true;
+      }
     });
     if(mudou)saveAll();
     return;
   }
   MODALIDADES_ENXOVAL=[
-    {id:'flashee',nome:'Flashee',temSetup:true,valorSetup:190,valorPorHospede:110},
-    {id:'intense',nome:'Intense Clean',temSetup:false,valorSetup:0,valorPorHospede:110},
+    {id:'flashee',nome:'Flashee',temSetup:true,setupCusto:190,setupCobrado:190,
+      precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
+    {id:'intense',nome:'Intense Clean',temSetup:false,setupCusto:0,setupCobrado:0,
+      precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
   ];
 }
 function _migrarCatalogoItens(){
@@ -1792,19 +1808,37 @@ function _onEnxovalTipoChange(sel){
   if(compradoHint)compradoHint.style.display=aluguel?'none':'';
   _recalcEnxovalValores();
 }
-// Enxoval alugado: valor mensal é R$/hóspede (padrão 110 — configurável por fornecedor em
-// Configurações) e setup é o valor cadastrado no fornecedor (0 se ele não cobrar setup);
-// comprado não tem nenhum dos dois. Ambos vêm de MODALIDADES_ENXOVAL, não mais fixos no código.
-function _valorEnxovalAutoMensal(hospedes,fornecedorNome){
+// Enxoval alugado: valor mensal e setup vêm de MODALIDADES_ENXOVAL (Configurações), com 2
+// formatos possíveis por fornecedor — 'formula' (inicial pra N hóspedes + valor por hóspede
+// extra) ou 'tabela' (valor exato cadastrado por quantidade de hóspedes, com a faixa mais alta
+// servindo de teto pra quem passa dela). campo = 'custo' (o que a gente paga) ou 'cobrado' (o
+// que cobra do proprietário — é o que alimenta o preenchimento automático da aba Contrato).
+function _valorEnxovalMensal(hospedes,fornecedorNome,campo){
   const h=+hospedes||0;if(h<=0)return 0;
-  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedorNome);
-  return h*(entry?.valorPorHospede??110);
+  const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
+  if(!m)return campo==='cobrado'?h*110:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
+  if(m.precificacaoMensal==='tabela'){
+    const linhas=m.mensalTabela||[];
+    const exata=linhas.find(l=>l.hospedes===h);
+    if(exata)return+exata[campo]||0;
+    const abaixo=linhas.filter(l=>l.hospedes<=h).sort((a,b)=>b.hospedes-a.hospedes)[0];
+    return abaixo?+abaixo[campo]||0:0;
+  }
+  const base=+(campo==='custo'?m.mensalBaseCusto:m.mensalBaseCobrado)||0;
+  const extra=+(campo==='custo'?m.mensalExtraCusto:m.mensalExtraCobrado)||0;
+  const hospedesBase=m.hospedesBase||2;
+  return h<=hospedesBase?base:base+(h-hospedesBase)*extra;
 }
-function _valorEnxovalAutoSetup(fornecedorNome){
-  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedorNome);
-  if(!entry)return fornecedorNome==='Flashee'?190:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
-  return entry.temSetup?(entry.valorSetup||0):0;
+function _valorEnxovalSetup(fornecedorNome,campo){
+  const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
+  if(!m)return(campo==='cobrado'&&fornecedorNome==='Flashee')?190:0; // fallback dado antigo
+  if(!m.temSetup)return 0;
+  return+(campo==='custo'?m.setupCusto:m.setupCobrado)||0;
 }
+// Aliases usados no preenchimento automático da aba Contrato — sempre o valor "cobrado"
+// (o que é passado pro proprietário), não o custo interno.
+function _valorEnxovalAutoMensal(hospedes,fornecedorNome){return _valorEnxovalMensal(hospedes,fornecedorNome,'cobrado');}
+function _valorEnxovalAutoSetup(fornecedorNome){return _valorEnxovalSetup(fornecedorNome,'cobrado');}
 function _recalcEnxovalValores(){
   const tipoSel=document.getElementById('def-enxoval-tipo');
   const mensalEl=document.getElementById('def-enxoval-mensal');
@@ -6074,32 +6108,63 @@ function _adicionarEtapaModelo(mi){
 }
 
 // ═══════════════════ FORNECEDORES DE ENXOVAL ALUGADO (MODALIDADES) ═══════════════════
+function _htmlBlocoModalidadeEnxoval(m,i){
+  const precTabela=m.precificacaoMensal==='tabela';
+  const tabela=m.mensalTabela||[];
+  return`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-weight:700;flex:1;max-width:260px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      <button class="btn btn-xs btn-danger" style="margin-left:auto;" onclick="_apagarModalidadeEnxoval(${i})"><i class="fa-solid fa-trash"></i> Apagar fornecedor</button>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <label class="checkbox-label"><input type="checkbox" id="me-setup-${i}"${m.temSetup?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra setup?</label>
+      ${m.temSetup?`
+      <span style="font-size:11px;color:var(--text-muted);">Custo</span><input type="number" id="me-setupcusto-${i}" class="input" min="0" step="10" value="${m.setupCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      <span style="font-size:11px;color:var(--text-muted);">Cobrado</span><input type="number" id="me-setupcobrado-${i}" class="input" min="0" step="10" value="${m.setupCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      `:''}
+    </div>
+
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor mensal (aluguel) — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
+    <div style="display:flex;gap:14px;margin-bottom:8px;">
+      <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="formula"${!precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Fórmula (inicial + por hóspede extra)</label>
+      <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="tabela"${precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Tabela por quantidade de hóspedes</label>
+    </div>
+    ${!precTabela?`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">A partir de (hóspedes)</label><input type="number" id="me-hospedesbase-${i}" class="input" min="1" value="${m.hospedesBase??2}" style="width:70px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Inicial — Custo</label><input type="number" id="me-basecusto-${i}" class="input" min="0" step="10" value="${m.mensalBaseCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Inicial — Cobrado</label><input type="number" id="me-basecobrado-${i}" class="input" min="0" step="10" value="${m.mensalBaseCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Extra/hóspede — Custo</label><input type="number" id="me-extracusto-${i}" class="input" min="0" step="10" value="${m.mensalExtraCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Extra/hóspede — Cobrado</label><input type="number" id="me-extracobrado-${i}" class="input" min="0" step="10" value="${m.mensalExtraCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+    </div>
+    <div class="hint" style="margin-top:6px;">Ex: inicial R$${m.mensalBaseCobrado||220} (cobrado) pra ${m.hospedesBase??2} hóspedes + R$${m.mensalExtraCobrado||110} por hóspede extra.</div>
+    `:`
+    <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;max-width:420px;">
+      <thead><tr style="color:var(--text-muted);"><th style="text-align:left;padding:4px;">Hóspedes</th><th style="text-align:right;padding:4px;">Custo</th><th style="text-align:right;padding:4px;">Cobrado</th><th style="width:28px;"></th></tr></thead>
+      <tbody>${tabela.map((t,ti)=>`<tr>
+        <td style="padding:4px;"><input type="number" min="1" class="input" value="${t.hospedes}" style="width:60px;padding:3px 5px;font-size:12px;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'hospedes',this.value)"></td>
+        <td style="padding:4px;"><input type="number" min="0" class="input" value="${t.custo||0}" style="width:70px;padding:3px 5px;font-size:12px;text-align:right;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'custo',this.value)"></td>
+        <td style="padding:4px;"><input type="number" min="0" class="input" value="${t.cobrado||0}" style="width:70px;padding:3px 5px;font-size:12px;text-align:right;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'cobrado',this.value)"></td>
+        <td style="padding:2px;"><button class="btn btn-xs btn-danger" onclick="_removerLinhaTabelaMensal(${i},${ti})"><i class="fa-solid fa-xmark"></i></button></td>
+      </tr>`).join('')}</tbody>
+    </table>
+    </div>
+    <button class="btn btn-xs btn-outline" style="margin-top:6px;" onclick="_adicionarLinhaTabelaMensal(${i})"><i class="fa-solid fa-plus"></i> Adicionar faixa</button>
+    <div class="hint" style="margin-top:6px;">Hóspede acima da maior faixa cadastrada usa o valor da faixa mais alta.</div>
+    `}
+  </div>`;
+}
 function _renderConfigModalidadesEnxoval(){
   const el=document.getElementById('config-modalidades-enxoval');
   if(!el)return;
   el.innerHTML=`
-    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada linha aqui é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato), nos checkboxes de modalidade das Compras e no formulário de Novo Item. Setup e valor mensal alimentam o preenchimento automático da aba Contrato.</div>
-    <div style="overflow-x:auto;">
-    <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:10px;">
-      <thead><tr style="background:var(--surface-2);">
-        <th style="text-align:left;padding:7px 6px;">Fornecedor</th>
-        <th style="text-align:center;padding:7px 6px;width:80px;">Tem setup?</th>
-        <th style="text-align:right;padding:7px 6px;width:120px;">Valor Setup (R$)</th>
-        <th style="text-align:right;padding:7px 6px;width:130px;">R$/hóspede/mês</th>
-        <th style="width:36px;"></th>
-      </tr></thead>
-      <tbody>${MODALIDADES_ENXOVAL.map((m,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 6px;"><input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-size:12.5px;padding:4px 8px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
-        <td style="padding:5px 6px;text-align:center;"><input type="checkbox" id="me-setup-${i}"${m.temSetup?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"></td>
-        <td style="padding:5px 6px;text-align:right;"><input type="number" id="me-valorsetup-${i}" class="input" min="0" step="10" value="${m.valorSetup||0}" style="width:90px;text-align:right;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
-        <td style="padding:5px 6px;text-align:right;"><input type="number" id="me-hospede-${i}" class="input" min="0" step="10" value="${m.valorPorHospede??110}" style="width:90px;text-align:right;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></td>
-        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_apagarModalidadeEnxoval(${i})"><i class="fa-solid fa-trash"></i></button></td>
-      </tr>`).join('')}</tbody>
-    </table>
-    </div>
+    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada bloco é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato), nos checkboxes de modalidade das Compras e no formulário de Novo Item. "Cobrado" alimenta o preenchimento automático da aba Contrato.</div>
+    ${MODALIDADES_ENXOVAL.map((m,i)=>_htmlBlocoModalidadeEnxoval(m,i)).join('')}
     <div style="display:flex;gap:6px;">
       <input class="input" id="nova-modalidade-nome" placeholder="Nome do novo fornecedor (ex: Lavanderia Prime)" style="flex:1;max-width:320px;" onkeydown="if(event.key==='Enter'){_adicionarModalidadeEnxoval();event.preventDefault();}">
-      <button class="btn btn-sm btn-sage" onclick="_adicionarModalidadeEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      <button class="btn btn-sm btn-sage" onclick="_adicionarModalidadeEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar Fornecedor</button>
     </div>`;
 }
 function _atualizarModalidadeEnxoval(i){
@@ -6107,9 +6172,41 @@ function _atualizarModalidadeEnxoval(i){
   const nome=document.getElementById(`me-nome-${i}`)?.value.trim();
   if(nome)m.nome=nome;
   m.temSetup=document.getElementById(`me-setup-${i}`)?.checked||false;
-  m.valorSetup=+document.getElementById(`me-valorsetup-${i}`)?.value||0;
-  m.valorPorHospede=+document.getElementById(`me-hospede-${i}`)?.value||0;
+  // Os campos condicionais (setup custo/cobrado, fórmula) só existem no DOM quando visíveis —
+  // ao trocar de aba/desmarcar, não sobrescreve com 0 o que já tinha sido configurado antes.
+  const setupCustoEl=document.getElementById(`me-setupcusto-${i}`);
+  if(setupCustoEl){
+    m.setupCusto=+setupCustoEl.value||0;
+    m.setupCobrado=+document.getElementById(`me-setupcobrado-${i}`)?.value||0;
+  }
+  const precifSel=document.querySelector(`input[name="me-precif-${i}"]:checked`);
+  m.precificacaoMensal=precifSel?.value==='tabela'?'tabela':'formula';
+  const baseCustoEl=document.getElementById(`me-basecusto-${i}`);
+  if(baseCustoEl){
+    m.hospedesBase=+document.getElementById(`me-hospedesbase-${i}`)?.value||2;
+    m.mensalBaseCusto=+baseCustoEl.value||0;
+    m.mensalBaseCobrado=+document.getElementById(`me-basecobrado-${i}`)?.value||0;
+    m.mensalExtraCusto=+document.getElementById(`me-extracusto-${i}`)?.value||0;
+    m.mensalExtraCobrado=+document.getElementById(`me-extracobrado-${i}`)?.value||0;
+  }
   saveAll();renderConfig(); // refaz Configurações inteira — a tabela de itens depende dessa lista pros checkboxes de modalidade
+}
+function _adicionarLinhaTabelaMensal(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  if(!m.mensalTabela)m.mensalTabela=[];
+  const proximo=m.mensalTabela.length?Math.max(...m.mensalTabela.map(t=>t.hospedes))+1:2;
+  m.mensalTabela.push({hospedes:proximo,custo:0,cobrado:0});
+  saveAll();renderConfig();
+}
+function _atualizarLinhaTabelaMensal(i,ti,campo,valor){
+  const m=MODALIDADES_ENXOVAL[i];if(!m||!m.mensalTabela?.[ti])return;
+  m.mensalTabela[ti][campo]=+valor||0;
+  saveAll();
+}
+function _removerLinhaTabelaMensal(i,ti){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  m.mensalTabela.splice(ti,1);
+  saveAll();renderConfig();
 }
 function _adicionarModalidadeEnxoval(){
   const inp=document.getElementById('nova-modalidade-nome');
@@ -6117,9 +6214,10 @@ function _adicionarModalidadeEnxoval(){
   if(!nome){showToast('Informe o nome do fornecedor.','peach');return;}
   if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
   const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
-  MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,valorSetup:0,valorPorHospede:110});
+  MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,setupCusto:0,setupCobrado:0,
+    precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:0,mensalExtraCusto:0,mensalExtraCobrado:0,mensalTabela:[]});
   saveAll();renderConfig();
-  showToast('Fornecedor adicionado! Configure setup e valor mensal na linha nova.','sage');
+  showToast('Fornecedor adicionado! Configure setup e valor mensal no bloco novo.','sage');
 }
 function _apagarModalidadeEnxoval(i){
   const m=MODALIDADES_ENXOVAL[i];if(!m)return;
