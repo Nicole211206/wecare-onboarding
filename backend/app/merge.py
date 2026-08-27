@@ -153,6 +153,7 @@ LIST_KEYS_ESTRITAS = [
     "wc_orcamentos",
     "wc_estoque_itens",
     "wc_camas_custom",
+    "wc_modelos_negocio",
 ]
 
 

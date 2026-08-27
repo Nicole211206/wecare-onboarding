@@ -221,6 +221,10 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             {"id": c.id, "nome": c.nome, "componentes": c.componentes}
             for c in db.scalars(select(models.CamaTipoCustom).order_by(models.CamaTipoCustom.ordem))
         ],
+        "wc_modelos_negocio": [
+            {"id": m.id, "nome": m.nome, "etapas": m.etapas}
+            for m in db.scalars(select(models.ModeloNegocio).order_by(models.ModeloNegocio.ordem))
+        ],
         "wc_orcamentos": [
             {
                 "id": o.id,
@@ -428,6 +432,15 @@ def put_state(db: Session, state: dict) -> None:
             db.add(
                 models.CamaTipoCustom(
                     id=c["id"], nome=c.get("nome"), componentes=c.get("componentes"), ordem=idx
+                )
+            )
+
+    if "wc_modelos_negocio" in state:
+        db.execute(delete(models.ModeloNegocio))
+        for idx, m in enumerate(state["wc_modelos_negocio"] or []):
+            db.add(
+                models.ModeloNegocio(
+                    id=m["id"], nome=m.get("nome"), etapas=m.get("etapas"), ordem=idx
                 )
             )
 

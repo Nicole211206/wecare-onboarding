@@ -6,6 +6,12 @@ let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
 let orcamentos=[], estoqueItens=[];
 let _editOrcamentoId=null, _orcItensSoltosTemp=[];
+// Catálogo de modelos de negócio (checklist-template por modelo, ex: "Gestão 360",
+// "Gestão Online") — cada um {id,nome,etapas:[{id,texto}]}. Editável em Configurações.
+// Cada imóvel aplica um modelo (im.modeloNegocioId) que COPIA as etapas pra
+// im.checklistEtapas — a partir daí o imóvel tem sua própria cópia editável
+// (excluir/remanejar/adicionar etapa), sem afetar o modelo original nem outros imóveis.
+let MODELOS_NEGOCIO=[];
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -47,6 +53,48 @@ function _migrarGastosSetup(){
 // Por isso mudanças no catálogo (novos campos, itens novos, renomeações) precisam ser aplicadas aqui
 // em cima do array já carregado, SEM mexer na posição dos itens existentes — im.compras é indexado
 // pelo índice do array, então reordenar/remover um item no meio confundiria os dados já salvos.
+// Semeia os 2 modelos de negócio padrão (Gestão 360 / Gestão Online) uma única vez,
+// só se o catálogo ainda estiver vazio — depois disso é 100% editável pela usuária em
+// Configurações (renomear, apagar, criar novos), sem essa função voltar a mexer.
+function _seedModelosNegocio(){
+  if(MODELOS_NEGOCIO.length)return;
+  const etapa=texto=>({id:'etp_'+uid()+uid(),texto});
+  MODELOS_NEGOCIO=[
+    {id:'mod_360',nome:'Gestão 360 (tudo — online e presencial)',etapas:[
+      'Assinatura do contrato',
+      'Pasta no drive + resumo das informações + excel e pasta das vistorias',
+      'Estudar informações para não ter divergências na comunicação com o proprietário',
+      'Definir limpeza (ver qual é o melhor custo-benefício, se atende, valores)',
+      'Criar grupo com proprietário e enviar a mensagem de boas-vindas e próximos passos',
+      'Ver disponibilidade do imóvel e marcar a primeira visita (ver disponibilidade da equipe também — não esquecer de pegar a senha da porta)',
+      'Em paralelo, pegar contato e e-mail da portaria/gestão do prédio',
+      'Entrar em contato e se apresentar, tirar dúvidas padrão (horário dos prestadores, áreas comuns, horário de silêncio, garagem, regras, liberação de hóspedes etc) — cadastro no prédio pra liberar nosso pessoal',
+      'Fazer a primeira vistoria (liberar a vistoriadora e enviar o link da planilha de vistoria e a pasta do drive)',
+      'Compilar as informações e fazer o orçamento dos itens faltantes e manutenções pendentes',
+      'Passar o orçamento para o proprietário',
+      'Se ele quiser o serviço de compras e recebimento: pedir o PIX, montar o carrinho no Mercado Livre e comprar os itens (alinhar a entrega com a vistoriadora)',
+      'Em paralelo, pedir para a IA pré-preencher o formulário do imóvel e enviar para o proprietário confirmar',
+      'Quando os itens estiverem para chegar, marcar a segunda vistoria (pra organizar os itens)',
+      'Estando tudo OK com os itens, marcar a primeira limpeza — não esquecer de deixar os itens de limpeza no apê',
+      'Com a limpeza agendada, marcar as fotos',
+      'Fotos recebidas: usar o melhorador de fotos, adicionar marca d’água e separar as fotos do anúncio na pasta do drive',
+      'Com o formulário OK e as fotos, iniciar a criação do anúncio',
+      'Finalizado o anúncio, enviar para o proprietário aprovar',
+    ].map(etapa)},
+    {id:'mod_online',nome:'Gestão Online',etapas:[
+      'Assinatura do contrato',
+      'Pasta no drive + resumo das informações + excel e pasta das vistorias',
+      'Estudar informações para não ter divergências na comunicação com o proprietário',
+      'Criar grupo com proprietário e enviar a mensagem de boas-vindas e próximos passos',
+      'Mandar lista de itens obrigatórios pro proprietário verificar/comprar (orientar com links do Mercado Livre) e acompanhar até estar tudo OK',
+      'Pegar informações do imóvel (quem cuida da limpeza, com quem alinhar reservas, horários de check-in/check-out, passar nossas políticas etc) e fotos',
+      'Pré-preencher o formulário',
+      'Enviar para validação do proprietário',
+      'Com o formulário OK e as fotos, iniciar a criação do anúncio',
+      'Finalizado o anúncio, enviar para o proprietário aprovar',
+    ].map(etapa)},
+  ];
+}
 function _migrarCatalogoItens(){
   let mudou=false;
   const detector=ITENS_COMPRAS.find(i=>i.nome==='Detector de Fumaça');
@@ -475,7 +523,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -496,6 +544,7 @@ function saveAll(){
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
   localStorage.setItem('wc_camas_custom',JSON.stringify(CAMAS_TIPOS_CUSTOM));
+  localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -521,6 +570,8 @@ function loadAll(){
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
   v=g('wc_camas_custom');if(Array.isArray(v))CAMAS_TIPOS_CUSTOM=v;
+  v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
+  _seedModelosNegocio();
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -1201,9 +1252,82 @@ function adicionarCama(){
 }
 
 // ═══════════════════ ABA CAPTAÇÃO ═══════════════════
+function _renderChecklistImovel(im){
+  const modeloAtual=im.modeloNegocioId||'';
+  const etapas=im.checklistEtapas||[];
+  const concluidas=etapas.filter(e=>e.concluida).length;
+  return`<div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist / Modelo de Negócio</div>
+  <div class="form-group" style="max-width:380px;">
+    <label>Modelo de negócio</label>
+    <select id="cap-modelo-negocio" class="input" onchange="_aplicarModeloChecklist('${im.id}',this.value)">
+      <option value="">— selecione —</option>
+      ${MODELOS_NEGOCIO.map(m=>`<option value="${esc(m.id)}"${modeloAtual===m.id?' selected':''}>${esc(m.nome)}</option>`).join('')}
+    </select>
+    <div class="hint" style="margin-top:4px;">Aplicar um modelo copia as etapas dele pra esse imóvel — dá pra editar livremente depois (excluir, reordenar, adicionar) sem afetar o modelo original.</div>
+  </div>
+  ${etapas.length?`
+  <div style="margin:10px 0 6px;font-size:12px;color:var(--text-muted);">${concluidas}/${etapas.length} concluídas</div>
+  <div style="margin-bottom:8px;">
+    ${etapas.map((e,ei)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;padding:6px 8px;border-radius:8px;${e.concluida?'background:var(--surface-2);':''}">
+      <input type="checkbox" style="margin-top:3px;flex-shrink:0;"${e.concluida?' checked':''} onchange="_toggleEtapaChecklist('${im.id}','${e.id}')">
+      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}</span>
+      <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
+      <button class="btn btn-xs btn-outline"${ei===etapas.length-1?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
+      <button class="btn btn-xs btn-danger" onclick="_removerEtapaChecklist('${im.id}','${e.id}')" title="Remover"><i class="fa-solid fa-xmark"></i></button>
+    </div>`).join('')}
+  </div>`:`<div class="hint" style="margin-top:8px;">${modeloAtual?'Esse modelo não tem etapas.':'Selecione um modelo pra carregar o checklist, ou adicione etapas soltas abaixo.'}</div>`}
+  <div style="display:flex;gap:6px;margin-top:4px;max-width:500px;">
+    <input class="input" id="cap-nova-etapa" placeholder="Adicionar etapa..." style="flex:1;" onkeydown="if(event.key==='Enter'){_adicionarEtapaChecklistImovel('${im.id}');event.preventDefault();}">
+    <button class="btn btn-sm btn-outline" onclick="_adicionarEtapaChecklistImovel('${im.id}')"><i class="fa-solid fa-plus"></i></button>
+  </div>
+  <hr class="divider" style="margin:20px 0;">`;
+}
+function _aplicarModeloChecklist(imId,modeloId){
+  const im=getImovel(imId);if(!im)return;
+  if(!modeloId){im.modeloNegocioId='';saveAll();renderAba('captacao');return;}
+  const modelo=MODELOS_NEGOCIO.find(m=>m.id===modeloId);if(!modelo)return;
+  if((im.checklistEtapas||[]).length&&!confirm(`Isso substitui o checklist atual desse imóvel pelas etapas do modelo "${modelo.nome}". Continuar?`)){
+    renderAba('captacao');
+    return;
+  }
+  im.modeloNegocioId=modeloId;
+  im.checklistEtapas=(modelo.etapas||[]).map(e=>({id:'etp_'+uid()+uid(),texto:e.texto,concluida:false}));
+  saveAll();renderAba('captacao');
+  showToast('Checklist aplicado!','sage');
+}
+function _toggleEtapaChecklist(imId,etapaId){
+  const im=getImovel(imId);if(!im)return;
+  const e=(im.checklistEtapas||[]).find(x=>x.id===etapaId);if(!e)return;
+  e.concluida=!e.concluida;
+  saveAll();renderAba('captacao');
+}
+function _moverEtapaChecklist(imId,etapaId,dir){
+  const im=getImovel(imId);if(!im)return;
+  const arr=im.checklistEtapas||[];
+  const idx=arr.findIndex(x=>x.id===etapaId);if(idx<0)return;
+  const novo=idx+dir;
+  if(novo<0||novo>=arr.length)return;
+  [arr[idx],arr[novo]]=[arr[novo],arr[idx]];
+  saveAll();renderAba('captacao');
+}
+function _removerEtapaChecklist(imId,etapaId){
+  const im=getImovel(imId);if(!im)return;
+  im.checklistEtapas=(im.checklistEtapas||[]).filter(x=>x.id!==etapaId);
+  saveAll();renderAba('captacao');
+}
+function _adicionarEtapaChecklistImovel(imId){
+  const im=getImovel(imId);if(!im)return;
+  const inp=document.getElementById('cap-nova-etapa');
+  const texto=(inp?.value||'').trim();
+  if(!texto)return;
+  if(!im.checklistEtapas)im.checklistEtapas=[];
+  im.checklistEtapas.push({id:'etp_'+uid()+uid(),texto,concluida:false});
+  saveAll();renderAba('captacao');
+}
 function renderAbaCaptacao(im){
   const temLink=!!(im.captacaoLink||'').trim();
   return`<div class="form-grid">
+  ${_renderChecklistImovel(im)}
   <div class="form-section-title"><i class="fa-brands fa-google-drive"></i> Pasta de Captação</div>
   <div class="hint" style="margin-bottom:12px;">Link da pasta do Google Drive criada pela equipe de captação para este imóvel (contrato, reuniões, fotos, etc.).</div>
   <div class="form-group">
@@ -5207,6 +5331,7 @@ function renderConfig(){
   _renderConfigDefPagadoria();
   _renderConfigVistoriaCampos();
   _renderConfigCamasCustom();
+  _renderConfigModelosNegocio();
 }
 function _renderConfigLimpezaCheckout(){
   const el=document.getElementById('config-precos-checkout');
@@ -5441,6 +5566,83 @@ function _removerTipoCamaCustom(i){
   CAMAS_TIPOS_CUSTOM.splice(i,1);
   saveAll();_renderConfigCamasCustom();
   showToast('Tipo removido.','peach');
+}
+
+// ═══════════════════ MODELOS DE NEGÓCIO (CHECKLIST) ═══════════════════
+function _renderConfigModelosNegocio(){
+  const el=document.getElementById('config-modelos-negocio');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Cada modelo é um checklist de etapas. Ao aplicar um modelo num imóvel (aba Captação), as etapas são copiadas pra aquele imóvel — dá pra excluir, reordenar ou adicionar etapas só naquele imóvel, sem afetar o modelo nem outros imóveis.</div>
+    <div style="margin-bottom:14px;">
+      <button class="btn btn-sm btn-sage" onclick="_adicionarModeloNegocio()"><i class="fa-solid fa-plus"></i> Novo Modelo</button>
+    </div>
+    ${MODELOS_NEGOCIO.map((m,mi)=>`
+      <div class="card" style="margin-bottom:14px;background:var(--surface-2);">
+        <div class="card-body" style="padding:12px;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+            <input class="input" style="font-weight:700;flex:1;" value="${esc(m.nome)}" onchange="_renomearModeloNegocio(${mi},this.value)">
+            <button class="btn btn-xs btn-danger" onclick="_apagarModeloNegocio(${mi})" title="Apagar modelo"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div style="margin-left:4px;">
+            ${(m.etapas||[]).map((e,ei)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+              <span style="width:24px;flex-shrink:0;color:var(--text-muted);font-size:11px;text-align:right;">${ei+1}.</span>
+              <input class="input" style="flex:1;font-size:12.5px;padding:5px 8px;" value="${esc(e.texto)}" onchange="_editarEtapaModelo(${mi},${ei},this.value)">
+              <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaModelo(${mi},${ei},-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
+              <button class="btn btn-xs btn-outline"${ei===m.etapas.length-1?' disabled':''} onclick="_moverEtapaModelo(${mi},${ei},1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="_removerEtapaModelo(${mi},${ei})" title="Remover"><i class="fa-solid fa-xmark"></i></button>
+            </div>`).join('')}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;margin-left:30px;">
+            <input class="input" id="nova-etapa-${mi}" placeholder="Nova etapa..." style="flex:1;font-size:12.5px;padding:5px 8px;" onkeydown="if(event.key==='Enter'){_adicionarEtapaModelo(${mi});event.preventDefault();}">
+            <button class="btn btn-xs btn-sage" onclick="_adicionarEtapaModelo(${mi})"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+      </div>
+    `).join('')||'<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum modelo cadastrado.</div>'}
+  `;
+}
+function _adicionarModeloNegocio(){
+  const nome=(prompt('Nome do novo modelo:')||'').trim();
+  if(!nome)return;
+  MODELOS_NEGOCIO.push({id:'mod_'+uid()+uid(),nome,etapas:[]});
+  saveAll();_renderConfigModelosNegocio();
+}
+function _renomearModeloNegocio(mi,nome){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  m.nome=nome.trim()||m.nome;
+  saveAll();
+}
+function _apagarModeloNegocio(mi){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  if(!confirm(`Apagar o modelo "${m.nome}"? Imóveis que já aplicaram esse modelo mantêm o checklist deles — só não vai dar mais pra escolher esse modelo em novos imóveis.`))return;
+  MODELOS_NEGOCIO.splice(mi,1);
+  saveAll();_renderConfigModelosNegocio();
+}
+function _editarEtapaModelo(mi,ei,texto){
+  const m=MODELOS_NEGOCIO[mi];if(!m||!m.etapas[ei])return;
+  m.etapas[ei].texto=texto.trim()||m.etapas[ei].texto;
+  saveAll();
+}
+function _moverEtapaModelo(mi,ei,dir){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  const novo=ei+dir;
+  if(novo<0||novo>=m.etapas.length)return;
+  [m.etapas[ei],m.etapas[novo]]=[m.etapas[novo],m.etapas[ei]];
+  saveAll();_renderConfigModelosNegocio();
+}
+function _removerEtapaModelo(mi,ei){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  m.etapas.splice(ei,1);
+  saveAll();_renderConfigModelosNegocio();
+}
+function _adicionarEtapaModelo(mi){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  const inp=document.getElementById('nova-etapa-'+mi);
+  const texto=(inp?.value||'').trim();
+  if(!texto)return;
+  m.etapas.push({id:'etp_'+uid()+uid(),texto});
+  saveAll();_renderConfigModelosNegocio();
 }
 function _lerModalidadesConfig(i){
   const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);

@@ -172,6 +172,15 @@ class CamaTipoCustom(Base):
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ModeloNegocio(Base):
+    __tablename__ = "modelos_negocio"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    nome: Mapped[str | None] = mapped_column(String)
+    etapas: Mapped[list | None] = mapped_column(JSON)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Orcamento(Base):
     __tablename__ = "orcamentos"
 
