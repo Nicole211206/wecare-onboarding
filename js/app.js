@@ -2399,7 +2399,7 @@ function confirmarManutencao(){
   im.manutencoes.push(novaManut);
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
   // Cria card no módulo de manutenção da Claire
-  fetch('https://claire-dados.nicole-0e7.workers.dev/api/manutencoes?token=wecare-claire-2026-k7x9q2',{
+  fetch('https://claire.wecarehosting.com.br/api/manutencoes?token=f634ad1d7fe480e9b53fa2009a7e650e',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
@@ -3203,7 +3203,7 @@ function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const r=_calcResumoFinanceiro(im).outros;
   if(!confirm(`Enviar para a Claire (Setup fica de fora, já vai por conta própria)?\n\nRecebido: ${fmtMoeda(r.recebido)}\nGasto: ${fmtMoeda(r.gastoPago)}\nMargem: ${fmtMoeda(r.margem)}`))return;
-  fetch('https://claire-dados.nicole-0e7.workers.dev/api/extras?token=wecare-claire-2026-k7x9q2',{
+  fetch('https://claire.wecarehosting.com.br/api/extras?token=f634ad1d7fe480e9b53fa2009a7e650e',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({imovelNome:im.nome,descricao:'Resumo financeiro onboarding (compras/manutenções/avulsos)',cobrado:r.recebido,gasto:r.gastoPago,obs:`Enviado do onboarding em ${new Date().toLocaleString('pt-BR')}`})
   }).then(resp=>resp.json()).then(j=>{
@@ -3830,7 +3830,7 @@ async function criarTarefaClaire(){
 RESPOSTAS DO FORMULÁRIO:
 ${respostasTxt||'(sem respostas ainda)'}`;
   try{
-    const r=await fetch('https://claire-dados.nicole-0e7.workers.dev/api/tasks?token=wecare-claire-2026-k7x9q2',{
+    const r=await fetch('https://claire.wecarehosting.com.br/api/tasks?token=f634ad1d7fe480e9b53fa2009a7e650e',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text:texto,cat:'onboarding',prio:'alta',due:im.dataEnvioParaCriacao||''})
     });
