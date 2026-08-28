@@ -54,32 +54,37 @@
     <button class="nav-item active" onclick="showPanel('kanban',this)">
       <i class="fa-solid fa-table-columns"></i> Kanban
     </button>
+    <button class="nav-item" onclick="showPanel('calendario',this)">
+      <i class="fa-solid fa-calendar-days"></i> Calendário
+    </button>
     <button class="nav-item" onclick="showPanel('dashboard',this)">
       <i class="fa-solid fa-chart-pie"></i> Dashboard
     </button>
+    <div class="nav-section">Financeiro</div>
     <button class="nav-item" onclick="showPanel('financeiro',this)">
       <i class="fa-solid fa-sack-dollar"></i> Financeiro
-    </button>
-    <button class="nav-item" onclick="showPanel('intel',this)">
-      <i class="fa-solid fa-magnifying-glass-location"></i> Intel de Mercado
-    </button>
-    <button class="nav-item" onclick="showPanel('fornecedores',this)">
-      <i class="fa-solid fa-address-book"></i> Fornecedores
-    </button>
-    <button class="nav-item" onclick="showPanel('informacoes',this)">
-      <i class="fa-solid fa-circle-info"></i> Informações
     </button>
     <button class="nav-item" onclick="showPanel('orcamentos',this)">
       <i class="fa-solid fa-file-invoice-dollar"></i> Orçamentos
     </button>
-    <button class="nav-item" onclick="showPanel('estoque',this)">
-      <i class="fa-solid fa-warehouse"></i> Estoque
+    <div class="nav-section">Operação</div>
+    <button class="nav-item" onclick="showPanel('proprietarios',this)">
+      <i class="fa-solid fa-user-tie"></i> Proprietários
     </button>
     <button class="nav-item" onclick="showPanel('vistoria',this)">
       <i class="fa-solid fa-clipboard-list"></i> Vistoria
     </button>
-    <button class="nav-item" onclick="showPanel('calendario',this)">
-      <i class="fa-solid fa-calendar-days"></i> Calendário
+    <button class="nav-item" onclick="showPanel('estoque',this)">
+      <i class="fa-solid fa-warehouse"></i> Estoque
+    </button>
+    <button class="nav-item" onclick="showPanel('fornecedores',this)">
+      <i class="fa-solid fa-address-book"></i> Fornecedores
+    </button>
+    <button class="nav-item" onclick="showPanel('intel',this)">
+      <i class="fa-solid fa-magnifying-glass-location"></i> Intel de Mercado
+    </button>
+    <button class="nav-item" onclick="showPanel('informacoes',this)">
+      <i class="fa-solid fa-circle-info"></i> Informações
     </button>
     <div class="nav-section" id="navsec-admin">Admin</div>
     <button class="nav-item" id="nav-config" onclick="showPanel('config',this)">
@@ -198,27 +203,17 @@
           <div id="intel-mapa-embed" style="margin-top:14px;"></div>
         </div>
       </div>
-
-      <!-- Tabela de prestadores -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fa-solid fa-address-book" style="color:var(--lavender)"></i> Prestadores Cadastrados</span>
-          <div style="margin-left:auto;display:flex;gap:8px;">
-            <select class="form-select" id="intel-filtro-tipo" onchange="renderPrestadores()" style="width:140px;padding:4px 8px;font-size:12px;">
-              <option value="">Todos os tipos</option>
-              <option>Limpeza</option><option>Fotógrafo</option><option>Hidráulica</option>
-              <option>Elétrica</option><option>Vistoria</option><option>Fechadura</option><option>Outros</option>
-            </select>
-            <input class="form-input" id="intel-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderPrestadores()">
-          </div>
-        </div>
-        <div class="card-body" id="intel-prestadores-lista" style="overflow-x:auto;"></div>
-      </div>
+      <div class="hint">Fornecedores já cadastrados ficam na aba <strong>Fornecedores</strong> — aqui é só pra pesquisar e achar novos.</div>
     </div>
 
     <!-- ── FORNECEDORES ── -->
     <div class="panel" id="panel-fornecedores">
       <div id="fornecedores-wrap"></div>
+    </div>
+
+    <!-- ── PROPRIETÁRIOS ── -->
+    <div class="panel" id="panel-proprietarios">
+      <div id="proprietarios-wrap"></div>
     </div>
 
     <!-- ── INFORMAÇÕES ── -->
@@ -280,6 +275,18 @@
         <div class="card" style="grid-column:1/-1;">
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-clipboard-list" style="color:var(--sky)"></i> Campos de Vistoria</span></div>
           <div class="card-body" id="config-vistoria-campos"></div>
+        </div>
+        <div class="card" style="grid-column:1/-1;">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-bed" style="color:var(--peach)"></i> Tipos de Cama Customizados</span></div>
+          <div class="card-body" id="config-camas-custom"></div>
+        </div>
+        <div class="card" style="grid-column:1/-1;">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-list-check" style="color:var(--sage)"></i> Modelos de Negócio (checklist)</span></div>
+          <div class="card-body" id="config-modelos-negocio"></div>
+        </div>
+        <div class="card" style="grid-column:1/-1;">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-truck" style="color:var(--gold)"></i> Fornecedores de Enxoval Alugado (modalidades)</span></div>
+          <div class="card-body" id="config-modalidades-enxoval"></div>
         </div>
       </div>
     </div>
@@ -625,11 +632,7 @@
         <option value="sim">Sim</option>
       </select></div>
     <div class="form-group" style="margin-bottom:0;"><label class="form-label">Aparece em quais modalidades de enxoval? (deixe tudo desmarcado para item obrigatório, sempre aparece)</label>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:4px;">
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-comprado"> Comprado</label>
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-flashee"> Alugado — Flashee</label>
-        <label class="checkbox-label"><input type="checkbox" id="it-modal-intense"> Alugado — Intense</label>
-      </div>
+      <div id="it-modal-checks" style="display:flex;gap:14px;flex-wrap:wrap;padding-top:4px;"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="btn" onclick="closeModal('modal-item')">Cancelar</button>
@@ -682,6 +685,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=67"></script>
+<script src="js/app.js?v=99"></script>
 </body>
 </html>

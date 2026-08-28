@@ -217,6 +217,30 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             {"nome": t.nome, "texto": t.texto}
             for t in db.scalars(select(models.TemplateMsg).order_by(models.TemplateMsg.ordem))
         ],
+        "wc_camas_custom": [
+            {"id": c.id, "nome": c.nome, "componentes": c.componentes}
+            for c in db.scalars(select(models.CamaTipoCustom).order_by(models.CamaTipoCustom.ordem))
+        ],
+        "wc_modelos_negocio": [
+            {"id": m.id, "nome": m.nome, "etapas": m.etapas}
+            for m in db.scalars(select(models.ModeloNegocio).order_by(models.ModeloNegocio.ordem))
+        ],
+        "wc_proprietarios": [
+            {"id": p.id, "nome": p.nome, "telefone": p.telefone, "email": p.email, "obs": p.obs}
+            for p in db.scalars(select(models.Proprietario).order_by(models.Proprietario.ordem))
+        ],
+        "wc_modalidades_enxoval": [
+            {
+                "id": m.id, "nome": m.nome, "temSetup": m.tem_setup,
+                "valorSetup": m.valor_setup, "valorPorHospede": m.valor_por_hospede,
+                "setupCusto": m.setup_custo, "setupCobrado": m.setup_cobrado,
+                "precificacaoMensal": m.precificacao_mensal, "hospedesBase": m.hospedes_base,
+                "mensalBaseCusto": m.mensal_base_custo, "mensalBaseCobrado": m.mensal_base_cobrado,
+                "mensalExtraCusto": m.mensal_extra_custo, "mensalExtraCobrado": m.mensal_extra_cobrado,
+                "mensalTabela": m.mensal_tabela,
+            }
+            for m in db.scalars(select(models.ModalidadeEnxoval).order_by(models.ModalidadeEnxoval.ordem))
+        ],
         "wc_orcamentos": [
             {
                 "id": o.id,
@@ -414,6 +438,50 @@ def put_state(db: Session, state: dict) -> None:
                     escopo=v.get("escopo"),
                     opcoes=v.get("opcoes"),
                     comodos_tipos=v.get("comodosTipos"),
+                    ordem=idx,
+                )
+            )
+
+    if "wc_camas_custom" in state:
+        db.execute(delete(models.CamaTipoCustom))
+        for idx, c in enumerate(state["wc_camas_custom"] or []):
+            db.add(
+                models.CamaTipoCustom(
+                    id=c["id"], nome=c.get("nome"), componentes=c.get("componentes"), ordem=idx
+                )
+            )
+
+    if "wc_modelos_negocio" in state:
+        db.execute(delete(models.ModeloNegocio))
+        for idx, m in enumerate(state["wc_modelos_negocio"] or []):
+            db.add(
+                models.ModeloNegocio(
+                    id=m["id"], nome=m.get("nome"), etapas=m.get("etapas"), ordem=idx
+                )
+            )
+
+    if "wc_proprietarios" in state:
+        db.execute(delete(models.Proprietario))
+        for idx, p in enumerate(state["wc_proprietarios"] or []):
+            db.add(
+                models.Proprietario(
+                    id=p["id"], nome=p.get("nome"), telefone=p.get("telefone"),
+                    email=p.get("email"), obs=p.get("obs"), ordem=idx,
+                )
+            )
+
+    if "wc_modalidades_enxoval" in state:
+        db.execute(delete(models.ModalidadeEnxoval))
+        for idx, m in enumerate(state["wc_modalidades_enxoval"] or []):
+            db.add(
+                models.ModalidadeEnxoval(
+                    id=m["id"], nome=m.get("nome"), tem_setup=bool(m.get("temSetup")),
+                    valor_setup=m.get("valorSetup"), valor_por_hospede=m.get("valorPorHospede"),
+                    setup_custo=m.get("setupCusto"), setup_cobrado=m.get("setupCobrado"),
+                    precificacao_mensal=m.get("precificacaoMensal"), hospedes_base=m.get("hospedesBase"),
+                    mensal_base_custo=m.get("mensalBaseCusto"), mensal_base_cobrado=m.get("mensalBaseCobrado"),
+                    mensal_extra_custo=m.get("mensalExtraCusto"), mensal_extra_cobrado=m.get("mensalExtraCobrado"),
+                    mensal_tabela=m.get("mensalTabela"),
                     ordem=idx,
                 )
             )

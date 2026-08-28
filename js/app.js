@@ -1,11 +1,24 @@
 // ═══════════════════ ESTADO ═══════════════════
-let imoveis=[], membros=[], usuarios=[], prestadores=[];
+let imoveis=[], membros=[], usuarios=[], prestadores=[], proprietarios=[];
+let _editProprietarioIdx=null, _novoProprietarioParaImovelId=null;
 let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
 let orcamentos=[], estoqueItens=[];
 let _editOrcamentoId=null, _orcItensSoltosTemp=[];
+// Catálogo de modelos de negócio (checklist-template por modelo, ex: "Gestão 360",
+// "Gestão Online") — cada um {id,nome,etapas:[{id,texto}]}. Editável em Configurações.
+// Cada imóvel aplica um modelo (im.modeloNegocioId) que COPIA as etapas pra
+// im.checklistEtapas — a partir daí o imóvel tem sua própria cópia editável
+// (excluir/remanejar/adicionar etapa), sem afetar o modelo original nem outros imóveis.
+let MODELOS_NEGOCIO=[];
+// Fornecedores de enxoval alugado (além de "Comprado", que é fixo/embutido) — cada
+// {id,nome}. Alimenta: checkboxes de modalidade no catálogo de Compras, o seletor de
+// Fornecedor na aba Contrato (Enxoval), e a leitura de qual modalidade um imóvel está em
+// (modalidadeEnxovalAtual, casando pelo nome exato do fornecedor escolhido).
+let MODALIDADES_ENXOVAL=[];
+function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome])];}
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -47,6 +60,104 @@ function _migrarGastosSetup(){
 // Por isso mudanças no catálogo (novos campos, itens novos, renomeações) precisam ser aplicadas aqui
 // em cima do array já carregado, SEM mexer na posição dos itens existentes — im.compras é indexado
 // pelo índice do array, então reordenar/remover um item no meio confundiria os dados já salvos.
+// Semeia os 2 modelos de negócio padrão (Gestão 360 / Gestão Online) uma única vez,
+// só se o catálogo ainda estiver vazio — depois disso é 100% editável pela usuária em
+// Configurações (renomear, apagar, criar novos), sem essa função voltar a mexer.
+function _seedModelosNegocio(){
+  if(MODELOS_NEGOCIO.length)return;
+  const etapa=texto=>({id:'etp_'+uid()+uid(),texto});
+  MODELOS_NEGOCIO=[
+    {id:'mod_360',nome:'Gestão 360 (tudo — online e presencial)',etapas:[
+      'Assinatura do contrato',
+      'Pasta no drive + resumo das informações + excel e pasta das vistorias',
+      'Estudar informações para não ter divergências na comunicação com o proprietário',
+      'Definir limpeza (ver qual é o melhor custo-benefício, se atende, valores)',
+      'Criar grupo com proprietário e enviar a mensagem de boas-vindas e próximos passos',
+      'Ver disponibilidade do imóvel e marcar a primeira visita (ver disponibilidade da equipe também — não esquecer de pegar a senha da porta)',
+      'Em paralelo, pegar contato e e-mail da portaria/gestão do prédio',
+      'Entrar em contato e se apresentar, tirar dúvidas padrão (horário dos prestadores, áreas comuns, horário de silêncio, garagem, regras, liberação de hóspedes etc) — cadastro no prédio pra liberar nosso pessoal',
+      'Fazer a primeira vistoria (liberar a vistoriadora e enviar o link da planilha de vistoria e a pasta do drive)',
+      'Compilar as informações e fazer o orçamento dos itens faltantes e manutenções pendentes',
+      'Passar o orçamento para o proprietário',
+      'Se ele quiser o serviço de compras e recebimento: pedir o PIX, montar o carrinho no Mercado Livre e comprar os itens (alinhar a entrega com a vistoriadora)',
+      'Em paralelo, pedir para a IA pré-preencher o formulário do imóvel e enviar para o proprietário confirmar',
+      'Quando os itens estiverem para chegar, marcar a segunda vistoria (pra organizar os itens)',
+      'Estando tudo OK com os itens, marcar a primeira limpeza — não esquecer de deixar os itens de limpeza no apê',
+      'Com a limpeza agendada, marcar as fotos',
+      'Fotos recebidas: usar o melhorador de fotos, adicionar marca d’água e separar as fotos do anúncio na pasta do drive',
+      'Com o formulário OK e as fotos, iniciar a criação do anúncio',
+      'Finalizado o anúncio, enviar para o proprietário aprovar',
+    ].map(etapa)},
+    {id:'mod_online',nome:'Gestão Online',etapas:[
+      'Assinatura do contrato',
+      'Pasta no drive + resumo das informações + excel e pasta das vistorias',
+      'Estudar informações para não ter divergências na comunicação com o proprietário',
+      'Criar grupo com proprietário e enviar a mensagem de boas-vindas e próximos passos',
+      'Mandar lista de itens obrigatórios pro proprietário verificar/comprar (orientar com links do Mercado Livre) e acompanhar até estar tudo OK',
+      'Pegar informações do imóvel (quem cuida da limpeza, com quem alinhar reservas, horários de check-in/check-out, passar nossas políticas etc) e fotos',
+      'Pré-preencher o formulário',
+      'Enviar para validação do proprietário',
+      'Com o formulário OK e as fotos, iniciar a criação do anúncio',
+      'Finalizado o anúncio, enviar para o proprietário aprovar',
+    ].map(etapa)},
+  ];
+}
+// Cria registros em `proprietarios[]` a partir dos campos soltos que já existiam em
+// cada imóvel (im.proprietarioNome/Tel/Email) e liga im.proprietarioId — roda toda vez
+// no load, mas só age em imóveis que ainda não têm proprietarioId, então é seguro
+// rodar de novo (idempotente). Casa por nome+telefone pra não duplicar o mesmo dono
+// em 2 registros diferentes quando ele já tem mais de um imóvel cadastrado.
+function _migrarProprietarios(){
+  let mudou=false;
+  imoveis.forEach(im=>{
+    if(im.proprietarioId)return;
+    const nome=(im.proprietarioNome||'').trim();
+    if(!nome)return;
+    const tel=(im.proprietarioTel||'').trim();
+    let prop=proprietarios.find(p=>p.nome===nome&&(p.telefone||'')===tel);
+    if(!prop){
+      prop={id:'prop_'+uid()+uid(),nome,telefone:tel,email:(im.proprietarioEmail||'').trim(),obs:''};
+      proprietarios.push(prop);
+    }
+    im.proprietarioId=prop.id;
+    mudou=true;
+  });
+  if(mudou)saveAll();
+}
+function _seedModalidadesEnxoval(){
+  if(MODALIDADES_ENXOVAL.length){
+    // migração leve: catálogo pode vir de 2 formatos anteriores — o hardcoded original
+    // (sem nenhum campo de preço) ou o intermediário de uma sessão anterior (valorPorHospede/
+    // valorSetup, um valor só sem custo x cobrado). Completa pro formato atual (fórmula/tabela
+    // + custo/cobrado) preservando o comportamento equivalente, sem perder nada.
+    let mudou=false;
+    MODALIDADES_ENXOVAL.forEach(m=>{
+      if(m.precificacaoMensal==null){
+        const porHospede=m.valorPorHospede??110;
+        m.precificacaoMensal='formula';
+        m.hospedesBase=2;
+        m.mensalBaseCusto=0;m.mensalBaseCobrado=porHospede*2;
+        m.mensalExtraCusto=0;m.mensalExtraCobrado=porHospede;
+        m.mensalTabela=m.mensalTabela||[];
+        mudou=true;
+      }
+      if(m.setupCobrado==null){
+        const legado=m.valorSetup??(m.nome==='Flashee'?190:0);
+        if(m.temSetup==null)m.temSetup=m.nome==='Flashee';
+        m.setupCusto=legado;m.setupCobrado=legado;
+        mudou=true;
+      }
+    });
+    if(mudou)saveAll();
+    return;
+  }
+  MODALIDADES_ENXOVAL=[
+    {id:'flashee',nome:'Flashee',temSetup:true,setupCusto:190,setupCobrado:190,
+      precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
+    {id:'intense',nome:'Intense Clean',temSetup:false,setupCusto:0,setupCobrado:0,
+      precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
+  ];
+}
 function _migrarCatalogoItens(){
   let mudou=false;
   const detector=ITENS_COMPRAS.find(i=>i.nome==='Detector de Fumaça');
@@ -83,6 +194,14 @@ function _migrarCatalogoItens(){
   ESTOQUE_ENXOVAL_ITENS.forEach(nome=>{
     const item=ITENS_COMPRAS.find(i=>i.nome===nome);
     if(item&&!item.estoqueEnxoval){item.estoqueEnxoval=true;mudou=true;}
+  });
+  // Itens de Cozinha são de uso comum às 3 modalidades de enxoval (comprado/Flashee/Intense)
+  // — qualquer restrição de modalidades salva neles é sempre indesejada, limpa sozinho.
+  ITENS_COMPRAS.forEach(item=>{
+    if(item.cat==='Cozinha'&&item.modalidades){
+      delete item.modalidades;
+      mudou=true;
+    }
   });
   if(mudou)saveAll();
 }
@@ -163,6 +282,32 @@ const CAMA_TIPO_ENXOVAL={
   'Queen':'Queen','King':'King'
 };
 const CAMA_LEITOS={'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solteiro':1,'Sofá-cama Casal':1,'Beliche':2,'Bicama':2,'Viúva':1};
+const TIPOS_CAMA_FIXOS=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+// Tipos de cama customizados (definidos em Configurações): cada um tem nome + composição
+// em leitos-base ([{tamanho:'Solteiro'|'Casal'|'Queen'|'King', qtd}]) — ex.: "Beliche Casal e Bicama"
+// = 2 Solteiro + 1 Casal. Persistido em wc_camas_custom.
+let CAMAS_TIPOS_CUSTOM=[];
+function _tiposCamaDisponiveis(){return[...TIPOS_CAMA_FIXOS,...CAMAS_TIPOS_CUSTOM.map(t=>t.nome)];}
+function _camaCustomPorNome(nome){return(CAMAS_TIPOS_CUSTOM||[]).find(t=>t.nome===nome);}
+function _leitosCama(c){return CAMA_LEITOS[c.tipo]!=null?CAMA_LEITOS[c.tipo]:1;}
+// Expande uma linha de cama (im.camas[i], já multiplicada por c.qtd) em unidades por
+// tamanho-base de enxoval — tipo fixo gera 1 unidade só; tipo customizado gera 1 unidade
+// por componente cadastrado em Configurações (ex.: Beliche Casal e Bicama -> 2 Solteiro + 1 Casal).
+function _expandirCama(c){
+  const qtdLinha=+c.qtd||1;
+  const custom=_camaCustomPorNome(c.tipo);
+  if(custom&&Array.isArray(custom.componentes)&&custom.componentes.length){
+    return custom.componentes.map(comp=>({tamanho:comp.tamanho||'Solteiro',qtd:(+comp.qtd||1)*qtdLinha,semSofaCama:false}));
+  }
+  return[{tamanho:CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro',qtd:_leitosCama(c)*qtdLinha,semSofaCama:!!(c.tipo&&c.tipo.startsWith('Sofá-cama'))}];
+}
+// Agrupa todas as camas de um imóvel/orçamento em unidades por tamanho-base de enxoval —
+// substitui o padrão antigo de "porTipo[t].push(c)" duplicado em 4 lugares do arquivo.
+function _unidadesEnxovalPorTamanho(camas){
+  const porTipo={};
+  (camas||[]).forEach(c=>{_expandirCama(c).forEach(u=>{(porTipo[u.tamanho]=porTipo[u.tamanho]||[]).push(u);});});
+  return porTipo;
+}
 
 // Lista livre (empresa, custo, cobrado por qtd. de quartos) — array com `id`, igual PRECOS_LIMPEZA_CHECKOUT,
 // pra permitir mais de uma faixa de preço pra mesma qtd. de quartos sem sobrescrever a anterior.
@@ -237,17 +382,56 @@ const FLASHEE_PACKAGES=[
   {id:'queen-2sol',    label:'Queen + 2 Solteiros (4)',        custo:279.90,cobrado:320,setup:290},
 ];
 
+// Bases de cálculo de quantidade pros itens de Compras (item.qtdRule = "<n>-<base>") — fonte
+// única usada tanto no formulário de Novo Item quanto na tabela de regras em Configurações,
+// pra nunca mais desincronizar (achado em 2026-08-21: "por lavabo" já existia na tabela de
+// regras mas faltava no formulário de criação, então dava pra editar mas não pra criar assim).
+const QTD_RULE_BASES=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','andar','hospede','cada2hospede','unidade'];
+const QTD_RULE_LABELS={
+  'colchao':'por colchão','leito':'por leito (cama/beliche)',
+  'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
+  'lavabo':'por lavabo','quarto':'por quarto','andar':'por andar',
+  'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
+  'unidade':'unidade fixa (1 por apê)'
+};
+
 const MODULOS_ONBOARDING=[
   {id:'kanban',label:'Kanban'},{id:'dashboard',label:'Dashboard'},{id:'intel',label:'Intel de Mercado'}
 ];
 
 // ═══════════════════ UTILITÁRIOS ═══════════════════
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Escapa pra embutir dentro de um literal JS de aspas simples ('...') que por sua vez
+// vai dentro de um atributo onclick="" — precisa rodar ANTES do esc() de cima (que
+// escapa o que sobra pro atributo HTML em volta).
+function _escJs(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function fmtDate(iso){if(!iso)return'–';return new Date(iso+'T12:00:00').toLocaleDateString('pt-BR');}
 function fmtMoeda(v){return'R$ '+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function diasEntre(a,b){if(!a||!b)return null;return Math.round((new Date(b)-new Date(a))/86400000);}
 function hoje(){return new Date().toISOString().split('T')[0];}
+// 5º dia útil de um mês (conta seg-sex, não desconta feriado — não temos calendário
+// de feriados no sistema). ano/mesIdx = mesIdx 0-indexado (0=janeiro), igual Date nativo.
+function _quintoDiaUtil(ano,mesIdx){
+  const d=new Date(ano,mesIdx,1);
+  let count=0;
+  while(count<5){
+    if(d.getDay()!==0&&d.getDay()!==6){count++;if(count===5)break;}
+    d.setDate(d.getDate()+1);
+  }
+  return d;
+}
+function _repasseHintTexto(regra){
+  const hj=new Date();
+  const data=regra==='5util'?_quintoDiaUtil(hj.getFullYear(),hj.getMonth()):new Date(hj.getFullYear(),hj.getMonth(),15);
+  const mesNome=data.toLocaleDateString('pt-BR',{month:'long'});
+  return`Esse mês (${mesNome}): dia ${String(data.getDate()).padStart(2,'0')}. Não considera feriado.`;
+}
+function _atualizarHintRepasse(){
+  const regra=document.getElementById('d-data-repasse-regra')?.value;
+  const el=document.getElementById('hint-data-repasse');
+  if(el)el.textContent=_repasseHintTexto(regra);
+}
 function showToast(msg,tipo=''){
   const c=document.getElementById('toast-container');
   const t=document.createElement('div');t.className='toast '+(tipo||'');t.textContent=msg;
@@ -259,13 +443,14 @@ function showPanel(id,btn){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('panel-'+id)?.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={kanban:'Kanban',dashboard:'Dashboard',financeiro:'Financeiro',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
+  const titles={kanban:'Kanban',dashboard:'Dashboard',financeiro:'Financeiro',intel:'Inteligência de Mercado',fornecedores:'Fornecedores',proprietarios:'Proprietários',vistoria:'Vistoria',calendario:'Calendário',config:'Configurações',usuarios:'Usuários',informacoes:'Informações',orcamentos:'Orçamentos',estoque:'Estoque'};
   document.getElementById('panel-title').textContent=titles[id]||id;
   if(id==='kanban'){kvPull(false).then(()=>renderKanban()).catch(()=>renderKanban());}
   if(id==='dashboard')renderDashboard();
   if(id==='financeiro')renderFinanceiro();
   if(id==='intel')renderIntel();
   if(id==='fornecedores')renderFornecedores();
+  if(id==='proprietarios')renderProprietarios();
   if(id==='vistoria')renderVistoria();
   if(id==='calendario')renderCalendario();
   if(id==='config')renderConfig();
@@ -316,8 +501,8 @@ function _getComodosImovel(im){
 }
 
 // Cálculo de quantidades
-function totalColchoes(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
-function totalLeitos(camas){return(camas||[]).reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);}
+function totalColchoes(camas){return(camas||[]).flatMap(_expandirCama).reduce((s,u)=>s+u.qtd,0);}
+function totalLeitos(camas){return(camas||[]).flatMap(_expandirCama).reduce((s,u)=>s+u.qtd,0);}
 function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares){
   const rule=item.qtdRule||'1-unidade';const dashIdx=rule.indexOf('-');const n=rule.slice(0,dashIdx);const base=rule.slice(dashIdx+1);
   const q=parseInt(n)||1;
@@ -332,11 +517,15 @@ function calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes
   if(base==='cada2hospede')return q*Math.ceil((+hospedes||1)/2);
   return q;
 }
-// 'comprado' | 'flashee' | 'intense' — deriva a modalidade ativa de enxoval do imóvel
+// 'comprado' | id de MODALIDADES_ENXOVAL (ex: 'flashee'/'intense'/novo) — deriva a
+// modalidade ativa de enxoval do imóvel casando o fornecedor salvo (nome) com o catálogo.
 function modalidadeEnxovalAtual(im){
   const def=im.defEnxoval||{};
   if((def.tipo||'comprado')!=='aluguel')return'comprado';
-  return(def.fornecedor||'').toLowerCase().includes('intense')?'intense':'flashee';
+  const forn=(def.fornecedor||'').trim().toLowerCase();
+  const match=MODALIDADES_ENXOVAL.find(m=>m.nome.toLowerCase()===forn);
+  if(match)return match.id;
+  return forn.includes('intense')?'intense':'flashee'; // fallback p/ dado antigo fora do catálogo
 }
 // item.modalidades ausente = obrigatório, sempre aparece. Presente = só aparece nas modalidades listadas.
 function itemValidoParaModalidade(item,modalidade){
@@ -402,7 +591,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval'];
 let _lastSentStr=null;
 
 function saveAll(){
@@ -422,6 +611,10 @@ function saveAll(){
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
+  localStorage.setItem('wc_camas_custom',JSON.stringify(CAMAS_TIPOS_CUSTOM));
+  localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
+  localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
+  localStorage.setItem('wc_modalidades_enxoval',JSON.stringify(MODALIDADES_ENXOVAL));
   // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
   localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
@@ -446,6 +639,13 @@ function loadAll(){
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
+  v=g('wc_camas_custom');if(Array.isArray(v))CAMAS_TIPOS_CUSTOM=v;
+  v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
+  v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
+  v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
+  _seedModelosNegocio();
+  _seedModalidadesEnxoval();
+  _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
   _migrarCatalogoItens();
@@ -908,9 +1108,13 @@ function _coletarDadosAba(aba,im){
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
+    if(im.proprietarioId){
+      const propVinculado=proprietarios.find(pr=>pr.id===im.proprietarioId);
+      if(propVinculado){propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;}
+    }
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
-    im.dataRepasse=g('d-data-repasse');
+    im.dataRepasseRegra=g('d-data-repasse-regra');
     im.quartos=gn('d-quartos')||1; im.andares=gn('d-andares')||1; im.salas=gn('d-salas'); im.banheirosCompletos=gn('d-banheiros-completos')||0; im.banheirosLavabo=gn('d-banheiros-lavabo')||0; im.maxHospedes=gn('d-max-hospedes')||0; im.minimoNoites=gn('d-min-noites')||1;
     im.cozinha=+document.getElementById('d-cozinha')?.value||0; im.lavanderia=+document.getElementById('d-lavanderia')?.value||0; im.areaExterna=+document.getElementById('d-area-externa')?.value||0; im.varanda=+document.getElementById('d-varanda')?.value||0;
     im.plataformas=[];
@@ -972,6 +1176,9 @@ function _coletarDadosAba(aba,im){
   if(aba==='final'){
     im.responsavelCriacao=g('fn-resp-criacao'); im.dataEnvioParaCriacao=g('fn-data-envio');
     im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
+    im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
+    im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
+    im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -1016,7 +1223,7 @@ function _coletarCompras(im){
 
 // ═══════════════════ ABA DADOS ═══════════════════
 function renderAbaDados(im){
-  const plataformas=['Airbnb','Booking','Vrbo','Expedia','Decolar','Site Próprio'];
+  const plataformas=['Airbnb','Booking','Vrbo','Expedia','Decolar','Quinto Andar','Blueground','Site Próprio'];
   return`<div class="form-grid">
   <div class="form-section-title"><i class="fa-solid fa-house"></i> Informações do Imóvel</div>
   <div class="form-group"><label>Nome do Imóvel</label><input id="d-nome" class="input" value="${esc(im.nome)}"></div>
@@ -1036,6 +1243,15 @@ function renderAbaDados(im){
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-user"></i> Proprietário</div>
+  <div class="form-group" style="max-width:420px;">
+    <label>Proprietário (cadastro central)</label>
+    <select id="d-prop-select" class="input" onchange="_onProprietarioSelectChange(this,'${im.id}')">
+      <option value="">— avulso (sem vincular) —</option>
+      ${proprietarios.map(p=>`<option value="${esc(p.id)}"${im.proprietarioId===p.id?' selected':''}>${esc(p.nome)}</option>`).join('')}
+      <option value="__novo__">+ Novo proprietário…</option>
+    </select>
+    <div class="hint" style="margin-top:4px;">Selecionar preenche nome/telefone/e-mail automaticamente — se ele já tem outro imóvel, dá pra dividir compras entre os dois. Editar os campos abaixo também atualiza o cadastro central.</div>
+  </div>
   <div class="form-row">
     <div class="form-group"><label>Nome</label><input id="d-prop-nome" class="input" value="${esc(im.proprietarioNome||'')}"></div>
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
@@ -1048,7 +1264,13 @@ function renderAbaDados(im){
       <option value="bruta"${im.comissaoBase==='bruta'?' selected':''}>Bruta</option>
     </select></div>
     <div class="form-group"><label>Expectativa de Faturamento Mensal (R$)</label>${numInput({id:'d-faturamento-esperado',value:im.expectativaFaturamentoMensal||0,min:0,step:100})}</div>
-    <div class="form-group"><label>Data de Repasse</label><input id="d-data-repasse" type="date" class="input" value="${im.dataRepasse||''}"></div>
+    <div class="form-group"><label>Dia de Repasse</label>
+      <select id="d-data-repasse-regra" class="input" onchange="_atualizarHintRepasse()">
+        <option value="dia15"${(im.dataRepasseRegra||'dia15')==='dia15'?' selected':''}>Dia 15</option>
+        <option value="5util"${im.dataRepasseRegra==='5util'?' selected':''}>5º dia útil do mês</option>
+      </select>
+      <div class="hint" id="hint-data-repasse" style="margin-top:4px;">${esc(_repasseHintTexto(im.dataRepasseRegra||'dia15'))}</div>
+    </div>
   </div>
 
   <div class="form-row" style="flex-wrap:wrap;gap:12px;margin-top:4px;">
@@ -1102,27 +1324,100 @@ function renderAbaDados(im){
   </div>`;
 }
 function _htmlCamas(camas){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  const tipos=_tiposCamaDisponiveis();
   return camas.map((c,i)=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
+    <select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${esc(t)}</option>`).join('')}</select>
     ${numInput({id:`cama-qtd-${i}`,value:c.qtd||1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
   </div>`).join('');
 }
 function adicionarCama(){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  const tipos=_tiposCamaDisponiveis();
   const div=document.createElement('div');div.className='cama-row';
   div.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;';
-  div.innerHTML=`<select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option>${t}</option>`).join('')}</select>
+  div.innerHTML=`<select class="input cama-tipo" style="flex:2">${tipos.map(t=>`<option>${esc(t)}</option>`).join('')}</select>
     ${numInput({value:1,min:1,style:'flex-shrink:0;'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove()"><i class="fa-solid fa-trash"></i></button>`;
   document.getElementById('camas-list').appendChild(div);
 }
 
 // ═══════════════════ ABA CAPTAÇÃO ═══════════════════
+function _renderChecklistImovel(im){
+  const modeloAtual=im.modeloNegocioId||'';
+  const etapas=im.checklistEtapas||[];
+  const concluidas=etapas.filter(e=>e.concluida).length;
+  return`<div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist / Modelo de Negócio</div>
+  <div class="form-group" style="max-width:380px;">
+    <label>Modelo de negócio</label>
+    <select id="cap-modelo-negocio" class="input" onchange="_aplicarModeloChecklist('${im.id}',this.value)">
+      <option value="">— selecione —</option>
+      ${MODELOS_NEGOCIO.map(m=>`<option value="${esc(m.id)}"${modeloAtual===m.id?' selected':''}>${esc(m.nome)}</option>`).join('')}
+    </select>
+    <div class="hint" style="margin-top:4px;">Aplicar um modelo copia as etapas dele pra esse imóvel — dá pra editar livremente depois (excluir, reordenar, adicionar) sem afetar o modelo original.</div>
+  </div>
+  ${etapas.length?`
+  <div style="margin:10px 0 6px;font-size:12px;color:var(--text-muted);">${concluidas}/${etapas.length} concluídas</div>
+  <div style="margin-bottom:8px;">
+    ${etapas.map((e,ei)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;padding:6px 8px;border-radius:8px;${e.concluida?'background:var(--surface-2);':''}">
+      <input type="checkbox" style="margin-top:3px;flex-shrink:0;"${e.concluida?' checked':''} onchange="_toggleEtapaChecklist('${im.id}','${e.id}')">
+      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}</span>
+      <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
+      <button class="btn btn-xs btn-outline"${ei===etapas.length-1?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
+      <button class="btn btn-xs btn-danger" onclick="_removerEtapaChecklist('${im.id}','${e.id}')" title="Remover"><i class="fa-solid fa-xmark"></i></button>
+    </div>`).join('')}
+  </div>`:`<div class="hint" style="margin-top:8px;">${modeloAtual?'Esse modelo não tem etapas.':'Selecione um modelo pra carregar o checklist, ou adicione etapas soltas abaixo.'}</div>`}
+  <div style="display:flex;gap:6px;margin-top:4px;max-width:500px;">
+    <input class="input" id="cap-nova-etapa" placeholder="Adicionar etapa..." style="flex:1;" onkeydown="if(event.key==='Enter'){_adicionarEtapaChecklistImovel('${im.id}');event.preventDefault();}">
+    <button class="btn btn-sm btn-outline" onclick="_adicionarEtapaChecklistImovel('${im.id}')"><i class="fa-solid fa-plus"></i></button>
+  </div>
+  <hr class="divider" style="margin:20px 0;">`;
+}
+function _aplicarModeloChecklist(imId,modeloId){
+  const im=getImovel(imId);if(!im)return;
+  if(!modeloId){im.modeloNegocioId='';saveAll();renderAba('captacao');return;}
+  const modelo=MODELOS_NEGOCIO.find(m=>m.id===modeloId);if(!modelo)return;
+  if((im.checklistEtapas||[]).length&&!confirm(`Isso substitui o checklist atual desse imóvel pelas etapas do modelo "${modelo.nome}". Continuar?`)){
+    renderAba('captacao');
+    return;
+  }
+  im.modeloNegocioId=modeloId;
+  im.checklistEtapas=(modelo.etapas||[]).map(e=>({id:'etp_'+uid()+uid(),texto:e.texto,concluida:false}));
+  saveAll();renderAba('captacao');
+  showToast('Checklist aplicado!','sage');
+}
+function _toggleEtapaChecklist(imId,etapaId){
+  const im=getImovel(imId);if(!im)return;
+  const e=(im.checklistEtapas||[]).find(x=>x.id===etapaId);if(!e)return;
+  e.concluida=!e.concluida;
+  saveAll();renderAba('captacao');
+}
+function _moverEtapaChecklist(imId,etapaId,dir){
+  const im=getImovel(imId);if(!im)return;
+  const arr=im.checklistEtapas||[];
+  const idx=arr.findIndex(x=>x.id===etapaId);if(idx<0)return;
+  const novo=idx+dir;
+  if(novo<0||novo>=arr.length)return;
+  [arr[idx],arr[novo]]=[arr[novo],arr[idx]];
+  saveAll();renderAba('captacao');
+}
+function _removerEtapaChecklist(imId,etapaId){
+  const im=getImovel(imId);if(!im)return;
+  im.checklistEtapas=(im.checklistEtapas||[]).filter(x=>x.id!==etapaId);
+  saveAll();renderAba('captacao');
+}
+function _adicionarEtapaChecklistImovel(imId){
+  const im=getImovel(imId);if(!im)return;
+  const inp=document.getElementById('cap-nova-etapa');
+  const texto=(inp?.value||'').trim();
+  if(!texto)return;
+  if(!im.checklistEtapas)im.checklistEtapas=[];
+  im.checklistEtapas.push({id:'etp_'+uid()+uid(),texto,concluida:false});
+  saveAll();renderAba('captacao');
+}
 function renderAbaCaptacao(im){
   const temLink=!!(im.captacaoLink||'').trim();
   return`<div class="form-grid">
+  ${_renderChecklistImovel(im)}
   <div class="form-section-title"><i class="fa-brands fa-google-drive"></i> Pasta de Captação</div>
   <div class="hint" style="margin-bottom:12px;">Link da pasta do Google Drive criada pela equipe de captação para este imóvel (contrato, reuniões, fotos, etc.).</div>
   <div class="form-group">
@@ -1487,15 +1782,15 @@ function renderAbaDefinicoes(im){
   <div class="form-group">
     <label>Fornecedor</label>
     <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
-    <select id="def-enxoval-forn-select" class="input" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
-      <option value="Flashee"${im.defEnxoval?.fornecedor==='Flashee'?' selected':''}>Flashee</option>
-      <option value="Intense Clean"${im.defEnxoval?.fornecedor==='Intense Clean'?' selected':''}>Intense Clean</option>
+    <select id="def-enxoval-forn-select" class="input" onchange="_recalcEnxovalValores()" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
+      ${MODALIDADES_ENXOVAL.map(m=>`<option value="${esc(m.nome)}"${im.defEnxoval?.fornecedor===m.nome?' selected':''}>${esc(m.nome)}</option>`).join('')}
     </select>
   </div>
-  <div class="form-row">
+  <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
     <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
-    <div class="form-group"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
+    <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
+  <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-clock"></i> Prazo</div>
   <div class="form-group">
@@ -1508,8 +1803,58 @@ function _onEnxovalTipoChange(sel){
   const aluguel=sel.value==='aluguel';
   const txt=document.getElementById('def-enxoval-forn-texto');
   const sel2=document.getElementById('def-enxoval-forn-select');
+  const valoresRow=document.getElementById('def-enxoval-valores-row');
+  const compradoHint=document.getElementById('def-enxoval-comprado-hint');
   if(txt)txt.style.display=aluguel?'none':'';
   if(sel2)sel2.style.display=aluguel?'':'none';
+  if(valoresRow)valoresRow.style.display=aluguel?'':'none';
+  if(compradoHint)compradoHint.style.display=aluguel?'none':'';
+  _recalcEnxovalValores();
+}
+// Enxoval alugado: valor mensal e setup vêm de MODALIDADES_ENXOVAL (Configurações), com 2
+// formatos possíveis por fornecedor — 'formula' (inicial pra N hóspedes + valor por hóspede
+// extra) ou 'tabela' (valor exato cadastrado por quantidade de hóspedes, com a faixa mais alta
+// servindo de teto pra quem passa dela). campo = 'custo' (o que a gente paga) ou 'cobrado' (o
+// que cobra do proprietário — é o que alimenta o preenchimento automático da aba Contrato).
+function _valorEnxovalMensal(hospedes,fornecedorNome,campo){
+  const h=+hospedes||0;if(h<=0)return 0;
+  const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
+  if(!m)return campo==='cobrado'?h*110:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
+  if(m.precificacaoMensal==='tabela'){
+    const linhas=m.mensalTabela||[];
+    const exata=linhas.find(l=>l.hospedes===h);
+    if(exata)return+exata[campo]||0;
+    const abaixo=linhas.filter(l=>l.hospedes<=h).sort((a,b)=>b.hospedes-a.hospedes)[0];
+    return abaixo?+abaixo[campo]||0:0;
+  }
+  const base=+(campo==='custo'?m.mensalBaseCusto:m.mensalBaseCobrado)||0;
+  const extra=+(campo==='custo'?m.mensalExtraCusto:m.mensalExtraCobrado)||0;
+  const hospedesBase=m.hospedesBase||2;
+  return h<=hospedesBase?base:base+(h-hospedesBase)*extra;
+}
+function _valorEnxovalSetup(fornecedorNome,campo){
+  const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
+  if(!m)return(campo==='cobrado'&&fornecedorNome==='Flashee')?190:0; // fallback dado antigo
+  if(!m.temSetup)return 0;
+  return+(campo==='custo'?m.setupCusto:m.setupCobrado)||0;
+}
+// Aliases usados no preenchimento automático da aba Contrato — sempre o valor "cobrado"
+// (o que é passado pro proprietário), não o custo interno.
+function _valorEnxovalAutoMensal(hospedes,fornecedorNome){return _valorEnxovalMensal(hospedes,fornecedorNome,'cobrado');}
+function _valorEnxovalAutoSetup(fornecedorNome){return _valorEnxovalSetup(fornecedorNome,'cobrado');}
+function _recalcEnxovalValores(){
+  const tipoSel=document.getElementById('def-enxoval-tipo');
+  const mensalEl=document.getElementById('def-enxoval-mensal');
+  const setupEl=document.getElementById('def-enxoval-setup');
+  const setupWrap=document.getElementById('def-enxoval-setup-wrap');
+  if(!tipoSel||!mensalEl||!setupEl)return;
+  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
+  const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
+  const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
+  if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
+  const im=getImovel(_imovelAtivoId);
+  mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
+  setupEl.value=_valorEnxovalAutoSetup(fornecedor);
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -1594,8 +1939,9 @@ function renderAbaFormulario(im){
       <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText('${esc(url)}').then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i></button>
       <a href="${esc(url)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>
       <a href="https://wa.me/?text=${encodeURIComponent('Olá! Para finalizar o cadastro do seu imóvel na WeCare, preencha este formulário (já deixamos algumas respostas prontas, é só confirmar ou ajustar): '+url)}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;"><i class="fa-brands fa-whatsapp"></i></a>
+      <button class="btn btn-outline btn-sm" title="Gerar novo link (invalida o link atual)" onclick="regenerarLinkForm()"><i class="fa-solid fa-rotate"></i></button>
     </div>
-    <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>.</div>
+    <div class="hint">Os campos abaixo são preenchidos pela <strong>IA da reunião</strong> (aba Reunião) ou manualmente. O proprietário abre sem login e tudo já aparece pronto para ele <strong>conferir, editar ou complementar</strong>. Se o link parar de funcionar ("inválido ou expirado"), use o botão <i class="fa-solid fa-rotate"></i> para gerar um novo.</div>
   </div>
   ${im.formEnviadoEm?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Proprietário enviou o formulário em <strong>${fmtDate(im.formEnviadoEm)}</strong></div>`
     :(im.formPreenchidoEm?`<div class="alert-warn"><i class="fa-solid fa-pen"></i> Proprietário está preenchendo, mas ainda <strong>não enviou</strong> — última atividade em ${fmtDate(im.formPreenchidoEm)}.</div>`
@@ -1709,6 +2055,12 @@ function importarRespostasParaRascunho(){
   im.formRascunho={...(im.formRespostas||{}),...(im.formRascunho||{})};
   saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
 }
+function regenerarLinkForm(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Gerar um novo link? O link antigo enviado ao proprietário deixará de funcionar.'))return;
+  im.formToken=uid()+uid();
+  saveAll();renderAba('formulario');showToast('Novo link gerado!','sage');
+}
 
 // ═══════════════════ ABA COMPRAS ═══════════════════
 function renderAbaCompras(im){
@@ -1725,22 +2077,16 @@ function renderAbaCompras(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      // agrupar camas por tipo enxoval
-      const porTipo={};
-      camas.forEach(c=>{
-        const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';
-        porTipo[t]=(porTipo[t]||[]);
-        porTipo[t].push(c);
-      });
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(item.semSofaCama&&!camasParaItem.length)return; // grupo só tem sofá-cama, item não se aplica
+      // agrupar camas (já expandidas por componente) por tamanho-base de enxoval
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(item.semSofaCama&&!unidadesParaItem.length)return; // grupo só tem sofá-cama, item não se aplica
         const [n,base]=(item.qtdRule||'1-colchao').split('-');
         const q=parseInt(n)||1;
         let qtdNec=0;
         // beliche conta como 2 colchões/leitos
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -2053,7 +2399,7 @@ function confirmarManutencao(){
   im.manutencoes.push(novaManut);
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
   // Cria card no módulo de manutenção da Claire
-  fetch('https://claire-dados.nicole-0e7.workers.dev/api/manutencoes?token=wecare-claire-2026-k7x9q2',{
+  fetch('https://claire.wecarehosting.com.br/api/manutencoes?token=f634ad1d7fe480e9b53fa2009a7e650e',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
@@ -2160,14 +2506,12 @@ function _rowsComprasFalta(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      const porTipo={};
-      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
         const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
         let qtdNec=0;
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
@@ -2221,15 +2565,13 @@ function _rowsComprasTodos(im){
   ITENS_COMPRAS.forEach((item,idx)=>{
     if(!itemValidoParaModalidade(item,modalidadeAtual))return;
     if(item.tipoPreco==='enxoval'&&camas.length){
-      const porTipo={};
-      camas.forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';porTipo[t]=(porTipo[t]||[]);porTipo[t].push(c);});
-      Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-        const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-        if(item.semSofaCama&&!camasParaItem.length)return;
+      const porTipo=_unidadesEnxovalPorTamanho(camas);
+      Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+        const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+        if(item.semSofaCama&&!unidadesParaItem.length)return;
         const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
         let qtdNec=0;
-        if(base==='colchao')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
-        else if(base==='leito')qtdNec=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+        if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
         const subKey=`${idx}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -2551,6 +2893,10 @@ function renderAbaGastos(im){
     </div>`);
 
   return`<div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-sm btn-outline" onclick="gerarPDFGastos()"><i class="fa-solid fa-file-pdf"></i> Exportar PDF</button>
+      <button class="btn btn-sm btn-outline" onclick="exportarGastosCSV()"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
+    </div>
     ${setupHtml}
     ${comprasHtml}
     ${manutHtml}
@@ -2558,6 +2904,123 @@ function renderAbaGastos(im){
     ${gastosAvulsosHtml}
     ${resumoHtml}
   </div>`;
+}
+// Achata todas as fontes de gasto do imovel (setup, compras avulsas, lotes, manutencoes,
+// itens extras, gastos avulsos) numa lista so, pra usar tanto no PDF quanto no Excel/CSV
+// de Gastos sem duplicar a logica de leitura de cada campo.
+function _linhasRelatorioGastos(im){
+  const linhas=[];
+  const ops=im.ops||{};
+  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'};
+  ['fotos','limpeza','vistoria'].forEach(k=>{
+    const custo=+ops[k]?.custo||0;
+    if(!custo)return;
+    linhas.push({grupo:'setup',categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
+  });
+  (im.eventosExtras||[]).filter(e=>e.gastoSetup).forEach(ev=>{
+    const custo=+ev.custo||0;
+    linhas.push({grupo:'setup',categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
+  });
+  _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
+    linhas.push({grupo:'outros',categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
+  });
+  (im.comprasLotes||[]).forEach(l=>{
+    linhas.push({grupo:'outros',categoria:'Compras (lote)',item:l.local||'Compra em lote',previsto:l.valorTotal,pago:l.valorTotal});
+  });
+  (im.manutencoes||[]).forEach(m=>{
+    const previsto=+(m.valor??m.custo??0);
+    const label=m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||'Manutenção');
+    linhas.push({grupo:'outros',categoria:'Manutenção',item:label,previsto,pago:_valorPagoOuPrevisto(m.pago,previsto,m.valorPago)});
+  });
+  (im.itensExtras||[]).forEach(x=>{
+    const previsto=(+x.precoUn||0)*(+x.qtd||1);
+    linhas.push({grupo:'outros',categoria:'Item Extra',item:x.nome||'Item extra',previsto,pago:_valorPagoOuPrevisto(x.pago,previsto,x.valorPago)});
+  });
+  (im.gastosAvulsos||[]).forEach(g=>{
+    const previsto=+g.valor||0;
+    linhas.push({grupo:'outros',categoria:g.categoria?`Gasto Avulso — ${g.categoria}`:'Gasto Avulso',item:g.descricao||'Gasto avulso',previsto,pago:_valorPagoOuPrevisto(g.pago,previsto,g.valorPago)});
+  });
+  return linhas;
+}
+async function gerarPDFGastos(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const linhas=_linhasRelatorioGastos(im);
+  const r=_calcResumoFinanceiro(im);
+  const win=window.open('','_blank');
+  const headerHtml=await _pdfHeaderHtml(im,'Relatório de Gastos');
+  const tabela=(titulo,lista,r2)=>{
+    const corpo=lista.map(l=>`<tr>
+      <td style="padding:6px 10px;">${esc(l.categoria)}</td>
+      <td style="padding:6px 10px;">${esc(l.item)}</td>
+      <td style="text-align:right;padding:6px 10px;color:#888;">${fmtMoeda(l.previsto)}</td>
+      <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.pago)}</td>
+    </tr>`).join('');
+    return`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">${titulo}</div>
+    <div style="display:flex;gap:20px;margin-bottom:10px;">
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Recebido</span><br><strong>${fmtMoeda(r2.recebido)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Gasto</span><br><strong>${fmtMoeda(r2.gastoPago)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Margem</span><br><strong>${fmtMoeda(r2.margem)}</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Categoria</th><th>Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
+      <tbody>${corpo||'<tr><td colspan="4" style="padding:14px;text-align:center;color:#888;">Nada nessa categoria.</td></tr>'}</tbody>
+    </table>`;
+  };
+  win.document.write(`<html><head><meta charset="utf-8"><title>Gastos — ${esc(im.nome)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:800px;margin:0 auto;}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12.5px;}
+    th{background:#132030;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+    tr:nth-child(even){background:#fafafa;}
+    td{border-bottom:1px solid #EFE7D6;vertical-align:middle;}
+    .summary{background:#132030;color:#fff;border-radius:12px;padding:16px 20px;margin-top:12px;display:flex;gap:24px;}
+    .summary div{flex:1;}
+    .summary .lbl{font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;}
+    .summary .val{font-size:18px;font-weight:800;margin-top:2px;}
+    @media print{body{padding:16px;}@page{margin:1cm;}}
+  </style></head><body>
+  ${headerHtml}
+  ${tabela('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup)}
+  ${tabela('Itens (Compras, Manutenções, Avulsos)',linhas.filter(l=>l.grupo==='outros'),r.outros)}
+  <div class="summary">
+    <div><div class="lbl">Total Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
+    <div><div class="lbl">Total Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
+    <div><div class="lbl">Margem Total</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
+  </div>
+  </body></html>`);
+  win.document.close();win.print();
+}
+function exportarGastosCSV(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const linhas=_linhasRelatorioGastos(im);
+  const r=_calcResumoFinanceiro(im);
+  const fmtNum=v=>(+v||0).toFixed(2).replace('.',',');
+  const csvEsc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const bloco=(titulo,lista,r2)=>[
+    [csvEsc(titulo)].join(';'),
+    ['Categoria','Item','Previsto (R$)','Pago (R$)'].map(csvEsc).join(';'),
+    ...lista.map(l=>[l.categoria,l.item,fmtNum(l.previsto),fmtNum(l.pago)].map(csvEsc).join(';')),
+    [csvEsc('Subtotal '+titulo),'','',csvEsc(fmtNum(r2.gastoPago))].join(';'),
+    [csvEsc('Recebido '+titulo),'','',csvEsc(fmtNum(r2.recebido))].join(';'),
+    [csvEsc('Margem '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
+    '',
+  ];
+  const linhasCsv=[
+    ...bloco('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup),
+    ...bloco('Itens',linhas.filter(l=>l.grupo==='outros'),r.outros),
+    [csvEsc('TOTAL GERAL'),'','',''].join(';'),
+    [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
+    [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
+    [csvEsc('Margem'),'','',csvEsc(fmtNum(r.margem))].join(';'),
+  ];
+  // BOM no início — sem isso o Excel abre acentuação (ç, ã, é) quebrada num CSV UTF-8.
+  const blob=new Blob(['﻿'+linhasCsv.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`gastos_${(im.nome||'imovel').replace(/[^a-z0-9]+/gi,'_').toLowerCase()}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function _onGastoSetupPago(cb,key){
@@ -2740,7 +3203,7 @@ function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const r=_calcResumoFinanceiro(im).outros;
   if(!confirm(`Enviar para a Claire (Setup fica de fora, já vai por conta própria)?\n\nRecebido: ${fmtMoeda(r.recebido)}\nGasto: ${fmtMoeda(r.gastoPago)}\nMargem: ${fmtMoeda(r.margem)}`))return;
-  fetch('https://claire-dados.nicole-0e7.workers.dev/api/extras?token=wecare-claire-2026-k7x9q2',{
+  fetch('https://claire.wecarehosting.com.br/api/extras?token=f634ad1d7fe480e9b53fa2009a7e650e',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({imovelNome:im.nome,descricao:'Resumo financeiro onboarding (compras/manutenções/avulsos)',cobrado:r.recebido,gasto:r.gastoPago,obs:`Enviado do onboarding em ${new Date().toLocaleString('pt-BR')}`})
   }).then(resp=>resp.json()).then(j=>{
@@ -2749,48 +3212,73 @@ function enviarResumoClaire(){
   }).catch(()=>showToast('Falha de conexão ao enviar.','peach'));
 }
 
+// Antes da fase "Vistoria e Compras" não há gasto/compra real acontecendo ainda —
+// mostrar Contrato/Setup no painel Financeiro só poluía com imóveis sem número nenhum.
+function _faseAtingiuCompras(status){
+  if(status==='ativo')return true;
+  const idx=FASES.indexOf(status);
+  return idx>=FASES.indexOf('vistoria_compras');
+}
+let _finFiltroAtual='ativos';
+function _finSetFiltro(v){_finFiltroAtual=v;renderFinanceiro();}
+function _finListaFiltrada(filtro){
+  return imoveis.filter(im=>{
+    if(filtro==='perdidos')return im.status==='perdido';
+    if(im.status==='perdido')return false;
+    if(filtro==='ativos')return im.status==='ativo';
+    if(!_faseAtingiuCompras(im.status))return false; // só entra em Compras (Vistoria e Compras) ou Concluído/Ativo
+    if(filtro==='todos')return true;
+    return im.contratoAssinado===true; // 'assinados' — só quem já assinou tem dinheiro real em jogo
+  });
+}
+function _statTileFinanceiro(label,valor,cor){
+  return`<div style="background:var(--surface-2);border-radius:12px;padding:14px 16px;">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${esc(label)}</div>
+    <div style="font-size:19px;font-weight:700;color:${cor};">${fmtMoeda(valor)}</div>
+  </div>`;
+}
 function renderFinanceiro(){
   const container=document.getElementById('panel-financeiro');if(!container)return;
-  const filtroAtual=(document.getElementById('fin-filtro-status')||{}).value||'assinados';
-  const lista=imoveis.filter(im=>{
-    if(filtroAtual==='todos')return true;
-    if(filtroAtual==='perdidos')return im.status==='perdido';
-    return im.status!=='perdido'&&im.contratoAssinado===true; // 'assinados' — só quem já assinou tem dinheiro real em jogo
-  });
-  const linhas=lista.map(im=>({im,r:_calcResumoFinanceiro(im)}))
+  const filtroAtual=_finFiltroAtual;
+  const filtros=[['ativos','Ativos'],['assinados','Contrato assinado'],['todos','Todos'],['perdidos','Perdidos']];
+  const linhas=_finListaFiltrada(filtroAtual).map(im=>({im,r:_calcResumoFinanceiro(im)}))
     .sort((a,b)=>(a.im.nome||'').localeCompare(b.im.nome||''));
-  const totRecebido=linhas.reduce((s,x)=>s+x.r.recebido,0);
-  const totGasto=linhas.reduce((s,x)=>s+x.r.gastoPago,0);
-  const totMargem=linhas.reduce((s,x)=>s+x.r.margem,0);
+  const tot=k=>linhas.reduce((s,x)=>s+x.r[k],0);
+  const totRecebido=tot('recebido'),totGasto=tot('gastoPago'),totPendente=tot('gastoPendente'),totMargem=tot('margem');
   container.innerHTML=`
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
-      <div class="tag tag-gold" style="font-size:14px;padding:10px 18px;">Recebido: <strong>${fmtMoeda(totRecebido)}</strong></div>
-      <div class="tag" style="font-size:14px;padding:10px 18px;">Gasto: <strong>${fmtMoeda(totGasto)}</strong></div>
-      <div class="tag tag-sage" style="font-size:14px;padding:10px 18px;">Margem: <strong>${fmtMoeda(totMargem)}</strong></div>
-      <select id="fin-filtro-status" class="input" style="width:auto;margin-left:auto;" onchange="renderFinanceiro()">
-        <option value="assinados"${filtroAtual==='assinados'?' selected':''}>Contrato assinado</option>
-        <option value="todos"${filtroAtual==='todos'?' selected':''}>Todos os imóveis</option>
-        <option value="perdidos"${filtroAtual==='perdidos'?' selected':''}>Só perdidos</option>
-      </select>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      ${filtros.map(([v,lbl])=>`<button type="button" class="btn btn-xs${filtroAtual===v?'':' btn-outline'}" onclick="_finSetFiltro('${v}')">${esc(lbl)} (${_finListaFiltrada(v).length})</button>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
-      ${linhas.map(({im,r})=>{
-        const faseLabel=im.status==='ativo'?'Ativo':im.status==='perdido'?'Perdido':(FASE_LABEL[im.status]||im.status);
-        const faseCor=im.status==='ativo'?'sage':im.status==='perdido'?'peach':'gold';
-        return`<div style="background:var(--surface-2);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s;" onclick="_abrirGastosImovel('${im.id}')" onmouseover="this.style.boxShadow='0 2px 10px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px;">
-            <div style="font-weight:700;font-size:13.5px;line-height:1.3;">${esc(im.nome||'(sem nome)')}</div>
-            <span class="tag tag-${faseCor}" style="flex-shrink:0;font-size:10.5px;">${esc(faseLabel)}</span>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 8px;font-size:12px;">
-            <div><div style="color:var(--text-muted);font-size:10.5px;">Recebido</div><div style="font-weight:700;color:var(--green);">${fmtMoeda(r.recebido)}</div></div>
-            <div><div style="color:var(--text-muted);font-size:10.5px;">Gasto</div><div style="font-weight:700;color:var(--rose);">${fmtMoeda(r.gastoPago)}</div></div>
-            <div><div style="color:var(--text-muted);font-size:10.5px;">Pendente</div><div style="font-weight:700;color:var(--amber);">${fmtMoeda(r.gastoPendente)}</div></div>
-            <div><div style="color:var(--text-muted);font-size:10.5px;">Margem</div><div style="font-weight:700;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</div></div>
-          </div>
-        </div>`;
-      }).join('')||'<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text-muted);">Nenhum imóvel neste filtro.</div>'}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
+      ${_statTileFinanceiro('Recebido',totRecebido,'var(--green)')}
+      ${_statTileFinanceiro('Gasto',totGasto,'var(--rose)')}
+      ${_statTileFinanceiro('Pendente',totPendente,'var(--amber)')}
+      ${_statTileFinanceiro('Margem',totMargem,totMargem>=0?'var(--sage)':'var(--rose)')}
     </div>
+    ${!linhas.length?'<div style="padding:32px;text-align:center;color:var(--text-muted);">Nenhum imóvel neste filtro.</div>':`
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:520px;">
+      <thead><tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:8px 10px;">Imóvel</th>
+        <th style="text-align:left;padding:8px 10px;">Fase</th>
+        <th style="text-align:right;padding:8px 10px;">Recebido</th>
+        <th style="text-align:right;padding:8px 10px;">Gasto</th>
+        <th style="text-align:right;padding:8px 10px;">Pendente</th>
+        <th style="text-align:right;padding:8px 10px;">Margem</th>
+      </tr></thead>
+      <tbody>${linhas.map(({im,r})=>{
+        const faseLabel=im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status);
+        const faseCor=im.status==='ativo'?'sage':'gold';
+        return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_abrirGastosImovel('${im.id}')">
+          <td style="padding:8px 10px;font-weight:600;">${esc(im.nome||'(sem nome)')}</td>
+          <td style="padding:8px 10px;"><span class="tag tag-${faseCor}" style="font-size:10.5px;">${esc(faseLabel)}</span></td>
+          <td style="padding:8px 10px;text-align:right;color:var(--green);font-weight:600;">${fmtMoeda(r.recebido)}</td>
+          <td style="padding:8px 10px;text-align:right;color:var(--rose);font-weight:600;">${fmtMoeda(r.gastoPago)}</td>
+          <td style="padding:8px 10px;text-align:right;color:var(--amber);font-weight:600;">${fmtMoeda(r.gastoPendente)}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:700;color:${r.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r.margem)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`}
   `;
 }
 function _abrirGastosImovel(id){
@@ -3286,6 +3774,15 @@ function renderAbaFinal(im){
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
   <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
+
+  <div class="form-group" style="margin-top:8px;">
+    <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
+  </div>
+  <div class="form-row" id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
+    <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
+    <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+  </div>
+
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
     <button class="btn btn-primary btn-sm" onclick="criarTarefaClaire()">
       <i class="fa-solid fa-circle-plus"></i> Criar tarefa na Claire para <span id="fn-resp-label">${esc(resp)}</span>
@@ -3297,6 +3794,10 @@ function renderAbaFinal(im){
     <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
   </div>`:''}
   </div>`;
+}
+function _toggleAnuncioConjunto(cb){
+  const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
+  if(wrap)wrap.style.display=cb.checked?'':'none';
 }
 function _onRespCriacaoChange(inp){
   const v=inp.value.trim();
@@ -3329,7 +3830,7 @@ async function criarTarefaClaire(){
 RESPOSTAS DO FORMULÁRIO:
 ${respostasTxt||'(sem respostas ainda)'}`;
   try{
-    const r=await fetch('https://claire-dados.nicole-0e7.workers.dev/api/tasks?token=wecare-claire-2026-k7x9q2',{
+    const r=await fetch('https://claire.wecarehosting.com.br/api/tasks?token=f634ad1d7fe480e9b53fa2009a7e650e',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text:texto,cat:'onboarding',prio:'alta',due:im.dataEnvioParaCriacao||''})
     });
@@ -3658,10 +4159,9 @@ const INTEL_TIPOS=[
 ];
 
 function renderIntel(){
-  // O panel-intel tem HTML estático no index — só atualiza o container de prestadores
-  const lista=document.getElementById('intel-prestadores-lista');
-  if(lista)lista.innerHTML=_renderPrestadoresList();
-  // Sincroniza endereço salvo com o campo
+  // O panel-intel tem HTML estático no index — Intel de Mercado é só pra pesquisar
+  // fornecedores novos (Google Maps); o banco já cadastrado fica na aba Fornecedores,
+  // pra não duplicar a mesma lista em dois lugares.
   const endEl=document.getElementById('intel-endereco');
   if(endEl&&_intelEndereco)endEl.value=_intelEndereco;
 }
@@ -3678,25 +4178,6 @@ function _buscarEmbeddedMapa(query){
     el.innerHTML=`<iframe src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed" width="100%" height="380" frameborder="0" style="border:0;border-radius:10px;" allowfullscreen loading="lazy"></iframe>`;
     el.scrollIntoView({behavior:'smooth',block:'start'});
   }
-}
-function _renderPrestadoresList(){
-  if(!prestadores.length)return`<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum prestador cadastrado ainda.</div>`;
-  return`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-    <thead><tr style="border-bottom:2px solid var(--border)">
-      <th style="text-align:left;padding:7px 6px;">Nome</th><th>Tipo</th><th>Telefone</th><th>Cidade</th><th>Nota</th><th></th>
-    </tr></thead>
-    <tbody>${prestadores.map((p,i)=>`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:7px 6px;font-weight:600;">${esc(p.nome)}</td>
-      <td><span class="tag tag-lav">${esc(p.tipo)}</span></td>
-      <td>${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}" target="_blank">${esc(p.telefone)}</a>`:'—'}</td>
-      <td>${esc(p.cidade||'—')}</td>
-      <td>${p.nota?'⭐'.repeat(Math.min(+p.nota,5)):'—'}</td>
-      <td style="white-space:nowrap;">
-        <button class="btn btn-xs btn-outline" onclick="editarPrestador(${i})"><i class="fa-solid fa-pen"></i></button>
-        <button class="btn btn-xs btn-danger" onclick="apagarPrestador(${i})"><i class="fa-solid fa-trash"></i></button>
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
 }
 const TIPOS_PRESTADOR_BASE=['Limpeza','Fotógrafo','Hidráulica','Elétrica','Vistoria','Fechadura','Internet','Reforma','Outros'];
 function _tiposPrestadorDisponiveis(){
@@ -4036,9 +4517,13 @@ function renderFornecedores(){
   const tipos=_tiposPrestadorDisponiveis();
   const filtroTipo=document.getElementById('forn-filtro-tipo')?.value||'';
   const filtroCidade=document.getElementById('forn-filtro-cidade')?.value?.toLowerCase()||'';
+  const filtroNome=document.getElementById('forn-filtro-nome')?.value?.toLowerCase().trim()||'';
+  const filtroNota=+(document.getElementById('forn-filtro-nota')?.value||0);
   const lista=prestadores.filter(p=>
     (!filtroTipo||p.tipo===filtroTipo)&&
-    (!filtroCidade||((p.cidade||'').toLowerCase().includes(filtroCidade)))
+    (!filtroCidade||((p.cidade||'').toLowerCase().includes(filtroCidade)))&&
+    (!filtroNome||(p.nome||'').toLowerCase().includes(filtroNome))&&
+    (!filtroNota||(+p.nota||0)>=filtroNota)
   );
   const wrap=document.getElementById('fornecedores-wrap');
   if(!wrap)return;
@@ -4056,12 +4541,21 @@ function renderFornecedores(){
   <div class="card">
     <div class="card-header">
       <span class="card-title"><i class="fa-solid fa-filter" style="color:var(--text3)"></i> Filtros</span>
-      <div style="margin-left:auto;display:flex;gap:8px;">
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+        <input class="form-input" id="forn-filtro-nome" placeholder="Buscar por nome..." style="width:150px;padding:4px 8px;font-size:12px;" oninput="renderFornecedores()" value="${esc(filtroNome)}">
         <select class="form-select" id="forn-filtro-tipo" onchange="renderFornecedores()" style="width:140px;padding:4px 8px;font-size:12px;">
           <option value="">Todos os tipos</option>
           ${tipos.map(t=>`<option${filtroTipo===t?' selected':''}>${t}</option>`).join('')}
         </select>
         <input class="form-input" id="forn-filtro-cidade" placeholder="Filtrar cidade..." style="width:140px;padding:4px 8px;font-size:12px;" oninput="renderFornecedores()" value="${filtroCidade}">
+        <select class="form-select" id="forn-filtro-nota" onchange="renderFornecedores()" style="width:130px;padding:4px 8px;font-size:12px;">
+          <option value="0"${!filtroNota?' selected':''}>Qualquer nota</option>
+          <option value="5"${filtroNota===5?' selected':''}>⭐⭐⭐⭐⭐</option>
+          <option value="4"${filtroNota===4?' selected':''}>⭐⭐⭐⭐+</option>
+          <option value="3"${filtroNota===3?' selected':''}>⭐⭐⭐+</option>
+          <option value="2"${filtroNota===2?' selected':''}>⭐⭐+</option>
+          <option value="1"${filtroNota===1?' selected':''}>⭐+</option>
+        </select>
       </div>
     </div>
     <div class="card-body" style="overflow-x:auto;">
@@ -4101,6 +4595,232 @@ function salvarManualFornecedores(){
   showToast('Manual salvo.');
 }
 
+// ═══════════════════ PROPRIETÁRIOS ═══════════════════
+// Cadastro central dos proprietários — cada imóvel referencia um pelo id
+// (im.proprietarioId) em vez de repetir nome/telefone/email soltos. Permite
+// reaproveitar o cadastro num imóvel novo do mesmo dono e agrupar imóveis do
+// mesmo proprietário pra dividir gasto/compra compartilhada entre eles.
+function renderProprietarios(){
+  const wrap=document.getElementById('proprietarios-wrap');
+  if(!wrap)return;
+  const filtro=(document.getElementById('prop-filtro-nome')?.value||'').toLowerCase().trim();
+  const lista=proprietarios.filter(p=>!filtro||(p.nome||'').toLowerCase().includes(filtro));
+  wrap.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Proprietários</div>
+      <div class="text-muted">Cadastro central (${proprietarios.length}) — reaproveite num imóvel novo do mesmo dono</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirNovoProprietario()"><i class="fa-solid fa-plus"></i> Novo Proprietário</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-filter" style="color:var(--text3)"></i> Filtro</span>
+      <input class="form-input" id="prop-filtro-nome" placeholder="Buscar por nome..." style="margin-left:auto;width:200px;padding:4px 8px;font-size:12px;" oninput="renderProprietarios()" value="${esc(filtro)}">
+    </div>
+    <div class="card-body" style="overflow-x:auto;padding:0;">
+      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
+          <th style="text-align:left;padding:8px;">Nome</th><th style="text-align:left;padding:8px;">Telefone</th><th style="text-align:left;padding:8px;">E-mail</th><th style="text-align:center;padding:8px;">Imóveis</th><th style="width:100px;"></th>
+        </tr></thead>
+        <tbody>${lista.map(p=>{
+          const idx=proprietarios.indexOf(p);
+          const qtdImoveis=imoveis.filter(im=>im.proprietarioId===p.id).length;
+          return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="abrirDetalheProprietario('${esc(p.id)}')">
+            <td style="padding:8px;font-weight:600;">${esc(p.nome)}</td>
+            <td style="padding:8px;">${p.telefone?`<a href="https://wa.me/55${p.telefone.replace(/\D/g,'')}" target="_blank" onclick="event.stopPropagation();" style="color:var(--sage);"><i class="fa-brands fa-whatsapp"></i> ${esc(p.telefone)}</a>`:'—'}</td>
+            <td style="padding:8px;">${esc(p.email||'—')}</td>
+            <td style="padding:8px;text-align:center;">${qtdImoveis}</td>
+            <td style="padding:8px;white-space:nowrap;text-align:right;" onclick="event.stopPropagation();">
+              <button class="btn btn-xs btn-sage" onclick="abrirDetalheProprietario('${esc(p.id)}')" title="Ver imóveis e compras compartilhadas"><i class="fa-solid fa-eye"></i> Ver imóveis</button>
+              <button class="btn btn-xs btn-outline" onclick="editarProprietario(${idx})" title="Editar dados"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="apagarProprietario(${idx})" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
+        Nenhum proprietário encontrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoProprietario()"><i class="fa-solid fa-plus"></i> Adicionar primeiro proprietário</button>
+      </div>`}
+    </div>
+  </div>`;
+}
+function _onProprietarioSelectChange(sel,imId){
+  const im=getImovel(imId);if(!im)return;
+  if(sel.value==='__novo__'){
+    sel.value=im.proprietarioId||'';
+    _novoProprietarioParaImovelId=imId;
+    abrirNovoProprietario();
+    return;
+  }
+  im.proprietarioId=sel.value||null;
+  if(im.proprietarioId){
+    const prop=proprietarios.find(p=>p.id===im.proprietarioId);
+    if(prop){im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';}
+  }
+  saveAll();renderAba('dados');
+}
+function abrirNovoProprietario(){
+  _editProprietarioIdx=null;
+  document.getElementById('generico-titulo').textContent='Novo Proprietário';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Nome</label><input id="prop-nome" class="input"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input"></div>
+      <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2"></textarea></div>
+    <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function editarProprietario(idx){
+  _editProprietarioIdx=idx;
+  const p=proprietarios[idx];if(!p)return;
+  document.getElementById('generico-titulo').textContent='Editar Proprietário';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Nome</label><input id="prop-nome" class="input" value="${esc(p.nome)}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input" value="${esc(p.telefone||'')}"></div>
+      <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input" value="${esc(p.email||'')}"></div>
+    </div>
+    <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2">${esc(p.obs||'')}</textarea></div>
+    <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarProprietario(){
+  const nome=document.getElementById('prop-nome').value.trim();
+  if(!nome){showToast('Informe o nome.','peach');return;}
+  const p={nome,
+    telefone:document.getElementById('prop-tel')?.value.trim()||'',
+    email:document.getElementById('prop-email')?.value.trim()||'',
+    obs:document.getElementById('prop-obs')?.value.trim()||''};
+  if(_editProprietarioIdx!=null){
+    p.id=proprietarios[_editProprietarioIdx].id;
+    proprietarios[_editProprietarioIdx]=p;
+  }else{
+    p.id='prop_'+uid()+uid();
+    proprietarios.push(p);
+  }
+  if(_novoProprietarioParaImovelId){
+    const im=getImovel(_novoProprietarioParaImovelId);
+    if(im){im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;}
+    _novoProprietarioParaImovelId=null;
+    saveAll();closeModal('modal-generico');renderAba('dados');showToast('Proprietário criado e vinculado!','sage');
+    return;
+  }
+  saveAll();closeModal('modal-generico');renderProprietarios();showToast('Proprietário salvo!','sage');
+}
+function apagarProprietario(idx){
+  const p=proprietarios[idx];if(!p)return;
+  const qtdImoveis=imoveis.filter(im=>im.proprietarioId===p.id).length;
+  if(qtdImoveis){showToast(`"${p.nome}" tem ${qtdImoveis} imóvel(is) vinculado(s) — desvincule antes de apagar.`,'peach');return;}
+  if(!confirm(`Apagar "${p.nome}"?`))return;
+  proprietarios.splice(idx,1);
+  saveAll();renderProprietarios();showToast('Removido.','peach');
+}
+function abrirDetalheProprietario(id){
+  const p=proprietarios.find(x=>x.id===id);if(!p)return;
+  const imoveisDele=imoveis.filter(im=>im.proprietarioId===id);
+  const lotesCompartilhados=[];
+  imoveisDele.forEach(im=>(im.comprasLotes||[]).filter(l=>l.loteCompartilhadoId).forEach(l=>{
+    if(!lotesCompartilhados.some(x=>x.loteCompartilhadoId===l.loteCompartilhadoId))lotesCompartilhados.push({...l,imovelNome:im.nome});
+  }));
+  document.getElementById('generico-titulo').textContent=p.nome;
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="margin-bottom:6px;">${esc(p.telefone||'sem telefone')} · ${esc(p.email||'sem e-mail')} <button class="btn btn-xs btn-outline" style="margin-left:8px;" onclick="editarProprietario(${proprietarios.indexOf(p)})"><i class="fa-solid fa-pen"></i> Editar dados</button></div>
+
+    <div class="form-section-title" style="margin-top:10px;"><i class="fa-solid fa-house"></i> Imóveis (${imoveisDele.length})</div>
+    ${imoveisDele.length?`<div style="margin-bottom:14px;">${imoveisDele.map(im=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="closeModal('modal-generico');showPanel('kanban',document.querySelector('.nav-item[onclick*=kanban]'));abrirDetalhe('${esc(im.id)}');"><strong>${esc(im.nome)}</strong> <span class="tag tag-${im.status==='ativo'?'sage':'gold'}" style="font-size:10px;margin-left:6px;">${esc(im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status))}</span></div>`).join('')}</div>`:`<div class="hint" style="margin-bottom:14px;">Nenhum imóvel vinculado ainda — vincule em Dados de um imóvel.</div>`}
+
+    <div class="form-section-title"><i class="fa-solid fa-people-arrows"></i> Compras/Gastos Compartilhados</div>
+    <div class="hint" style="margin-bottom:8px;">Um pagamento só que cobre 2+ imóveis (desse proprietário e/ou de outro, ex: casal com cadastros separados) — divide o valor igualmente e marca os itens comprados em cada imóvel.</div>
+    ${lotesCompartilhados.length?`<div style="margin-bottom:10px;">${lotesCompartilhados.map(l=>`<div style="font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--border);">${esc(l.local||'Compra compartilhada')} — ${fmtDate(l.data)} — <strong>${fmtMoeda(l.valorTotal)}</strong> por imóvel (${esc(l.imovelNome)} e outro(s))</div>`).join('')}</div>`:''}
+    ${imoveisDele.length>=1?`<button class="btn btn-sm btn-sage" onclick="abrirModalCompraCompartilhada('${esc(id)}')"><i class="fa-solid fa-plus"></i> Nova Compra Compartilhada</button>`:`<div class="hint">Esse proprietário não tem imóvel vinculado ainda.</div>`}
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+
+// ═══════════════════ COMPRA/GASTO COMPARTILHADO ═══════════════════
+function _htmlBlocoImovelCompraCompartilhada(im){
+  const pendentes=_rowsComprasRelevantes(im).filter(x=>!x.comprado&&!x.loteId);
+  const propNome=proprietarios.find(p=>p.id===im.proprietarioId)?.nome||'sem proprietário';
+  return`<div class="cc-imovel-bloco" data-imovel-id="${esc(im.id)}" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <label class="checkbox-label" style="font-weight:700;"><input type="checkbox" class="cc-imovel-check" data-imovel-id="${esc(im.id)}" checked> ${esc(im.nome)} <span class="text-muted" style="font-weight:400;font-size:11px;">(${esc(propNome)})</span></label>
+      <button type="button" class="btn btn-xs btn-outline" onclick="this.closest('.cc-imovel-bloco').remove()" title="Remover da divisão"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="margin-top:6px;margin-left:22px;max-height:160px;overflow:auto;">
+      ${pendentes.length?pendentes.map(x=>`<label class="checkbox-label" style="display:flex;font-size:12.5px;padding:2px 0;"><input type="checkbox" class="cc-item-check" data-imovel-id="${esc(im.id)}" data-subkey="${esc(x.subKey)}"> ${esc(x.label)} <span class="text-muted" style="margin-left:4px;">(${esc(x.cat)})</span></label>`).join(''):'<div class="hint">Nenhum item pendente nesse imóvel.</div>'}
+    </div>
+  </div>`;
+}
+function abrirModalCompraCompartilhada(proprietarioId){
+  const imoveisIniciais=imoveis.filter(im=>im.proprietarioId===proprietarioId);
+  const idsIniciais=new Set(imoveisIniciais.map(im=>im.id));
+  const outrosImoveis=imoveis.filter(im=>!idsIniciais.has(im.id));
+  document.getElementById('generico-titulo').textContent='Nova Compra Compartilhada';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="margin-bottom:8px;">Marque em quais imóveis entra a divisão e, dentro de cada um, quais itens desse imóvel foram comprados nessa compra. Dá pra incluir imóvel de outro proprietário também (ex: casal com cadastros separados, compra junta). Valor total sempre dividido igual entre os imóveis marcados.</div>
+    <div class="form-group"><label>Descrição</label><input id="cc-descricao" class="input" placeholder="Ex: Setup Belas Cintras 101+102"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Data</label><input id="cc-data" type="date" class="input" value="${hoje()}"></div>
+      <div class="form-group"><label>Valor total do lote (R$)</label>${numInput({id:'cc-valor',value:0,min:0,step:10})}</div>
+    </div>
+    <div class="form-group">
+      <label>Incluir imóvel de outro proprietário</label>
+      <select id="cc-add-imovel" class="input" onchange="_ccAdicionarImovelBloco(this)">
+        <option value="">— selecionar —</option>
+        ${outrosImoveis.map(im=>`<option value="${esc(im.id)}">${esc(im.nome)} (${esc(proprietarios.find(p=>p.id===im.proprietarioId)?.nome||'sem proprietário')})</option>`).join('')}
+      </select>
+    </div>
+    <div id="cc-imoveis-wrap" style="margin-top:8px;">
+      ${imoveisIniciais.map(_htmlBlocoImovelCompraCompartilhada).join('')}
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_confirmarCompraCompartilhada()"><i class="fa-solid fa-check"></i> Confirmar e dividir</button>
+      <button class="btn btn-sm btn-outline" onclick="abrirDetalheProprietario('${esc(proprietarioId)}')"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+    </div>
+  </div>`;
+}
+function _ccAdicionarImovelBloco(sel){
+  const id=sel.value;if(!id)return;
+  const im=getImovel(id);if(!im)return;
+  if(document.querySelector(`.cc-imovel-bloco[data-imovel-id="${id}"]`)){sel.value='';return;}
+  document.getElementById('cc-imoveis-wrap').insertAdjacentHTML('beforeend',_htmlBlocoImovelCompraCompartilhada(im));
+  sel.value='';
+}
+function _confirmarCompraCompartilhada(){
+  const descricao=document.getElementById('cc-descricao').value.trim()||'Compra compartilhada';
+  const data=document.getElementById('cc-data').value||hoje();
+  const valorTotal=+document.getElementById('cc-valor').value||0;
+  const imovelIdsIncluidos=[...document.querySelectorAll('.cc-imovel-check:checked')].map(cb=>cb.dataset.imovelId);
+  if(imovelIdsIncluidos.length<2){showToast('Marque pelo menos 2 imóveis pra dividir.','peach');return;}
+  if(!valorTotal){showToast('Informe o valor total do lote.','peach');return;}
+  const valorPorImovel=+(valorTotal/imovelIdsIncluidos.length).toFixed(2);
+  const loteCompartilhadoId='cc_'+uid()+uid();
+  const nomesImoveis=imovelIdsIncluidos.map(id=>imoveis.find(im=>im.id===id)?.nome||'?');
+  imovelIdsIncluidos.forEach(imId=>{
+    const im=imoveis.find(x=>x.id===imId);if(!im)return;
+    const subKeys=[...document.querySelectorAll(`.cc-item-check[data-imovel-id="${imId}"]:checked`)].map(cb=>cb.dataset.subkey);
+    const valorPorItem=subKeys.length?+(valorPorImovel/subKeys.length).toFixed(2):0;
+    const valoresPorItem={};subKeys.forEach(sk=>valoresPorItem[sk]=valorPorItem);
+    if(!im.comprasLotes)im.comprasLotes=[];
+    im.comprasLotes.push({
+      id:'lote_'+uid()+uid(),data,local:descricao,valorTotal:valorPorImovel,valoresPorItem,itensVinculados:subKeys,
+      criadoEm:new Date().toISOString(),loteCompartilhadoId,imoveisCompartilhados:nomesImoveis,
+    });
+    if(!im.compras)im.compras={};
+    subKeys.forEach(sk=>{
+      if(!im.compras[sk])im.compras[sk]={};
+      im.compras[sk].comprado=true;im.compras[sk].pago=true;im.compras[sk].loteId=im.comprasLotes[im.comprasLotes.length-1].id;
+    });
+  });
+  saveAll();closeModal('modal-generico');
+  if(_imovelAtivoId&&imovelIdsIncluidos.includes(_imovelAtivoId))renderAba(_abaAtiva);
+  showToast(`Compra dividida entre ${imovelIdsIncluidos.length} imóveis — ${fmtMoeda(valorPorImovel)} cada.`,'sage');
+}
+
 // ═══════════════════ INFORMAÇÕES ═══════════════════
 function renderInformacoes(){
   const wrap=document.getElementById('informacoes-wrap');
@@ -4129,12 +4849,25 @@ function renderInfoTabContent(){
 }
 
 // ── Mensagens (templates) ──
+let _templatesMsgBusca='';
+function _filtrarTemplatesMsg(v){
+  _templatesMsgBusca=v;
+  const c=document.getElementById('info-tab-content');
+  if(!c)return;
+  c.innerHTML=renderInfoMensagensHTML();
+  const el=document.getElementById('tpl-busca');
+  if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}
+}
 function renderInfoMensagensHTML(){
+  const busca=_templatesMsgBusca.toLowerCase().trim();
+  const lista=templatesMsg.map((t,i)=>({t,i}))
+    .filter(({t})=>!busca||(t.nome||'').toLowerCase().includes(busca)||(t.texto||'').toLowerCase().includes(busca));
   return `
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <input class="form-input" id="tpl-busca" placeholder="Buscar template por nome ou texto..." style="max-width:280px;flex:1;" oninput="_filtrarTemplatesMsg(this.value)" value="${esc(_templatesMsgBusca)}">
     <button class="btn btn-rose btn-sm" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Novo Template</button>
   </div>
-  ${templatesMsg.length?templatesMsg.map((t,i)=>`
+  ${lista.length?lista.map(({t,i})=>`
     <div class="card" style="margin-bottom:12px;">
       <div class="card-header">
         <span class="card-title">${esc(t.nome)}</span>
@@ -4147,7 +4880,7 @@ function renderInfoMensagensHTML(){
       <div class="card-body" style="white-space:pre-wrap;font-size:13px;color:var(--text-2);">${esc(t.texto)}</div>
     </div>
   `).join(''):`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">
-    Nenhum template cadastrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Adicionar primeiro template</button>
+    ${busca?'Nenhum template encontrado para essa busca.':`Nenhum template cadastrado.<br><button class="btn btn-sm btn-rose" style="margin-top:12px;" onclick="abrirNovoTemplateMsg()"><i class="fa-solid fa-plus"></i> Adicionar primeiro template</button>`}
   </div>`}`;
 }
 function abrirNovoTemplateMsg(){
@@ -4190,13 +4923,14 @@ function copiarTemplateMsg(idx){
 function editorRicoHTML(campo,valorHtml){
   return `
   <div class="card">
-    <div class="rich-editor-toolbar">
+    <div class="rich-editor-toolbar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','bold')" title="Negrito"><i class="fa-solid fa-bold"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','italic')" title="Itálico"><i class="fa-solid fa-italic"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','H3')" title="Título"><i class="fa-solid fa-heading"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertUnorderedList')" title="Lista"><i class="fa-solid fa-list-ul"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','insertOrderedList')" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
       <button type="button" class="btn btn-xs" onclick="richExec('${campo}','formatBlock','P')" title="Parágrafo normal">¶</button>
+      <span id="rich-status-${campo}" style="margin-left:auto;font-size:11px;color:var(--text-muted);"></span>
     </div>
     <div class="rich-editor-body" id="rich-${campo}" contenteditable="true" oninput="richSalvar('${campo}')">${valorHtml||''}</div>
   </div>`;
@@ -4211,8 +4945,14 @@ function richSalvar(campo){
   const html=document.getElementById('rich-'+campo).innerHTML;
   if(campo==='processo')processoTexto=html;
   else if(campo==='anotacoes')anotacoesTexto=html;
+  const statusEl=document.getElementById('rich-status-'+campo);
+  if(statusEl)statusEl.textContent='Salvando...';
   clearTimeout(_richSalvarTimer);
-  _richSalvarTimer=setTimeout(saveAll,600);
+  _richSalvarTimer=setTimeout(()=>{
+    saveAll();
+    const el=document.getElementById('rich-status-'+campo);
+    if(el)el.textContent='Salvo às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  },600);
 }
 
 // ═══════════════════ ORÇAMENTOS ═══════════════════
@@ -4316,9 +5056,9 @@ function apagarOrcamento(id){
   showToast('Orçamento apagado.','peach');
 }
 function _htmlCamasOrc(camas){
-  const tipos=['Solteiro','Casal','Queen','King','Beliche','Bicama','Sofá-cama Solteiro','Sofá-cama Casal','Viúva'];
+  const tipos=_tiposCamaDisponiveis();
   return(camas||[]).map(c=>`<div class="cama-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <select class="input cama-tipo" style="flex:2" onchange="_atualizarTotalOrcamentoUI()">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${t}</option>`).join('')}</select>
+    <select class="input cama-tipo" style="flex:2" onchange="_atualizarTotalOrcamentoUI()">${tipos.map(t=>`<option${t===c.tipo?' selected':''}>${esc(t)}</option>`).join('')}</select>
     ${numInput({value:c.qtd||1,min:1,style:'flex-shrink:0;',oninput:'_atualizarTotalOrcamentoUI()'})}
     <button class="btn btn-xs btn-danger" onclick="this.closest('.cama-row').remove();_atualizarTotalOrcamentoUI()"><i class="fa-solid fa-trash"></i></button>
   </div>`).join('');
@@ -4448,17 +5188,16 @@ function salvarOrcamento(){
 }
 function _calcEnxovalOrcamento(camas,fornecedor){
   const rows=[];
-  const porTipo={};
-  (camas||[]).forEach(c=>{const t=CAMA_TIPO_ENXOVAL[c.tipo]||'Solteiro';(porTipo[t]=porTipo[t]||[]).push(c);});
+  const porTipo=_unidadesEnxovalPorTamanho(camas);
   ITENS_COMPRAS.forEach(item=>{
     if(item.tipoPreco!=='enxoval')return;
     if(!itemValidoParaModalidade(item,fornecedor))return;
-    Object.entries(porTipo).forEach(([tipoEnx,camasTipo])=>{
-      const camasParaItem=item.semSofaCama?camasTipo.filter(c=>!c.tipo.startsWith('Sofá-cama')):camasTipo;
-      if(item.semSofaCama&&!camasParaItem.length)return;
+    Object.entries(porTipo).forEach(([tipoEnx,unidadesTipo])=>{
+      const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
+      if(item.semSofaCama&&!unidadesParaItem.length)return;
       const[n,base]=(item.qtdRule||'1-colchao').split('-');const q=parseInt(n)||1;
       let qtd=0;
-      if(base==='colchao'||base==='leito')qtd=q*camasParaItem.reduce((s,c)=>s+(CAMA_LEITOS[c.tipo]||1)*(+c.qtd||1),0);
+      if(base==='colchao'||base==='leito')qtd=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
       else qtd=q;
       if(!qtd)return;
       const valorUnit=(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
@@ -4551,81 +5290,347 @@ async function gerarPDFOrcamentoAvulso(id){
 }
 
 // ═══════════════════ ESTOQUE ═══════════════════
+const ESTOQUE_ITENS_SUGESTOES=['Lençol','Fronha Basic Percalle c/ Abas','Travesseiro Sanomed','Travesseiro Toque de Pluma','Protetor de Travesseiro','Protetor de Colchão','Toalha de Banho Lory Hotel','Toalha de Rosto Lory Hotel','Tapete Piso Luxor Hotel','Cobertor Aspen II','Edredom Premier Hotel'];
+const ESTOQUE_TAMANHOS_SUGESTOES=['Solteiro','Casal','Queen','King','Banho','Rosto','Piso','Único'];
+function _estoqueSugestoes(campo){
+  const usados=[...new Set(estoqueItens.map(i=>i[campo]).filter(Boolean))];
+  const base=campo==='item'?ESTOQUE_ITENS_SUGESTOES:campo==='tamanho'?ESTOQUE_TAMANHOS_SUGESTOES:[];
+  return[...new Set([...base,...usados])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+let _estoqueBusca='';
+let _estoqueAbaForm='unico';
+let _estoqueGruposAbertos=new Set();
+function _filtrarEstoque(v){_estoqueBusca=v;renderEstoque();}
+function _estoqueChave(i){return[i.item,i.tamanho,i.cor].filter(Boolean).join(' · ');}
+function _estoqueToggleGrupo(chave){
+  if(_estoqueGruposAbertos.has(chave))_estoqueGruposAbertos.delete(chave);
+  else _estoqueGruposAbertos.add(chave);
+  renderEstoque();
+}
+// Puxa o preço do catálogo de Compras (ITENS_COMPRAS) pelo nome do item — evita
+// digitar o valor na mão quando o item já tem preço cadastrado lá. Itens de preço
+// fixo usam o preço direto; itens de enxoval (varia por tamanho de cama) usam
+// PRECOS_ENXOVAL[nome][tamanho] — só funciona se o tamanho informado for um dos
+// 4 tamanhos-base (Solteiro/Casal/Queen/King). Retorna null se não achar.
+function _estoquePrecoCatalogo(nome,tamanho){
+  const nomeNorm=(nome||'').trim().toLowerCase();
+  if(!nomeNorm)return null;
+  const item=ITENS_COMPRAS.find(it=>it.nome.toLowerCase()===nomeNorm);
+  if(!item)return null;
+  if(item.tipoPreco==='fixo')return item.preco||0;
+  if(item.tipoPreco==='enxoval'){
+    const tamEnx=CAMA_TIPO_ENXOVAL[tamanho]||(['Solteiro','Casal','Queen','King'].includes(tamanho)?tamanho:null);
+    if(!tamEnx)return null;
+    return(PRECOS_ENXOVAL[item.nome]||{})[tamEnx]||0;
+  }
+  return null;
+}
+function _estoqueAutoPreco(prefixo){
+  prefixo=prefixo||'est';
+  const item=document.getElementById(prefixo+'-item')?.value.trim();
+  const tamanho=document.getElementById(prefixo+'-tamanho')?.value.trim();
+  const preco=_estoquePrecoCatalogo(item,tamanho);
+  if(preco==null)return;
+  const usado=document.getElementById(prefixo+'-usado')?.checked;
+  const valorEl=document.getElementById(prefixo+'-valor');
+  if(valorEl)valorEl.value=+(preco*(usado?0.6:1)).toFixed(2);
+}
+function _estoqueStatTile(label,valor){
+  return`<div style="background:var(--surface-2);border-radius:12px;padding:12px 18px;">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${esc(label)}</div>
+    <div style="font-size:19px;font-weight:700;">${valor}</div>
+  </div>`;
+}
 function renderEstoque(){
   const wrap=document.getElementById('estoque-wrap');
   if(!wrap)return;
   const h=hoje();
   // "em estoque hoje" = já deu entrada e (nunca saiu OU a saída registrada é no futuro)
   const emEstoque=estoqueItens.filter(i=>i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h));
-  const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0),0);
+  const totalValorEstoque=emEstoque.reduce((s,i)=>s+(+i.valor||0)*(+i.qtd||1),0);
+  const totalUnidEstoque=emEstoque.reduce((s,i)=>s+(+i.qtd||1),0);
+  // Grupos vêm de TODOS os lançamentos (não só o que está em estoque hoje) — assim um
+  // item que já saiu inteiro do estoque continua aparecendo pra dar pra ver o histórico
+  // ou apagar; qtdEstoque conta só a parte ainda em estoque.
   const porItem={};
-  emEstoque.forEach(i=>{porItem[i.item]=(porItem[i.item]||0)+1;});
-  const lista=[...estoqueItens].sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
+  estoqueItens.forEach(i=>{
+    const k=_estoqueChave(i);
+    if(!porItem[k])porItem[k]={item:i.item,tamanho:i.tamanho||'',cor:i.cor||'',qtdEstoque:0};
+    if(i.dataEntrada<=h&&(!i.dataSaida||i.dataSaida>h))porItem[k].qtdEstoque+=(+i.qtd||1);
+  });
+  const busca=_estoqueBusca.toLowerCase().trim();
+  const grupos=Object.entries(porItem)
+    .filter(([chave])=>!busca||chave.toLowerCase().includes(busca))
+    .sort((a,b)=>a[0].localeCompare(b[0]));
   wrap.innerHTML=`
-  <div style="margin-bottom:16px;">
-    <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
-    <div class="text-muted">Item, data de entrada/saída e valor — o resumo abaixo é calculado a partir das datas</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    <div>
+      <div class="section-title" style="margin-bottom:4px;">Controle de Estoque</div>
+      <div class="text-muted" style="font-size:12px;">Valor puxa do catálogo de Compras quando o nome bate; "Usado" desconta 40%.</div>
+    </div>
+    <button class="btn btn-rose btn-sm" onclick="abrirModalAdicionarEstoque()"><i class="fa-solid fa-plus"></i> Adicionar ao estoque</button>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-plus" style="color:var(--sage)"></i> Adicionar item</span></div>
-    <div class="card-body" style="padding:12px;">
-      <div class="form-row" style="flex-wrap:wrap;gap:12px;">
-        <div class="form-group" style="flex:2;min-width:180px;"><label>Item</label><input id="est-item" class="input" placeholder="Ex: Travesseiro Sanomed"></div>
-        <div class="form-group" style="min-width:150px;"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
-        <div class="form-group" style="min-width:150px;"><label>Data de saída</label><input id="est-saida" type="date" class="input"></div>
-        <div class="form-group" style="min-width:130px;"><label>Valor (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
-      </div>
-      <button class="btn btn-rose btn-sm" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Resumo — em estoque hoje</span></div>
-    <div class="card-body" style="padding:12px;">
-      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:${Object.keys(porItem).length?'12px':'0'};">
-        <div><div class="text-muted" style="font-size:12px;">Itens em estoque</div><div style="font-size:20px;font-weight:700;">${emEstoque.length}</div></div>
-        <div><div class="text-muted" style="font-size:12px;">Valor total em estoque</div><div style="font-size:20px;font-weight:700;">${fmtMoeda(totalValorEstoque)}</div></div>
-      </div>
-      ${Object.keys(porItem).length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px 4px;">Item</th><th style="text-align:center;padding:6px 4px;width:110px;">Qtd. em estoque</th></tr></thead>
-        <tbody>${Object.entries(porItem).sort((a,b)=>a[0].localeCompare(b[0])).map(([nome,qtd])=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:6px 4px;">${esc(nome)}</td><td style="padding:6px 4px;text-align:center;font-weight:600;">${qtd}</td>
-        </tr>`).join('')}</tbody>
-      </table>`:''}
-    </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    ${_estoqueStatTile('Unidades em estoque',totalUnidEstoque)}
+    ${_estoqueStatTile('Valor total em estoque',fmtMoeda(totalValorEstoque))}
   </div>
 
   <div class="card">
-    <div class="card-header"><span class="card-title"><i class="fa-solid fa-list" style="color:var(--peach)"></i> Movimentações (${lista.length})</span></div>
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-warehouse" style="color:var(--lavender)"></i> Itens (${grupos.length})</span>
+      <input class="form-input" id="est-busca" placeholder="Buscar..." style="margin-left:auto;width:170px;padding:4px 8px;font-size:12px;" oninput="_filtrarEstoque(this.value)" value="${esc(_estoqueBusca)}">
+      ${estoqueItens.length?`<button class="btn btn-xs btn-outline" style="margin-left:8px;color:var(--rose);" onclick="_estoqueApagarTudo()" title="Apagar todos os lançamentos"><i class="fa-solid fa-trash"></i> Apagar tudo</button>`:''}
+    </div>
     <div class="card-body" style="overflow-x:auto;padding:0;">
-      ${lista.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
+      ${grupos.length?`<table style="width:100%;font-size:13px;border-collapse:collapse;">
         <thead><tr style="border-bottom:2px solid var(--border);background:var(--surface-2);">
-          <th style="text-align:left;padding:8px;">Item</th><th style="text-align:left;padding:8px;">Entrada</th><th style="text-align:left;padding:8px;">Saída</th><th style="text-align:right;padding:8px;">Valor</th><th style="padding:8px;width:120px;"></th>
+          <th style="text-align:left;padding:8px;">Item · Tamanho · Cor</th><th style="text-align:center;padding:8px;width:90px;">Em estoque</th><th style="padding:8px;width:80px;"></th>
         </tr></thead>
-        <tbody>${lista.map(i=>`<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px;font-weight:600;">${esc(i.item)}</td>
-          <td style="padding:8px;">${fmtDate(i.dataEntrada)}</td>
-          <td style="padding:8px;">${i.dataSaida?fmtDate(i.dataSaida):`<span class="tag tag-sage">em estoque</span>`}</td>
-          <td style="padding:8px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
-          <td style="padding:8px;white-space:nowrap;text-align:right;">
-            ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
-            <button class="btn btn-xs btn-danger" onclick="apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
-          </td>
-        </tr>`).join('')}</tbody>
-      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum item cadastrado ainda.</div>`}
+        <tbody>${grupos.map(([chave,g])=>{
+          const aberto=_estoqueGruposAbertos.has(chave);
+          const linhasGrupo=estoqueItens.filter(i=>_estoqueChave(i)===chave).sort((a,b)=>(b.dataEntrada||'').localeCompare(a.dataEntrada||''));
+          return`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="_estoqueToggleGrupo('${esc(_escJs(chave))}')">
+            <td style="padding:8px;font-weight:600;"><i class="fa-solid fa-chevron-${aberto?'down':'right'}" style="width:12px;color:var(--text-muted);margin-right:8px;font-size:11px;"></i>${esc(chave)}</td>
+            <td style="padding:8px;text-align:center;font-weight:600;">${g.qtdEstoque}</td>
+            <td style="padding:4px;text-align:right;" onclick="event.stopPropagation();">
+              <button class="btn btn-xs btn-outline" onclick="abrirModalRenomearGrupo('${esc(_escJs(g.item))}','${esc(_escJs(g.tamanho))}','${esc(_escJs(g.cor))}')" title="Renomear / mesclar com outro grupo"><i class="fa-solid fa-pen"></i></button>
+            </td>
+          </tr>
+          ${aberto?`<tr><td colspan="3" style="padding:0;background:var(--surface-2);">
+            <table style="width:100%;font-size:12px;border-collapse:collapse;">
+              <thead><tr style="color:var(--text-muted);"><th style="text-align:left;padding:6px 10px 6px 30px;font-weight:400;">Entrada</th><th style="text-align:left;padding:6px;font-weight:400;">Situação</th><th style="text-align:center;padding:6px;font-weight:400;">Qtd.</th><th style="text-align:right;padding:6px;font-weight:400;">Valor unit.</th><th style="width:110px;"></th></tr></thead>
+              <tbody>${linhasGrupo.map(i=>`<tr style="border-top:1px solid var(--border);">
+                <td style="padding:6px 10px 6px 30px;">${fmtDate(i.dataEntrada)}</td>
+                <td style="padding:6px;">${i.dataSaida?`saiu ${fmtDate(i.dataSaida)}`:`<span class="tag tag-sage">em estoque</span>`}${i.usado?' <span class="tag tag-peach">usado</span>':''}</td>
+                <td style="padding:6px;text-align:center;" onclick="event.stopPropagation();"><input type="number" class="input" min="0" value="${+i.qtd||1}" style="width:56px;padding:3px 4px;text-align:center;font-size:12px;" onchange="_estoqueEditarQtd('${esc(i.id)}',this.value)"></td>
+                <td style="padding:6px;text-align:right;">${fmtMoeda(i.valor||0)}</td>
+                <td style="padding:6px;white-space:nowrap;text-align:right;">
+                  <button class="btn btn-xs btn-outline" onclick="event.stopPropagation();abrirModalEditarEstoqueItem('${esc(i.id)}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                  ${!i.dataSaida?`<button class="btn btn-xs btn-outline" onclick="event.stopPropagation();marcarSaidaEstoqueItem('${esc(i.id)}')" title="Marcar saída hoje"><i class="fa-solid fa-right-from-bracket"></i></button>`:''}
+                  <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();apagarEstoqueItem('${esc(i.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>
+                </td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </td></tr>`:''}`;
+        }).join('')}</tbody>
+      </table>`:`<div class="empty-state" style="padding:32px;text-align:center;font-size:13px;color:var(--text-muted);">${busca?'Nenhum item encontrado para essa busca.':'Nenhum item cadastrado ainda. Clique em "Adicionar ao estoque" pra começar.'}</div>`}
     </div>
   </div>`;
 }
+function abrirModalAdicionarEstoque(){
+  document.getElementById('generico-titulo').textContent='Adicionar ao Estoque';
+  document.getElementById('generico-body').innerHTML=_estoqueFormModalHTML();
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _estoqueMostrarAbaForm(aba){
+  _estoqueAbaForm=aba;
+  const body=document.getElementById('generico-body');
+  if(body)body.innerHTML=_estoqueFormModalHTML();
+}
+function _estoqueFormModalHTML(){
+  const h=hoje();
+  return`
+  <div class="tabs-bar" style="padding:0;margin-bottom:14px;">
+    <button class="tab-btn${_estoqueAbaForm==='unico'?' active':''}" onclick="_estoqueMostrarAbaForm('unico')"><i class="fa-solid fa-plus"></i> Um item</button>
+    <button class="tab-btn${_estoqueAbaForm==='colar'?' active':''}" onclick="_estoqueMostrarAbaForm('colar')"><i class="fa-solid fa-paste"></i> Colar vários</button>
+  </div>
+  ${_estoqueAbaForm==='unico'?`
+  <div class="form-grid">
+    <div class="form-group"><label>Item</label><input id="est-item" class="input" list="est-item-list" placeholder="Ex: Lençol" onchange="_estoqueAutoPreco()"><datalist id="est-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-row">
+      <div class="form-group"><label>Tamanho</label><input id="est-tamanho" class="input" list="est-tamanho-list" placeholder="Ex: Queen" onchange="_estoqueAutoPreco()"><datalist id="est-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <div class="form-group"><label>Cor</label><input id="est-cor" class="input" list="est-cor-list" placeholder="Ex: Branco"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Qtd.</label>${numInput({id:'est-qtd',value:1,min:1})}</div>
+      <div class="form-group"><label>Valor unit. (R$)</label>${numInput({id:'est-valor',value:0,min:0,step:10})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Data de entrada</label><input id="est-entrada" type="date" class="input" value="${h}"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><label class="checkbox-label"><input type="checkbox" id="est-usado" onchange="_estoqueAutoPreco()"> Usado (desconta 40%)</label></div>
+    </div>
+  </div>
+  <button class="btn btn-rose btn-sm" style="margin-top:8px;" onclick="adicionarEstoqueItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+  `:`
+  <div class="hint" style="margin-bottom:8px;">Uma linha por item, começando pela quantidade — ex: <code>6 travesseiros</code>, <code>2 jogos de casal</code> (tamanho no nome é detectado sozinho). O valor de cada linha puxa do catálogo de Compras pelo nome; se não achar, usa o valor manual abaixo.</div>
+  <textarea id="est-colar-texto" class="input" rows="5" placeholder="6 travesseiros&#10;4 tapetes&#10;2 jogos de casal" oninput="_estoquePreviewColar()"></textarea>
+  <div class="form-row" style="margin-top:8px;">
+    <div class="form-group"><label>Data de entrada</label><input id="est-colar-entrada" type="date" class="input" value="${h}"></div>
+    <div class="form-group"><label>Cor (todo o lote)</label><input id="est-colar-cor" class="input" list="est-cor-list" placeholder="Ex: Branco" oninput="_estoquePreviewColar()"><datalist id="est-cor-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Valor manual — se não achar no catálogo (R$)</label>${numInput({id:'est-colar-valor',value:0,min:0,step:10,onchange:'_estoquePreviewColar()'})}</div>
+    <div class="form-group" style="display:flex;align-items:flex-end;"><label class="checkbox-label"><input type="checkbox" id="est-colar-usado" onchange="_estoquePreviewColar()"> Usado (desconta 40%)</label></div>
+  </div>
+  <div id="est-colar-preview" style="margin:10px 0;font-size:12.5px;"></div>
+  <button class="btn btn-rose btn-sm" id="est-colar-btn" onclick="_estoqueImportarColados()" disabled><i class="fa-solid fa-check"></i> Confirmar e lançar</button>
+  `}`;
+}
+const ESTOQUE_TAMANHOS_REGEX=/\b(casal|solteiro|queen|king)\b/i;
+// Detecta tamanho embutido no nome digitado (ex: "2 jogos de casal") e separa em
+// campo próprio, tirando a sobra "de" que fica pendurada (achado em 2026-08-21:
+// itens colados em lista viravam nome bagunçado tipo "jogos de casal" inteiro,
+// sem tamanho separado, porque o parser antigo não tentava reconhecer isso).
+function _estoqueParseColados(texto){
+  return(texto||'').split('\n').map(l=>l.trim()).filter(Boolean).map(linha=>{
+    const m=/^(\d+)\s*[xX×]?\s*(.+)$/.exec(linha);
+    let qtd=1,nome=linha;
+    if(m){qtd=parseInt(m[1])||1;nome=m[2].trim();}
+    let tamanho='';
+    const tm=ESTOQUE_TAMANHOS_REGEX.exec(nome);
+    if(tm){
+      tamanho=tm[1][0].toUpperCase()+tm[1].slice(1).toLowerCase();
+      nome=nome.replace(ESTOQUE_TAMANHOS_REGEX,'').replace(/\bde\b\s*$/i,'').replace(/\s{2,}/g,' ').trim();
+    }
+    return{qtd,nome,tamanho};
+  }).filter(l=>l.nome);
+}
+function _estoqueLinhaValor(nome,tamanho,valorManual,usado){
+  const preco=_estoquePrecoCatalogo(nome,tamanho);
+  const base=preco!=null?preco:(+valorManual||0);
+  return usado?+(base*0.6).toFixed(2):base;
+}
+function _estoquePreviewColar(){
+  const texto=document.getElementById('est-colar-texto')?.value||'';
+  const itens=_estoqueParseColados(texto);
+  const prevEl=document.getElementById('est-colar-preview');
+  const btn=document.getElementById('est-colar-btn');
+  if(btn)btn.disabled=!itens.length;
+  if(!prevEl)return;
+  if(!itens.length){prevEl.innerHTML='';return;}
+  const valorManual=document.getElementById('est-colar-valor')?.value||0;
+  const usado=document.getElementById('est-colar-usado')?.checked;
+  const cor=document.getElementById('est-colar-cor')?.value.trim()||'';
+  const contagemNome={};
+  itens.forEach(l=>{contagemNome[l.nome.toLowerCase()]=(contagemNome[l.nome.toLowerCase()]||0)+1;});
+  const totalUnidades=itens.reduce((s,l)=>s+l.qtd,0);
+  prevEl.innerHTML=`<div class="hint" style="margin-bottom:6px;">Prévia — ${itens.length} linha(s), ${totalUnidades} unidade(s) no total:</div>
+    <ul style="margin:0;padding-left:18px;">
+    ${itens.map(l=>{
+      const repetido=contagemNome[l.nome.toLowerCase()]>1;
+      const achouCatalogo=_estoquePrecoCatalogo(l.nome,l.tamanho)!=null;
+      const valor=_estoqueLinhaValor(l.nome,l.tamanho,valorManual,usado);
+      return`<li>${l.qtd}× ${esc(l.nome)}${l.tamanho?` <span class="tag tag-lav" style="font-size:10px;">${esc(l.tamanho)}</span>`:''}${cor?` <span class="tag" style="font-size:10px;">${esc(cor)}</span>`:''} — <strong>${fmtMoeda(valor)}</strong>/un. ${achouCatalogo?'<span class="text-muted">(do catálogo)</span>':'<span class="text-muted">(valor manual)</span>'}${repetido?' <span style="color:var(--rose);font-weight:600;">— nome repetido em outra linha, confira se não é duplicado</span>':''}</li>`;
+    }).join('')}
+    </ul>`;
+}
+function _estoqueImportarColados(){
+  const texto=document.getElementById('est-colar-texto')?.value||'';
+  const itens=_estoqueParseColados(texto);
+  if(!itens.length)return;
+  const dataEntrada=document.getElementById('est-colar-entrada').value||hoje();
+  const valorManual=document.getElementById('est-colar-valor')?.value||0;
+  const usado=document.getElementById('est-colar-usado')?.checked||false;
+  const cor=document.getElementById('est-colar-cor')?.value.trim()||'';
+  itens.forEach(l=>{
+    const valor=_estoqueLinhaValor(l.nome,l.tamanho,valorManual,usado);
+    estoqueItens.push({id:'est_'+uid()+uid(),item:l.nome,tamanho:l.tamanho,cor,qtd:l.qtd,dataEntrada,dataSaida:null,valor,usado});
+  });
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast(`${itens.length} item(ns) lançado(s) no estoque!`,'sage');
+}
 function adicionarEstoqueItem(){
   const item=document.getElementById('est-item').value.trim();
+  const tamanho=document.getElementById('est-tamanho').value.trim();
+  const cor=document.getElementById('est-cor').value.trim();
+  const qtd=+document.getElementById('est-qtd').value||1;
   const dataEntrada=document.getElementById('est-entrada').value||hoje();
-  const dataSaida=document.getElementById('est-saida').value||null;
   const valor=+document.getElementById('est-valor').value||0;
+  const usado=document.getElementById('est-usado')?.checked||false;
   if(!item){showToast('Informe o nome do item.','peach');return;}
-  estoqueItens.push({id:'est_'+uid()+uid(),item,dataEntrada,dataSaida,valor});
-  saveAll();renderEstoque();
+  estoqueItens.push({id:'est_'+uid()+uid(),item,tamanho,cor,qtd,dataEntrada,dataSaida:null,valor,usado});
+  saveAll();closeModal('modal-generico');renderEstoque();
   showToast('Item adicionado ao estoque.','sage');
+}
+function abrirModalRenomearGrupo(item,tamanho,cor){
+  document.getElementById('generico-titulo').textContent='Renomear / mesclar grupo';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="hint" style="grid-column:1/-1;">Atualiza TODOS os lançamentos que hoje aparecem como "${esc([item,tamanho,cor].filter(Boolean).join(' · '))}". Pra juntar com outro grupo, digite exatamente o mesmo nome/tamanho/cor dele.</div>
+    <div class="form-group"><label>Item</label><input id="rg-item" class="input" value="${esc(item)}"></div>
+    <div class="form-group"><label>Tamanho</label><input id="rg-tamanho" class="input" value="${esc(tamanho||'')}"></div>
+    <div class="form-group"><label>Cor</label><input id="rg-cor" class="input" value="${esc(cor||'')}"></div>
+    <div style="margin-top:12px;grid-column:1/-1;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_salvarRenomearGrupo('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-save"></i> Renomear tudo</button>
+      <button class="btn btn-sm btn-danger" onclick="_apagarGrupoEstoque('${esc(_escJs(item))}','${esc(_escJs(tamanho||''))}','${esc(_escJs(cor||''))}')"><i class="fa-solid fa-trash"></i> Apagar grupo inteiro</button>
+    </div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarRenomearGrupo(itemAntigo,tamanhoAntigo,corAntigo){
+  const item=document.getElementById('rg-item').value.trim();
+  if(!item){showToast('Informe o nome do item.','peach');return;}
+  const tamanho=document.getElementById('rg-tamanho').value.trim();
+  const cor=document.getElementById('rg-cor').value.trim();
+  let n=0;
+  estoqueItens.forEach(i=>{
+    if((i.item||'')===itemAntigo&&(i.tamanho||'')===tamanhoAntigo&&(i.cor||'')===corAntigo){
+      i.item=item;i.tamanho=tamanho;i.cor=cor;n++;
+    }
+  });
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast(`${n} lançamento(s) renomeado(s).`,'sage');
+}
+function _apagarGrupoEstoque(item,tamanho,cor){
+  const n=estoqueItens.filter(i=>(i.item||'')===item&&(i.tamanho||'')===tamanho&&(i.cor||'')===cor).length;
+  if(!confirm(`Apagar ${n} lançamento(s) de "${[item,tamanho,cor].filter(Boolean).join(' · ')}"? Não dá pra desfazer.`))return;
+  estoqueItens=estoqueItens.filter(i=>!((i.item||'')===item&&(i.tamanho||'')===tamanho&&(i.cor||'')===cor));
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast(`${n} lançamento(s) apagado(s).`,'peach');
+}
+function abrirModalEditarEstoqueItem(id){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  document.getElementById('generico-titulo').textContent='Editar Item do Estoque';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group"><label>Item</label><input id="este-item" class="input" list="este-item-list" value="${esc(it.item)}" onchange="_estoqueAutoPreco('este')"><datalist id="este-item-list">${_estoqueSugestoes('item').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Tamanho</label><input id="este-tamanho" class="input" list="este-tamanho-list" value="${esc(it.tamanho||'')}" onchange="_estoqueAutoPreco('este')"><datalist id="este-tamanho-list">${_estoqueSugestoes('tamanho').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Cor</label><input id="este-cor" class="input" list="este-cor-edit-list" value="${esc(it.cor||'')}"><datalist id="este-cor-edit-list">${_estoqueSugestoes('cor').map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+    <div class="form-group"><label>Qtd.</label>${numInput({id:'este-qtd',value:it.qtd||1,min:1})}</div>
+    <div class="form-group"><label>Valor unit. (R$)</label>${numInput({id:'este-valor',value:it.valor||0,min:0,step:10})}</div>
+    <div class="form-group"><label class="checkbox-label" style="display:inline-flex;"><input type="checkbox" id="este-usado"${it.usado?' checked':''} onchange="_estoqueAutoPreco('este')"> Usado</label></div>
+    <div style="margin-top:12px;grid-column:1/-1;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-sage" onclick="_salvarEdicaoEstoqueItem('${esc(id)}')"><i class="fa-solid fa-save"></i> Salvar</button>
+      <button class="btn btn-sm btn-danger" onclick="apagarEstoqueItem('${esc(id)}');closeModal('modal-generico')"><i class="fa-solid fa-trash"></i> Apagar item</button>
+    </div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarEdicaoEstoqueItem(id){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  const item=document.getElementById('este-item').value.trim();
+  if(!item){showToast('Informe o nome do item.','peach');return;}
+  it.item=item;
+  it.tamanho=document.getElementById('este-tamanho').value.trim();
+  it.cor=document.getElementById('este-cor').value.trim();
+  it.qtd=+document.getElementById('este-qtd').value||1;
+  it.valor=+document.getElementById('este-valor').value||0;
+  it.usado=document.getElementById('este-usado').checked;
+  saveAll();closeModal('modal-generico');renderEstoque();
+  showToast('Item atualizado.','sage');
+}
+function _estoqueEditarQtd(id,novaQtd){
+  const it=estoqueItens.find(x=>x.id===id);if(!it)return;
+  const qtd=+novaQtd;
+  if(!qtd||qtd<=0){
+    if(confirm('Quantidade zero — apagar este lançamento (ex: era duplicado)?')){
+      estoqueItens=estoqueItens.filter(x=>x.id!==id);
+      saveAll();renderEstoque();
+      showToast('Lançamento apagado.','peach');
+    }else{
+      renderEstoque(); // desfaz visualmente, volta pro valor salvo
+    }
+    return;
+  }
+  it.qtd=qtd;
+  saveAll();renderEstoque();
+  showToast('Quantidade atualizada.','sage');
+}
+function _estoqueApagarTudo(){
+  if(!estoqueItens.length)return;
+  if(!confirm(`Apagar TODOS os ${estoqueItens.length} lançamento(s) de estoque? Não dá pra desfazer.`))return;
+  estoqueItens=[];
+  saveAll();renderEstoque();
+  showToast('Todos os lançamentos de estoque foram apagados.','peach');
 }
 function marcarSaidaEstoqueItem(id){
   const it=estoqueItens.find(x=>x.id===id);if(!it)return;
@@ -4655,15 +5660,9 @@ function renderConfig(){
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
-  const baseOpts=['colchao','leito','banheiro-completo','banheiro','lavabo','quarto','andar','hospede','cada2hospede','unidade'];
-  const baseLabels={
-    'colchao':'por colchão','leito':'por leito (cama/beliche)',
-    'banheiro-completo':'por banh. completo','banheiro':'por banheiro (total)',
-    'lavabo':'por lavabo','quarto':'por quarto','andar':'por andar',
-    'hospede':'por hóspede','cada2hospede':'a cada 2 hóspedes',
-    'unidade':'unidade fixa (1 por apê)'
-  };
-  const modalOpts=[['comprado','Comprado'],['flashee','Flashee'],['intense','Intense']];
+  const baseOpts=QTD_RULE_BASES;
+  const baseLabels=QTD_RULE_LABELS;
+  const modalOpts=_opcoesModalidades();
   ci.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;">
     <thead><tr style="border-bottom:2px solid var(--border);">
       <th style="text-align:left;padding:6px 4px;">Item</th>
@@ -4678,7 +5677,7 @@ function renderConfig(){
       const base=item.qtdRule.slice(dash+1);
       const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br>${esc(item.nome)}</td>
+        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;"></td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
         <td style="padding:5px 4px;">
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
@@ -4808,6 +5807,9 @@ function renderConfig(){
   _renderConfigLimpezaCheckout();
   _renderConfigDefPagadoria();
   _renderConfigVistoriaCampos();
+  _renderConfigCamasCustom();
+  _renderConfigModelosNegocio();
+  _renderConfigModalidadesEnxoval();
 }
 function _renderConfigLimpezaCheckout(){
   const el=document.getElementById('config-precos-checkout');
@@ -4976,12 +5978,289 @@ function _removerCampoVistoria(i){
   saveAll();_renderConfigVistoriaCampos();
   showToast('Campo removido.','peach');
 }
+
+// ═══════════════════ TIPOS DE CAMA CUSTOMIZADOS ═══════════════════
+function _renderConfigCamasCustom(){
+  const el=document.getElementById('config-camas-custom');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Cadastre combinações de cama que não são um tamanho só (ex: beliche de casal com bicama) dizendo de quais tamanhos-base elas são feitas. Isso passa a valer automaticamente pro cálculo de enxoval (jogo de cama, cobertor, edredom, protetor) em qualquer imóvel/orçamento que usar esse tipo.</div>
+    <div style="margin-bottom:12px;">
+      <button class="btn btn-sm btn-sage" onclick="abrirModalNovoTipoCama()"><i class="fa-solid fa-plus"></i> Novo Tipo de Cama</button>
+    </div>
+    ${!CAMAS_TIPOS_CUSTOM.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum tipo customizado cadastrado ainda.</div>`:`
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--surface-2);">
+        <th style="padding:7px 10px;text-align:left;">Nome</th>
+        <th style="padding:7px 10px;text-align:left;">Composição (leitos-base)</th>
+        <th style="padding:7px 4px;width:36px;"></th>
+      </tr></thead>
+      <tbody>
+      ${CAMAS_TIPOS_CUSTOM.map((t,i)=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 10px;">${esc(t.nome)}</td>
+        <td style="padding:7px 10px;">${(t.componentes||[]).map(c=>`${c.qtd}× ${esc(c.tamanho)}`).join(' + ')}</td>
+        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerTipoCamaCustom(${i})"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`}`;
+}
+function _htmlComponenteCama(tamanho,qtd){
+  const tamanhos=['Solteiro','Casal','Queen','King'];
+  return`<div class="componente-cama-row" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+    ${numInput({value:qtd||1,min:1,style:'flex-shrink:0;'})}
+    <select class="input componente-cama-tamanho" style="flex:1;">${tamanhos.map(t=>`<option${t===tamanho?' selected':''}>${t}</option>`).join('')}</select>
+    <button class="btn btn-xs btn-danger" onclick="this.closest('.componente-cama-row').remove()"><i class="fa-solid fa-trash"></i></button>
+  </div>`;
+}
+function abrirModalNovoTipoCama(){
+  document.getElementById('generico-titulo').textContent='Novo Tipo de Cama Customizado';
+  document.getElementById('generico-body').innerHTML=`<div class="form-grid">
+    <div class="form-group" style="grid-column:1/-1;"><label>Nome do tipo</label><input id="tc-nome" class="input" placeholder="Ex: Beliche Casal e Bicama"></div>
+    <div class="form-group" style="grid-column:1/-1;">
+      <label>De quais tamanhos-base isso é feito?</label>
+      <div id="tc-componentes-list" style="margin-top:6px;">${_htmlComponenteCama('Solteiro',1)}</div>
+      <button type="button" class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="document.getElementById('tc-componentes-list').insertAdjacentHTML('beforeend',_htmlComponenteCama('Solteiro',1))"><i class="fa-solid fa-plus"></i> Adicionar componente</button>
+    </div>
+    <div style="margin-top:12px;grid-column:1/-1;"><button class="btn btn-sm btn-sage" onclick="_salvarNovoTipoCama()"><i class="fa-solid fa-save"></i> Salvar Tipo</button></div>
+  </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+}
+function _salvarNovoTipoCama(){
+  const nome=(document.getElementById('tc-nome').value||'').trim();
+  if(!nome){showToast('Informe o nome do tipo.','peach');return;}
+  if(TIPOS_CAMA_FIXOS.includes(nome)||CAMAS_TIPOS_CUSTOM.some(t=>t.nome===nome)){showToast('Já existe um tipo com esse nome.','peach');return;}
+  const componentes=[...document.querySelectorAll('#tc-componentes-list .componente-cama-row')].map(r=>({
+    tamanho:r.querySelector('.componente-cama-tamanho')?.value||'Solteiro',
+    qtd:+r.querySelector('.num-input-wrap input')?.value||1
+  }));
+  if(!componentes.length){showToast('Adicione ao menos um componente.','peach');return;}
+  CAMAS_TIPOS_CUSTOM.push({id:'ct_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),nome,componentes});
+  saveAll();closeModal('modal-generico');_renderConfigCamasCustom();
+  showToast('Tipo de cama adicionado!','sage');
+}
+function _removerTipoCamaCustom(i){
+  const t=CAMAS_TIPOS_CUSTOM[i];if(!t)return;
+  if(!confirm(`Remover o tipo "${t.nome}"? Camas já cadastradas com esse tipo passam a contar como 1 leito solteiro no cálculo de enxoval.`))return;
+  CAMAS_TIPOS_CUSTOM.splice(i,1);
+  saveAll();_renderConfigCamasCustom();
+  showToast('Tipo removido.','peach');
+}
+
+// ═══════════════════ MODELOS DE NEGÓCIO (CHECKLIST) ═══════════════════
+function _renderConfigModelosNegocio(){
+  const el=document.getElementById('config-modelos-negocio');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Cada modelo é um checklist de etapas. Ao aplicar um modelo num imóvel (aba Captação), as etapas são copiadas pra aquele imóvel — dá pra excluir, reordenar ou adicionar etapas só naquele imóvel, sem afetar o modelo nem outros imóveis.</div>
+    <div style="margin-bottom:14px;">
+      <button class="btn btn-sm btn-sage" onclick="_adicionarModeloNegocio()"><i class="fa-solid fa-plus"></i> Novo Modelo</button>
+    </div>
+    ${MODELOS_NEGOCIO.map((m,mi)=>`
+      <div class="card" style="margin-bottom:14px;background:var(--surface-2);">
+        <div class="card-body" style="padding:12px;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+            <input class="input" style="font-weight:700;flex:1;" value="${esc(m.nome)}" onchange="_renomearModeloNegocio(${mi},this.value)">
+            <button class="btn btn-xs btn-danger" onclick="_apagarModeloNegocio(${mi})" title="Apagar modelo"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div style="margin-left:4px;">
+            ${(m.etapas||[]).map((e,ei)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+              <span style="width:24px;flex-shrink:0;color:var(--text-muted);font-size:11px;text-align:right;">${ei+1}.</span>
+              <input class="input" style="flex:1;font-size:12.5px;padding:5px 8px;" value="${esc(e.texto)}" onchange="_editarEtapaModelo(${mi},${ei},this.value)">
+              <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaModelo(${mi},${ei},-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
+              <button class="btn btn-xs btn-outline"${ei===m.etapas.length-1?' disabled':''} onclick="_moverEtapaModelo(${mi},${ei},1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
+              <button class="btn btn-xs btn-danger" onclick="_removerEtapaModelo(${mi},${ei})" title="Remover"><i class="fa-solid fa-xmark"></i></button>
+            </div>`).join('')}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;margin-left:30px;">
+            <input class="input" id="nova-etapa-${mi}" placeholder="Nova etapa..." style="flex:1;font-size:12.5px;padding:5px 8px;" onkeydown="if(event.key==='Enter'){_adicionarEtapaModelo(${mi});event.preventDefault();}">
+            <button class="btn btn-xs btn-sage" onclick="_adicionarEtapaModelo(${mi})"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+      </div>
+    `).join('')||'<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">Nenhum modelo cadastrado.</div>'}
+  `;
+}
+function _adicionarModeloNegocio(){
+  const nome=(prompt('Nome do novo modelo:')||'').trim();
+  if(!nome)return;
+  MODELOS_NEGOCIO.push({id:'mod_'+uid()+uid(),nome,etapas:[]});
+  saveAll();_renderConfigModelosNegocio();
+}
+function _renomearModeloNegocio(mi,nome){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  m.nome=nome.trim()||m.nome;
+  saveAll();
+}
+function _apagarModeloNegocio(mi){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  if(!confirm(`Apagar o modelo "${m.nome}"? Imóveis que já aplicaram esse modelo mantêm o checklist deles — só não vai dar mais pra escolher esse modelo em novos imóveis.`))return;
+  MODELOS_NEGOCIO.splice(mi,1);
+  saveAll();_renderConfigModelosNegocio();
+}
+function _editarEtapaModelo(mi,ei,texto){
+  const m=MODELOS_NEGOCIO[mi];if(!m||!m.etapas[ei])return;
+  m.etapas[ei].texto=texto.trim()||m.etapas[ei].texto;
+  saveAll();
+}
+function _moverEtapaModelo(mi,ei,dir){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  const novo=ei+dir;
+  if(novo<0||novo>=m.etapas.length)return;
+  [m.etapas[ei],m.etapas[novo]]=[m.etapas[novo],m.etapas[ei]];
+  saveAll();_renderConfigModelosNegocio();
+}
+function _removerEtapaModelo(mi,ei){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  m.etapas.splice(ei,1);
+  saveAll();_renderConfigModelosNegocio();
+}
+function _adicionarEtapaModelo(mi){
+  const m=MODELOS_NEGOCIO[mi];if(!m)return;
+  const inp=document.getElementById('nova-etapa-'+mi);
+  const texto=(inp?.value||'').trim();
+  if(!texto)return;
+  m.etapas.push({id:'etp_'+uid()+uid(),texto});
+  saveAll();_renderConfigModelosNegocio();
+}
+
+// ═══════════════════ FORNECEDORES DE ENXOVAL ALUGADO (MODALIDADES) ═══════════════════
+function _htmlBlocoModalidadeEnxoval(m,i){
+  const precTabela=m.precificacaoMensal==='tabela';
+  const tabela=m.mensalTabela||[];
+  return`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-weight:700;flex:1;max-width:260px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      <button class="btn btn-xs btn-danger" style="margin-left:auto;" onclick="_apagarModalidadeEnxoval(${i})"><i class="fa-solid fa-trash"></i> Apagar fornecedor</button>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <label class="checkbox-label"><input type="checkbox" id="me-setup-${i}"${m.temSetup?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra setup?</label>
+      ${m.temSetup?`
+      <span style="font-size:11px;color:var(--text-muted);">Custo</span><input type="number" id="me-setupcusto-${i}" class="input" min="0" step="10" value="${m.setupCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      <span style="font-size:11px;color:var(--text-muted);">Cobrado</span><input type="number" id="me-setupcobrado-${i}" class="input" min="0" step="10" value="${m.setupCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})">
+      `:''}
+    </div>
+
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor mensal (aluguel) — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
+    <div style="display:flex;gap:14px;margin-bottom:8px;">
+      <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="formula"${!precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Fórmula (inicial + por hóspede extra)</label>
+      <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="tabela"${precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Tabela por quantidade de hóspedes</label>
+    </div>
+    ${!precTabela?`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">A partir de (hóspedes)</label><input type="number" id="me-hospedesbase-${i}" class="input" min="1" value="${m.hospedesBase??2}" style="width:70px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Inicial — Custo</label><input type="number" id="me-basecusto-${i}" class="input" min="0" step="10" value="${m.mensalBaseCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Inicial — Cobrado</label><input type="number" id="me-basecobrado-${i}" class="input" min="0" step="10" value="${m.mensalBaseCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Extra/hóspede — Custo</label><input type="number" id="me-extracusto-${i}" class="input" min="0" step="10" value="${m.mensalExtraCusto||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Extra/hóspede — Cobrado</label><input type="number" id="me-extracobrado-${i}" class="input" min="0" step="10" value="${m.mensalExtraCobrado||0}" style="width:80px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+    </div>
+    <div class="hint" style="margin-top:6px;">Ex: inicial R$${m.mensalBaseCobrado||220} (cobrado) pra ${m.hospedesBase??2} hóspedes + R$${m.mensalExtraCobrado||110} por hóspede extra.</div>
+    `:`
+    <div style="overflow-x:auto;">
+    <table style="width:100%;font-size:12px;border-collapse:collapse;max-width:420px;">
+      <thead><tr style="color:var(--text-muted);"><th style="text-align:left;padding:4px;">Hóspedes</th><th style="text-align:right;padding:4px;">Custo</th><th style="text-align:right;padding:4px;">Cobrado</th><th style="width:28px;"></th></tr></thead>
+      <tbody>${tabela.map((t,ti)=>`<tr>
+        <td style="padding:4px;"><input type="number" min="1" class="input" value="${t.hospedes}" style="width:60px;padding:3px 5px;font-size:12px;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'hospedes',this.value)"></td>
+        <td style="padding:4px;"><input type="number" min="0" class="input" value="${t.custo||0}" style="width:70px;padding:3px 5px;font-size:12px;text-align:right;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'custo',this.value)"></td>
+        <td style="padding:4px;"><input type="number" min="0" class="input" value="${t.cobrado||0}" style="width:70px;padding:3px 5px;font-size:12px;text-align:right;" onchange="_atualizarLinhaTabelaMensal(${i},${ti},'cobrado',this.value)"></td>
+        <td style="padding:2px;"><button class="btn btn-xs btn-danger" onclick="_removerLinhaTabelaMensal(${i},${ti})"><i class="fa-solid fa-xmark"></i></button></td>
+      </tr>`).join('')}</tbody>
+    </table>
+    </div>
+    <button class="btn btn-xs btn-outline" style="margin-top:6px;" onclick="_adicionarLinhaTabelaMensal(${i})"><i class="fa-solid fa-plus"></i> Adicionar faixa</button>
+    <div class="hint" style="margin-top:6px;">Hóspede acima da maior faixa cadastrada usa o valor da faixa mais alta.</div>
+    `}
+  </div>`;
+}
+function _renderConfigModalidadesEnxoval(){
+  const el=document.getElementById('config-modalidades-enxoval');
+  if(!el)return;
+  el.innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Além de "Comprado" (fixo), cada bloco é um fornecedor de enxoval alugado — aparece no seletor de Fornecedor (aba Contrato), nos checkboxes de modalidade das Compras e no formulário de Novo Item. "Cobrado" alimenta o preenchimento automático da aba Contrato.</div>
+    ${MODALIDADES_ENXOVAL.map((m,i)=>_htmlBlocoModalidadeEnxoval(m,i)).join('')}
+    <div style="display:flex;gap:6px;">
+      <input class="input" id="nova-modalidade-nome" placeholder="Nome do novo fornecedor (ex: Lavanderia Prime)" style="flex:1;max-width:320px;" onkeydown="if(event.key==='Enter'){_adicionarModalidadeEnxoval();event.preventDefault();}">
+      <button class="btn btn-sm btn-sage" onclick="_adicionarModalidadeEnxoval()"><i class="fa-solid fa-plus"></i> Adicionar Fornecedor</button>
+    </div>`;
+}
+function _atualizarModalidadeEnxoval(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  const nome=document.getElementById(`me-nome-${i}`)?.value.trim();
+  if(nome)m.nome=nome;
+  m.temSetup=document.getElementById(`me-setup-${i}`)?.checked||false;
+  // Os campos condicionais (setup custo/cobrado, fórmula) só existem no DOM quando visíveis —
+  // ao trocar de aba/desmarcar, não sobrescreve com 0 o que já tinha sido configurado antes.
+  const setupCustoEl=document.getElementById(`me-setupcusto-${i}`);
+  if(setupCustoEl){
+    m.setupCusto=+setupCustoEl.value||0;
+    m.setupCobrado=+document.getElementById(`me-setupcobrado-${i}`)?.value||0;
+  }
+  const precifSel=document.querySelector(`input[name="me-precif-${i}"]:checked`);
+  m.precificacaoMensal=precifSel?.value==='tabela'?'tabela':'formula';
+  const baseCustoEl=document.getElementById(`me-basecusto-${i}`);
+  if(baseCustoEl){
+    m.hospedesBase=+document.getElementById(`me-hospedesbase-${i}`)?.value||2;
+    m.mensalBaseCusto=+baseCustoEl.value||0;
+    m.mensalBaseCobrado=+document.getElementById(`me-basecobrado-${i}`)?.value||0;
+    m.mensalExtraCusto=+document.getElementById(`me-extracusto-${i}`)?.value||0;
+    m.mensalExtraCobrado=+document.getElementById(`me-extracobrado-${i}`)?.value||0;
+  }
+  saveAll();renderConfig(); // refaz Configurações inteira — a tabela de itens depende dessa lista pros checkboxes de modalidade
+}
+function _adicionarLinhaTabelaMensal(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  if(!m.mensalTabela)m.mensalTabela=[];
+  const proximo=m.mensalTabela.length?Math.max(...m.mensalTabela.map(t=>t.hospedes))+1:2;
+  m.mensalTabela.push({hospedes:proximo,custo:0,cobrado:0});
+  saveAll();renderConfig();
+}
+function _atualizarLinhaTabelaMensal(i,ti,campo,valor){
+  const m=MODALIDADES_ENXOVAL[i];if(!m||!m.mensalTabela?.[ti])return;
+  m.mensalTabela[ti][campo]=+valor||0;
+  saveAll();
+}
+function _removerLinhaTabelaMensal(i,ti){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  m.mensalTabela.splice(ti,1);
+  saveAll();renderConfig();
+}
+function _adicionarModalidadeEnxoval(){
+  const inp=document.getElementById('nova-modalidade-nome');
+  const nome=(inp?.value||'').trim();
+  if(!nome){showToast('Informe o nome do fornecedor.','peach');return;}
+  if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
+  const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
+  MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,setupCusto:0,setupCobrado:0,
+    precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:0,mensalExtraCusto:0,mensalExtraCobrado:0,mensalTabela:[]});
+  saveAll();renderConfig();
+  showToast('Fornecedor adicionado! Configure setup e valor mensal no bloco novo.','sage');
+}
+function _apagarModalidadeEnxoval(i){
+  const m=MODALIDADES_ENXOVAL[i];if(!m)return;
+  if(!confirm(`Apagar "${m.nome}"? Itens já marcados com essa modalidade deixam de aparecer nela (a marcação some, mas o item continua existindo).`))return;
+  MODALIDADES_ENXOVAL.splice(i,1);
+  saveAll();renderConfig();
+  showToast('Removido.','peach');
+}
 function _lerModalidadesConfig(i){
-  const modalidades=['comprado','flashee','intense'].filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
+  const modalidades=_opcoesModalidades().map(([v])=>v).filter(v=>document.getElementById(`ci-modal-${v}-${i}`)?.checked);
   return modalidades.length?modalidades:undefined;
+}
+// Renomear um item precisa migrar a chave em PRECOS_ENXOVAL junto (ela é indexada pelo
+// nome do item, não por índice) — senão o preço por tamanho de cama fica "órfão" no nome
+// antigo e o item renomeado perde o preço.
+function _renomearItemCompra(item,novoNome){
+  const nomeAntigo=item.nome;
+  if(!novoNome||novoNome===nomeAntigo)return;
+  item.nome=novoNome;
+  if(PRECOS_ENXOVAL[nomeAntigo]){
+    PRECOS_ENXOVAL[novoNome]=PRECOS_ENXOVAL[nomeAntigo];
+    delete PRECOS_ENXOVAL[nomeAntigo];
+  }
 }
 function salvarRegra(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
+  _renomearItemCompra(item,document.getElementById(`ci-nome-${i}`)?.value.trim());
   const n=document.getElementById(`ci-n-${i}`)?.value||'1';
   const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
   item.qtdRule=`${n}-${base}`;
@@ -4989,11 +6268,12 @@ function salvarRegra(i){
   saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
 }
 function salvarTodasRegras(){
-  ITENS_COMPRAS.forEach((_,i)=>{
+  ITENS_COMPRAS.forEach((item,i)=>{
+    _renomearItemCompra(item,document.getElementById(`ci-nome-${i}`)?.value.trim());
     const n=document.getElementById(`ci-n-${i}`)?.value||'1';
     const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
-    ITENS_COMPRAS[i].qtdRule=`${n}-${base}`;
-    ITENS_COMPRAS[i].modalidades=_lerModalidadesConfig(i);
+    item.qtdRule=`${n}-${base}`;
+    item.modalidades=_lerModalidadesConfig(i);
   });
   saveAll();showToast('Todas as regras salvas!','sage');
 }
@@ -5099,7 +6379,6 @@ function buscarNoMaps(){
   if(end){_intelEndereco=end;renderIntel();_buscarEmbeddedMapa(end);}
 }
 function abrirMaps(query){_buscarEmbeddedMapa(query);}
-function renderPrestadores(){renderIntel();}
 // ── Membros ──
 function abrirModalMembro(){
   document.getElementById('mb-nome').value='';
@@ -5142,14 +6421,16 @@ function abrirModalItem(){
   document.getElementById('modal-item-title').textContent='Novo Item';
   document.getElementById('it-cat').value='Cama';
   document.getElementById('it-nome').value='';
-  document.getElementById('it-qtd-rule').value='1-unidade';
+  const qtdRuleSel=document.getElementById('it-qtd-rule');
+  qtdRuleSel.innerHTML=QTD_RULE_BASES.map(b=>[1,2,3].map(n=>`<option value="${n}-${b}">${n} ${QTD_RULE_LABELS[b]||b}</option>`).join('')).join('')
+    +'<option value="6-unidade">6 unidade fixa (1 por apê)</option>';
+  qtdRuleSel.value='1-unidade';
   document.getElementById('it-tipo-preco').value='fixo';
   document.getElementById('it-preco').value='';
   document.getElementById('it-link').value='';
   document.getElementById('it-enxoval-dep').value='';
-  document.getElementById('it-modal-comprado').checked=false;
-  document.getElementById('it-modal-flashee').checked=false;
-  document.getElementById('it-modal-intense').checked=false;
+  document.getElementById('it-modal-checks').innerHTML=_opcoesModalidades().map(([id,nome])=>
+    `<label class="checkbox-label"><input type="checkbox" class="it-modal-check" data-modal-id="${esc(id)}"> ${esc(nome)}</label>`).join('');
   renderItTipoPreco();
   document.getElementById('modal-item').classList.add('open');
   setTimeout(()=>document.getElementById('it-nome').focus(),100);
@@ -5169,9 +6450,7 @@ function salvarItem(){
   const link=document.getElementById('it-link').value.trim();
   const enxovalDep=document.getElementById('it-enxoval-dep').value==='sim';
   const modalidades=[];
-  if(document.getElementById('it-modal-comprado').checked)modalidades.push('comprado');
-  if(document.getElementById('it-modal-flashee').checked)modalidades.push('flashee');
-  if(document.getElementById('it-modal-intense').checked)modalidades.push('intense');
+  [...document.querySelectorAll('.it-modal-check:checked')].forEach(cb=>modalidades.push(cb.dataset.modalId));
   ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link,modalidades:modalidades.length?modalidades:undefined});
   saveAll();closeModal('modal-item');renderConfig();showToast(`"${nome}" adicionado!`,'sage');
 }
