@@ -1147,7 +1147,7 @@ function _coletarDadosAba(aba,im){
     im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
     if(!im.ops)im.ops={fotos:{},limpeza:{},vistoria:{}};
-    ['fotos','limpeza','vistoria'].forEach(op=>{
+    ['fotos','limpeza','vistoria','vistoria2'].forEach(op=>{
       if(!im.ops[op])im.ops[op]={};
       const v=gn(`ct-op-${op}`);if(v!=null)im.ops[op].custo=v;
     });
@@ -1176,6 +1176,10 @@ function _coletarDadosAba(aba,im){
       im.ops[op].hora=g(`op-${op}-hora`); im.ops[op].custo=gn(`op-${op}-custo`);
     });
     im.ops.vistoria.localizacao=g('op-vistoria-local');
+    if(!im.ops.vistoria2)im.ops.vistoria2={};
+    im.ops.vistoria2.data=g('op-vistoria2-data'); im.ops.vistoria2.responsavel=g('op-vistoria2-resp');
+    im.ops.vistoria2.hora=g('op-vistoria2-hora'); im.ops.vistoria2.custo=gn('op-vistoria2-custo');
+    im.ops.vistoria2.localizacao=g('op-vistoria2-local');
   }
   if(aba==='custos'){
     im.margemWecare=gn('cs-margem'); im.descontoTipo=g('cs-desc-tipo');
@@ -1457,7 +1461,7 @@ function renderAbaCaptacao(im){
   ${isAdmin()?(()=>{
     const custoFotosKpi=+im.ops?.fotos?.custo||0;
     const custoLimpezaKpi=+im.ops?.limpeza?.custo||0;
-    const custoVistoriaKpi=+im.ops?.vistoria?.custo||0;
+    const custoVistoriaKpi=(+im.ops?.vistoria?.custo||0)+(+im.ops?.vistoria2?.custo||0);
     const custosExtrasKpi=(im.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
     const gastoSetupKpi=custoFotosKpi+custoLimpezaKpi+custoVistoriaKpi+custosExtrasKpi;
     const valorSetupCobradoKpi=im.valorSetupCobrado||0;
@@ -1637,8 +1641,9 @@ function renderAbaContrato(im){
   const custoFotos=+ops.fotos?.custo||0;
   const custoLimpeza=+ops.limpeza?.custo||0;
   const custoVistoria=+ops.vistoria?.custo||0;
+  const custoVistoria2=+ops.vistoria2?.custo||0;
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
-  const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
+  const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custoVistoria2+custosExtras;
   const valorSetupCobrado=im.valorSetupCobrado||0;
   const margemSetup=valorSetupCobrado-totalSetupBase;
   const pctMargem=valorSetupCobrado>0?Math.round((margemSetup/valorSetupCobrado)*1000)/10:0;
@@ -1662,6 +1667,7 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Fotos (R$)</label>${numInput({id:'ct-op-fotos',value:custoFotos,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
     <div class="form-group"><label>Limpeza (R$)</label>${numInput({id:'ct-op-limpeza',value:custoLimpeza,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
     <div class="form-group"><label>Vistoria (R$)</label>${numInput({id:'ct-op-vistoria',value:custoVistoria,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
+    <div class="form-group"><label>Segunda Vistoria (R$)</label>${numInput({id:'ct-op-vistoria2',value:custoVistoria2,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
   </div>
 
   ${gastosSetup.length?`<div style="margin-bottom:8px;">
@@ -1680,7 +1686,7 @@ function renderAbaContrato(im){
       <span id="ct-subtotal-val">${fmtMoeda(totalSetupBase)}</span>
     </div>
     <div id="ct-subtotal-detail" style="font-size:11px;color:var(--text-muted);margin-top:4px;">
-      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
+      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custoVistoria2?` + 2ª Vistoria ${fmtMoeda(custoVistoria2)}`:''}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-top:6px;">
       <span id="ct-setup-margem-label">Margem WeCare (${pctMargem}%)</span>
@@ -1733,16 +1739,17 @@ function _atualizarSubtotalSetup(){
   const f=+document.getElementById('ct-op-fotos')?.value||0;
   const l=+document.getElementById('ct-op-limpeza')?.value||0;
   const v=+document.getElementById('ct-op-vistoria')?.value||0;
+  const v2=+document.getElementById('ct-op-vistoria2')?.value||0;
   const im=getImovel(_imovelAtivoId);
   const extras=(im?.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
-  const total=f+l+v+extras;
+  const total=f+l+v+v2+extras;
   const cobrado=+document.getElementById('ct-setup-cobrado')?.value||0;
   const margem=cobrado-total;
   const pct=cobrado>0?Math.round((margem/cobrado)*1000)/10:0;
   const valEl=document.getElementById('ct-subtotal-val');
   const detEl=document.getElementById('ct-subtotal-detail');
   if(valEl)valEl.textContent=fmtMoeda(total);
-  if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
+  if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(v2?` + 2ª Vistoria ${fmtMoeda(v2)}`:'')+(extras?` + Extras ${fmtMoeda(extras)}`:'');
   const mgEl=document.getElementById('ct-setup-margem-label');
   const mgValEl=document.getElementById('ct-setup-margem-val');
   const totalEl=document.getElementById('ct-setup-total');
@@ -3577,8 +3584,30 @@ function renderAbaOperacional(im){
     </button>
   </div>
 
+  <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
+    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Segunda Vistoria</div>
+    <div class="form-row">
+      <div class="form-group"><label>Data</label><input id="op-vistoria2-data" type="date" class="input" value="${ops.vistoria2?.data||''}"></div>
+      <div class="form-group"><label>Hora</label><input id="op-vistoria2-hora" type="time" class="input" value="${ops.vistoria2?.hora||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Responsável</label><input id="op-vistoria2-resp" class="input" value="${esc(ops.vistoria2?.responsavel||'')}"></div>
+      <div class="form-group"><label>Custo (R$)</label><input id="op-vistoria2-custo" type="number" class="input" value="${ops.vistoria2?.custo||0}"></div>
+    </div>
+    <div class="form-group"><label>Localização</label>
+      <select id="op-vistoria2-local" class="input">
+        <option value="central"${(ops.vistoria2?.localizacao||'central')==='central'?' selected':''}>Central (SP)</option>
+        <option value="litoral"${ops.vistoria2?.localizacao==='litoral'?' selected':''}>Litoral</option>
+        <option value="interior"${ops.vistoria2?.localizacao==='interior'?' selected':''}>Interior</option>
+      </select>
+    </div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
+      <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
+    </button>
+  </div>
+
   <div class="form-section-title" style="margin-top:8px;"><i class="fa-solid fa-calendar-plus"></i> Outros Eventos</div>
-  <div class="hint" style="margin-bottom:10px;">Ex: segunda vistoria, instalação de internet, manutenção agendada — aparecem no Calendário junto com fotos/limpeza/vistoria.</div>
+  <div class="hint" style="margin-bottom:10px;">Ex: instalação de internet, manutenção agendada — aparecem no Calendário junto com fotos/limpeza/vistoria.</div>
   ${(im.eventosExtras||[]).length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
     <thead><tr style="background:var(--surface-2)">
       <th style="text-align:left;padding:6px 8px;">Título</th>
@@ -3686,7 +3715,7 @@ async function gerarPDFOrcamento(){
   const frete=im.freteTotal||0;
   const custoFotos=+im.ops?.fotos?.custo||0;
   const custoLimpeza=+im.ops?.limpeza?.custo||0;
-  const custoVistoria=+im.ops?.vistoria?.custo||0;
+  const custoVistoria=(+im.ops?.vistoria?.custo||0)+(+im.ops?.vistoria2?.custo||0);
   const gastosSetup=(im.eventosExtras||[]).filter(e=>e.gastoSetup);
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
   const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.titulo)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.custo||0)}</td></tr>`).join('');
@@ -4360,9 +4389,10 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
 }
 // ═══════════════════ CALENDÁRIO ═══════════════════
 const CAL_TIPOS=[
-  {key:'fotos',    label:'Fotos',    icon:'fa-camera',        cor:'gold'},
-  {key:'limpeza',  label:'Limpeza',  icon:'fa-broom',         cor:'sage'},
-  {key:'vistoria', label:'Vistoria', icon:'fa-clipboard-list',cor:'sky'},
+  {key:'fotos',     label:'Fotos',            icon:'fa-camera',        cor:'gold'},
+  {key:'limpeza',   label:'Limpeza',          icon:'fa-broom',         cor:'sage'},
+  {key:'vistoria',  label:'Vistoria',         icon:'fa-clipboard-list',cor:'sky'},
+  {key:'vistoria2', label:'Segunda Vistoria', icon:'fa-clipboard-list',cor:'sky'},
 ];
 let _calMesRef=null; // 'YYYY-MM'; null = mês atual
 function _calMesAtual(){return _calMesRef||hoje().slice(0,7);}
