@@ -31,8 +31,27 @@ def _find_vistoria(im: dict, vistoria_id: str) -> dict | None:
     return None
 
 
+async def _resolver_link_pasta_vistoria(im: dict) -> str | None:
+    """Acha (ou cria) a subpasta "Vistoria" dentro da pasta do imóvel no Drive e
+    devolve o link — mesma pasta pra onde /vistoria-upload manda a mídia, exposta
+    de antemão (mesmo antes do primeiro upload) pra quem preenche poder abrir e
+    conferir/subir arquivo direto lá também, sem depender só do widget de upload."""
+    if not (settings.google_client_id and settings.google_client_secret and settings.google_refresh_token):
+        return None
+    folder_id = google_drive.extract_folder_id(im.get("captacaoLink"))
+    if not folder_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            token = await google_drive.get_google_access_token(client)
+            vistoria_folder_id = await google_drive.find_or_create_folder(client, token, folder_id, "Vistoria")
+        return f"https://drive.google.com/drive/folders/{vistoria_folder_id}"
+    except Exception:
+        return None
+
+
 @router.get("/vistoria-load")
-def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Request = None, db: Session = Depends(get_db)):
+async def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Request = None, db: Session = Depends(get_db)):
     if not id or not vid or not t:
         return {"ok": False, "error": "Link incompleto"}
     data = state.get_state(db, str(request.base_url).rstrip("/"), "")
@@ -53,6 +72,7 @@ def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Request = N
         "status": v.get("status") or "rascunho",
         "itensCompras": data.get("wc_itens") or [],
         "modalidadesEnxoval": data.get("wc_modalidades_enxoval") or [],
+        "pastaDriveLink": await _resolver_link_pasta_vistoria(im),
         "imovelDados": {
             "camas": im.get("camas") or [],
             "quartos": im.get("quartos") or 1,
@@ -131,6 +151,7 @@ async def vistoria_save(id: str = "", vid: str = "", t: str = "", request: Reque
                         "id": f"man_{uuid.uuid4().hex[:16]}",
                         "comodo": p.get("comodo"),
                         "descricao": p.get("descricao"),
+                        "prioridade": p.get("prioridade"),
                         "status": "pendente",
                         "custo": 0,
                         "criadoEm": v["enviadoEm"],

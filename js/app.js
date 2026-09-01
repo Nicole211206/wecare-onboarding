@@ -18,7 +18,7 @@ let MODELOS_NEGOCIO=[];
 // Fornecedor na aba Contrato (Enxoval), e a leitura de qual modalidade um imóvel está em
 // (modalidadeEnxovalAtual, casando pelo nome exato do fornecedor escolhido).
 let MODALIDADES_ENXOVAL=[];
-function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome])];}
+function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome]),['manual','Manual (exceção)']];}
 
 // ═══════════════════ FASES ═══════════════════
 const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
@@ -4367,7 +4367,7 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
     const midias=Array.isArray(c.midiaFrames)?c.midiaFrames:[];
     const midiasDrive=Array.isArray(c.midiaDrive)?c.midiaDrive:[];
     return`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
-      <strong>${esc(c.nome)}</strong>${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
+      <strong>${esc(c.nome)}</strong>${c.prioridade?` <span class="tag tag-${c.prioridade==='alta'?'rose':(c.prioridade==='media'?'gold':'sage')}" style="font-size:10px;">${esc(c.prioridade)}</span>`:''}${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
       ${extras.length?`<div style="font-size:12.5px;color:var(--text-muted);">${extras.map(([k,val])=>`${esc(k)}: ${val===true?'✓':esc(String(val))}`).join(' · ')}</div>`:''}
       ${midiasDrive.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midiasDrive.map(f=>`<a href="${esc(f.driveLink||'#')}" target="_blank" style="display:flex;align-items:center;gap:4px;font-size:12px;padding:4px 8px;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);"><i class="fa-brands fa-google-drive"></i> ${f.tipo==='video'?'Vídeo':'Foto'}</a>`).join('')}</div>`:''}
       ${midias.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midias.map(f=>`<img src="data:image/jpeg;base64,${f}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('data:image/jpeg;base64,${f}','_blank')">`).join('')}</div>`:''}
@@ -4375,6 +4375,20 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
   }).join('')||'<div class="text-muted" style="font-size:13px;">Sem detalhes de cômodos registrados.</div>';
   const geraisHtml=Object.entries(d.camposGerais||{}).filter(([,val])=>val!==''&&val!==false&&val!=null)
     .map(([k,val])=>`<div>${esc(k)}: <strong>${val===true?'Sim':esc(String(val))}</strong></div>`).join('')||'';
+  const fichaHtml=(titulo,obj,campos)=>{
+    const linhas=campos.map(([k,label])=>{
+      const val=(obj||{})[k];
+      if(val===''||val==null)return'';
+      return`<div>${esc(label)}: <strong>${esc(String(val))}</strong></div>`;
+    }).filter(Boolean).join('');
+    return linhas?`<div style="margin-top:10px;"><div class="form-section-title" style="margin-bottom:4px;">${esc(titulo)}</div><div style="font-size:13px;">${linhas}</div></div>`:'';
+  };
+  const acessoHtml=fichaHtml('Acesso ao Imóvel',d.acesso,[['senhaPorta','Senha da porta'],['modeloFechadura','Modelo da fechadura'],['andarAreasComuns','Andar das áreas comuns'],['contatoPortaria','Contato da portaria'],['portaria24h','Portaria 24hrs'],['temGaragem','Tem garagem'],['acessoGaragem','Como acessa a garagem'],['prestadorLivre','Prestador entra a qualquer momento'],['horariosPermitidos','Horários permitidos']]);
+  const estruturaHtml=fichaHtml('Estrutura do Imóvel',d.estrutura,[['qtdQuartos','Quartos'],['qtdBanheiros','Banheiros'],['qtdLavabos','Lavabos'],['temVaranda','Tem varanda'],['tamanhoCamas','Tamanho das camas'],['tamanhoTV','Tamanho da TV'],['voltagem','Voltagem']]);
+  const infraHtml=fichaHtml('Infraestrutura e Conforto',d.infra,[['arCondQuenteFrio','Ar-condicionado quente e frio'],['temWifi','Tem Wi-Fi'],['wifiFunciona','Wi-Fi funcionando'],['operadoraInternet','Operadora de internet']]);
+  const itensEncontradosHtml=(d.itensEncontrados||[]).filter(it=>it.item).length
+    ?`<div style="margin-top:10px;"><div class="form-section-title" style="margin-bottom:4px;">Itens Extras Encontrados</div>${(d.itensEncontrados||[]).filter(it=>it.item).map(it=>`<div style="font-size:12.5px;padding:3px 0;">${esc(it.item)}${it.quantidade?` (${esc(String(it.quantidade))})`:''}${it.observacao?` — ${esc(it.observacao)}`:''}${it.oQueFazer?` · <em>${esc(it.oQueFazer)}</em>`:''}</div>`).join('')}</div>`
+    :'';
   document.getElementById('generico-titulo').textContent='Detalhes da Vistoria';
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
     <div class="form-group" style="grid-column:1/-1;">
@@ -4382,6 +4396,8 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
       <div style="margin-top:4px;">${aptoLabel}</div>
       ${geraisHtml?`<div style="margin-top:8px;font-size:13px;">${geraisHtml}</div>`:''}
       ${d.obsFinais?`<div class="hint" style="margin-top:8px;">${esc(d.obsFinais)}</div>`:''}
+      ${d.obsProprietaria?`<div class="hint" style="margin-top:8px;"><strong>Solicitações da proprietária:</strong> ${esc(d.obsProprietaria)}</div>`:''}
+      ${acessoHtml}${estruturaHtml}${infraHtml}${itensEncontradosHtml}
       <div style="margin-top:12px;">${comodosHtml}</div>
     </div>
   </div>`;
@@ -6018,8 +6034,11 @@ function _renderConfigVistoriaCampos(){
   const el=document.getElementById('config-vistoria-campos');
   if(!el)return;
   const tipoLabel={texto:'Texto',numero:'Número',checkbox:'Sim/Não',select:'Múltipla escolha'};
+  const nomesCatalogo=new Set(ITENS_COMPRAS.map(i=>i.nome.toLowerCase()));
+  const duplicados=VISTORIA_CAMPOS.filter(c=>nomesCatalogo.has((c.label||'').toLowerCase()));
   el.innerHTML=`
     <div class="hint" style="margin-bottom:10px;">Vídeo por cômodo e irregularidades continuam fixos. Aqui você adiciona campos extras — gerais (uma vez na vistoria) ou por cômodo (repetem em cada cômodo do tipo escolhido).</div>
+    ${duplicados.length?`<div class="hint" style="margin-bottom:10px;color:var(--brand-red,#c0392b);"><i class="fa-solid fa-triangle-exclamation"></i> ${duplicados.length} campo(s) abaixo (marcado "⚠ duplicado") tem o mesmo nome de um item do catálogo de Compras — já aparece sozinho na seção "Itens Obrigatórios"/"Checklist de Enxoval" da vistoria, perguntar de novo aqui é redundante. Considere apagar.</div>`:''}
     <div style="margin-bottom:12px;">
       <button class="btn btn-sm btn-sage" onclick="abrirModalNovoCampoVistoria()"><i class="fa-solid fa-plus"></i> Novo Campo</button>
     </div>
@@ -6033,7 +6052,7 @@ function _renderConfigVistoriaCampos(){
       </tr></thead>
       <tbody>
       ${VISTORIA_CAMPOS.map((c,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:7px 10px;">${esc(c.label)}</td>
+        <td style="padding:7px 10px;">${esc(c.label)}${nomesCatalogo.has((c.label||'').toLowerCase())?' <span class="tag tag-rose" style="font-size:10px;">⚠ duplicado</span>':''}</td>
         <td style="padding:7px 10px;">${tipoLabel[c.tipo]||c.tipo}</td>
         <td style="padding:7px 10px;">${c.escopo==='geral'?'Geral da vistoria':`Cômodo: ${c.comodosTipos==='todos'?'todos':esc((c.comodosTipos||[]).join(', '))}`}</td>
         <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerCampoVistoria(${i})"><i class="fa-solid fa-trash"></i></button></td>
