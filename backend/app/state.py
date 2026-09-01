@@ -226,7 +226,11 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             for m in db.scalars(select(models.ModeloNegocio).order_by(models.ModeloNegocio.ordem))
         ],
         "wc_proprietarios": [
-            {"id": p.id, "nome": p.nome, "telefone": p.telefone, "email": p.email, "obs": p.obs}
+            {
+                "id": p.id, "nome": p.nome, "telefone": p.telefone, "email": p.email, "obs": p.obs,
+                "tipoDocumento": p.tipo_documento, "cpf": p.cpf, "cnpj": p.cnpj,
+                "razaoSocial": p.razao_social, "dadosBancarios": p.dados_bancarios, "chavePix": p.chave_pix,
+            }
             for p in db.scalars(select(models.Proprietario).order_by(models.Proprietario.ordem))
         ],
         "wc_modalidades_enxoval": [
@@ -467,6 +471,9 @@ def put_state(db: Session, state: dict) -> None:
                 models.Proprietario(
                     id=p["id"], nome=p.get("nome"), telefone=p.get("telefone"),
                     email=p.get("email"), obs=p.get("obs"), ordem=idx,
+                    tipo_documento=p.get("tipoDocumento"), cpf=p.get("cpf"), cnpj=p.get("cnpj"),
+                    razao_social=p.get("razaoSocial"), dados_bancarios=p.get("dadosBancarios"),
+                    chave_pix=p.get("chavePix"),
                 )
             )
 

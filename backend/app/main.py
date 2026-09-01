@@ -28,6 +28,12 @@ _COLUNAS_NOVAS = [
     "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_extra_custo NUMERIC",
     "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_extra_cobrado NUMERIC",
     "ALTER TABLE modalidades_enxoval ADD COLUMN mensal_tabela JSON",
+    "ALTER TABLE proprietarios ADD COLUMN tipo_documento VARCHAR",
+    "ALTER TABLE proprietarios ADD COLUMN cpf VARCHAR",
+    "ALTER TABLE proprietarios ADD COLUMN cnpj VARCHAR",
+    "ALTER TABLE proprietarios ADD COLUMN razao_social VARCHAR",
+    "ALTER TABLE proprietarios ADD COLUMN dados_bancarios VARCHAR",
+    "ALTER TABLE proprietarios ADD COLUMN chave_pix VARCHAR",
 ]
 for _sql in _COLUNAS_NOVAS:
     try:

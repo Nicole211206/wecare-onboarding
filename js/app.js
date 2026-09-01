@@ -4659,6 +4659,33 @@ function _onProprietarioSelectChange(sel,imId){
   }
   saveAll();renderAba('dados');
 }
+// Campos de documento/dados bancários (2026-09-01) só existem aqui no cadastro central
+// de Proprietários — de propósito não replicados em im.* (aba Dados do imóvel), pra não
+// expor dado sensível (CPF/CNPJ/dados bancários) nos cards de imóvel.
+function _htmlCamposDocProprietario(p){
+  const tipo=p?.tipoDocumento||'cpf';
+  return`<div class="form-row">
+      <div class="form-group"><label>Tipo de documento</label>
+        <select id="prop-tipo-doc" class="input" onchange="_onTipoDocProprietarioChange(this)">
+          <option value="cpf"${tipo==='cpf'?' selected':''}>Pessoa Física (CPF)</option>
+          <option value="cnpj"${tipo==='cnpj'?' selected':''}>Pessoa Jurídica (CNPJ)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>CPF</label><input id="prop-cpf" class="input" placeholder="000.000.000-00" value="${esc(p?.cpf||'')}"></div>
+    </div>
+    <div class="form-row" id="prop-campos-cnpj" style="display:${tipo==='cnpj'?'':'none'};">
+      <div class="form-group"><label>CNPJ</label><input id="prop-cnpj" class="input" placeholder="00.000.000/0000-00" value="${esc(p?.cnpj||'')}"></div>
+      <div class="form-group"><label>Razão Social</label><input id="prop-razao-social" class="input" value="${esc(p?.razaoSocial||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Dados bancários</label><textarea id="prop-dados-bancarios" class="input" rows="2" placeholder="Banco, agência, conta">${esc(p?.dadosBancarios||'')}</textarea></div>
+      <div class="form-group"><label>Chave PIX</label><input id="prop-chave-pix" class="input" value="${esc(p?.chavePix||'')}"></div>
+    </div>`;
+}
+function _onTipoDocProprietarioChange(sel){
+  const wrap=document.getElementById('prop-campos-cnpj');
+  if(wrap)wrap.style.display=sel.value==='cnpj'?'':'none';
+}
 function abrirNovoProprietario(){
   _editProprietarioIdx=null;
   document.getElementById('generico-titulo').textContent='Novo Proprietário';
@@ -4668,6 +4695,7 @@ function abrirNovoProprietario(){
       <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input"></div>
       <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input"></div>
     </div>
+    ${_htmlCamposDocProprietario(null)}
     <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2"></textarea></div>
     <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
   </div>`;
@@ -4683,6 +4711,7 @@ function editarProprietario(idx){
       <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input" value="${esc(p.telefone||'')}"></div>
       <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input" value="${esc(p.email||'')}"></div>
     </div>
+    ${_htmlCamposDocProprietario(p)}
     <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2">${esc(p.obs||'')}</textarea></div>
     <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
   </div>`;
@@ -4691,9 +4720,16 @@ function editarProprietario(idx){
 function _salvarProprietario(){
   const nome=document.getElementById('prop-nome').value.trim();
   if(!nome){showToast('Informe o nome.','peach');return;}
+  const tipoDocumento=document.getElementById('prop-tipo-doc')?.value||'cpf';
   const p={nome,
     telefone:document.getElementById('prop-tel')?.value.trim()||'',
     email:document.getElementById('prop-email')?.value.trim()||'',
+    tipoDocumento,
+    cpf:document.getElementById('prop-cpf')?.value.trim()||'',
+    cnpj:tipoDocumento==='cnpj'?(document.getElementById('prop-cnpj')?.value.trim()||''):'',
+    razaoSocial:tipoDocumento==='cnpj'?(document.getElementById('prop-razao-social')?.value.trim()||''):'',
+    dadosBancarios:document.getElementById('prop-dados-bancarios')?.value.trim()||'',
+    chavePix:document.getElementById('prop-chave-pix')?.value.trim()||'',
     obs:document.getElementById('prop-obs')?.value.trim()||''};
   if(_editProprietarioIdx!=null){
     p.id=proprietarios[_editProprietarioIdx].id;
@@ -4726,9 +4762,13 @@ function abrirDetalheProprietario(id){
   imoveisDele.forEach(im=>(im.comprasLotes||[]).filter(l=>l.loteCompartilhadoId).forEach(l=>{
     if(!lotesCompartilhados.some(x=>x.loteCompartilhadoId===l.loteCompartilhadoId))lotesCompartilhados.push({...l,imovelNome:im.nome});
   }));
+  const docLinha=p.tipoDocumento==='cnpj'
+    ?[p.razaoSocial,p.cnpj?`CNPJ ${p.cnpj}`:'',p.cpf?`CPF ${p.cpf}`:''].filter(Boolean).join(' · ')
+    :(p.cpf?`CPF ${p.cpf}`:'');
   document.getElementById('generico-titulo').textContent=p.nome;
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
     <div class="hint" style="margin-bottom:6px;">${esc(p.telefone||'sem telefone')} · ${esc(p.email||'sem e-mail')} <button class="btn btn-xs btn-outline" style="margin-left:8px;" onclick="editarProprietario(${proprietarios.indexOf(p)})"><i class="fa-solid fa-pen"></i> Editar dados</button></div>
+    ${docLinha?`<div class="hint" style="margin-bottom:6px;">${esc(docLinha)}</div>`:''}
 
     <div class="form-section-title" style="margin-top:10px;"><i class="fa-solid fa-house"></i> Imóveis (${imoveisDele.length})</div>
     ${imoveisDele.length?`<div style="margin-bottom:14px;">${imoveisDele.map(im=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="closeModal('modal-generico');showPanel('kanban',document.querySelector('.nav-item[onclick*=kanban]'));abrirDetalhe('${esc(im.id)}');"><strong>${esc(im.nome)}</strong> <span class="tag tag-${im.status==='ativo'?'sage':'gold'}" style="font-size:10px;margin-left:6px;">${esc(im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status))}</span></div>`).join('')}</div>`:`<div class="hint" style="margin-bottom:14px;">Nenhum imóvel vinculado ainda — vincule em Dados de um imóvel.</div>`}

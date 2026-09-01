@@ -189,6 +189,12 @@ class Proprietario(Base):
     telefone: Mapped[str | None] = mapped_column(String)
     email: Mapped[str | None] = mapped_column(String)
     obs: Mapped[str | None] = mapped_column(String)
+    tipo_documento: Mapped[str | None] = mapped_column(String)
+    cpf: Mapped[str | None] = mapped_column(String)
+    cnpj: Mapped[str | None] = mapped_column(String)
+    razao_social: Mapped[str | None] = mapped_column(String)
+    dados_bancarios: Mapped[str | None] = mapped_column(String)
+    chave_pix: Mapped[str | None] = mapped_column(String)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
