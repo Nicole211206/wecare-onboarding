@@ -21,14 +21,14 @@ let MODALIDADES_ENXOVAL=[];
 function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome]),['manual','Manual (exceção)']];}
 
 // ═══════════════════ FASES ═══════════════════
-const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
+const FASES=['contrato','setup','vistoria_compras','preparacao','formulario','anuncio'];
 const FASE_LABEL={
   contrato:'Contrato', setup:'Setup e Definições', vistoria_compras:'Vistoria e Compras',
-  formulario:'Formulário', preparacao:'Preparação do Imóvel', anuncio:'Criação do Anúncio'
+  preparacao:'Preparação do Imóvel', formulario:'Formulário', anuncio:'Criação do Anúncio'
 };
 const FASE_COLOR={
   contrato:'sky', setup:'gold', vistoria_compras:'peach',
-  formulario:'lav', preparacao:'rose', anuncio:'lavender'
+  preparacao:'rose', formulario:'lav', anuncio:'lavender'
 };
 // Migração: imóveis com status das fases antigas (antes do reagrupamento de 2026-07) caem na fase nova equivalente
 const FASES_LEGADO_MAP={compras:'vistoria_compras', producao:'preparacao', compilamento:'anuncio', auditoria:'anuncio'};
@@ -2731,12 +2731,12 @@ function renderAbaGastos(im){
         if(naoAplica)return`<tr style="opacity:.55;border-bottom:1px solid var(--border);">
           <td colspan="2" style="padding:4px 8px;text-align:center;"><span class="tag tag-neutral" style="font-size:10px;">Não se aplica</span></td>
           <td style="padding:4px 8px;">${label}</td>
-          <td style="text-align:right;padding:0 8px;"><a href="#" onclick="event.preventDefault();_onGastoSetupNaoAplica('${k}',false)" style="font-size:11px;">desfazer</a></td>
+          <td style="text-align:right;padding:0 8px;">—</td>
         </tr>`;
         return`<tr style="${pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${feito?'checked':''} onchange="_onGastoSetupFeito(this,'${k}')"></td>
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
-          <td style="padding:4px 8px;">${label} <a href="#" onclick="event.preventDefault();_onGastoSetupNaoAplica('${k}',true)" style="font-size:10.5px;color:var(--text-muted);margin-left:4px;">(não se aplica)</a></td>
+          <td style="padding:4px 8px;">${label}</td>
           <td style="text-align:right;padding:0 8px;">${fmtMoeda(custo)}</td>
         </tr>`;
       }).join('')}
@@ -2752,7 +2752,7 @@ function renderAbaGastos(im){
       <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
       <button class="btn btn-sm ${im.valorSetupCobradoRecebido?'btn-sage':'btn-outline'}" onclick="_toggleSetupRecebido()"><i class="fa-solid ${im.valorSetupCobradoRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.valorSetupCobradoRecebido?'Proprietário pagou':'Marcar como pago'}</button>
     </div>
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup".</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup". Fase que não se aplica a este imóvel também se marca na aba Produção, dentro do card de Fotos/Limpeza/Vistoria.</div>
   </div>`;
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
@@ -3095,7 +3095,7 @@ function _onGastoSetupNaoAplica(key,valor){
   if(!im.ops)im.ops={};
   if(!im.ops[key])im.ops[key]={};
   im.ops[key].naoAplica=valor;
-  saveAll();renderAba('gastos');
+  saveAll();renderAba(_abaAtiva);
 }
 function _onEventoSetupFeito(cb,evId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
@@ -3558,7 +3558,11 @@ function renderAbaOperacional(im){
 
   const sCard=(titulo,icon,cor,id,op,hint='')=>`
   <div style="border:2px solid var(--${cor});border-radius:12px;padding:16px;margin-bottom:16px;">
-    <div style="font-weight:700;font-size:14px;color:var(--${cor});margin-bottom:10px;"><i class="fa-solid fa-${icon}"></i> ${titulo}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--${cor});"><i class="fa-solid fa-${icon}"></i> ${titulo}</div>
+      <label class="checkbox-label" style="font-size:12px;font-weight:400;"><input type="checkbox" ${op.naoAplica?'checked':''} onchange="_onGastoSetupNaoAplica('${id}',this.checked)"> Não se aplica a este imóvel</label>
+    </div>
+    <div style="${op.naoAplica?'opacity:.45;pointer-events:none;':''}">
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="op-${id}-data" type="date" class="input" value="${op.data||''}"></div>
       <div class="form-group"><label>Hora</label><input id="op-${id}-hora" type="time" class="input" value="${op.hora||''}"></div>
@@ -3571,6 +3575,7 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('${id}')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+    </div>
   </div>`;
 
   return`<div class="form-grid">
@@ -3580,7 +3585,11 @@ function renderAbaOperacional(im){
   ${sCard('Primeira Limpeza','broom','peach','limpeza',ops.limpeza,
     plS.length?`💡 Sugestão (${quartos}q): `+plS.map(p=>`${p.empresa} custo R$ ${p.custo} / cobrado R$ ${p.cobrado}`).join(' · '):'')}
   <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
-    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Vistoria</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--sage);"><i class="fa-solid fa-magnifying-glass"></i> Vistoria</div>
+      <label class="checkbox-label" style="font-size:12px;font-weight:400;"><input type="checkbox" ${ops.vistoria?.naoAplica?'checked':''} onchange="_onGastoSetupNaoAplica('vistoria',this.checked)"> Não se aplica a este imóvel</label>
+    </div>
+    <div style="${ops.vistoria?.naoAplica?'opacity:.45;pointer-events:none;':''}">
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="op-vistoria-data" type="date" class="input" value="${ops.vistoria?.data||''}"></div>
       <div class="form-group"><label>Hora</label><input id="op-vistoria-hora" type="time" class="input" value="${ops.vistoria?.hora||''}"></div>
@@ -3599,6 +3608,7 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+    </div>
   </div>
 
   <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
