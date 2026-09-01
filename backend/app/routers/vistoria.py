@@ -52,6 +52,7 @@ def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Request = N
         "dados": v.get("dados") or {},
         "status": v.get("status") or "rascunho",
         "itensCompras": data.get("wc_itens") or [],
+        "modalidadesEnxoval": data.get("wc_modalidades_enxoval") or [],
         "imovelDados": {
             "camas": im.get("camas") or [],
             "quartos": im.get("quartos") or 1,

@@ -1112,6 +1112,7 @@ const VISTORIA_COMODO_TIPOS = ['Quarto','Sala','Cozinha','Banheiro Completo','La
 // telas (app.js e vistoria.html) não compartilham módulo JS (mesmo padrão de
 // getComodos/_getComodosImovel). Vistoriador só registra "quanto já tem" por item —
 // isso alimenta direto im.compras[subKey].qtdTem no admin, sem passo manual no meio.
+let MODALIDADES_ENXOVAL = [];
 let ITENS_COMPRAS = [
   {cat:'Cama',nome:'Jogo de Cama Basic Percalle',tipoPreco:'enxoval',qtdRule:'3-colchao',modalidades:['comprado']},
   {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',qtdRule:'2-colchao',modalidades:['comprado']},
@@ -1171,10 +1172,17 @@ const CAMA_LEITOS = {'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solte
 
 function _qtdComodoVal(v) { if (v === true) return 1; if (!v) return 0; const n = parseInt(v); return isNaN(n) ? 0 : n; }
 function totalLeitosVistoria(camas) { return (camas || []).reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0); }
+// Mesma lógica de app.js:modalidadeEnxovalAtual — casa o fornecedor salvo com o catálogo
+// MODALIDADES_ENXOVAL (carregado em /vistoria-load) em vez de só adivinhar por substring,
+// senão fornecedor custom ou "Manual" caía sempre no fallback errado (flashee/intense).
 function modalidadeEnxovalAtualVistoria(imDados) {
   const def = (imDados && imDados.defEnxoval) || {};
   if ((def.tipo || 'comprado') !== 'aluguel') return 'comprado';
-  return (def.fornecedor || '').toLowerCase().includes('intense') ? 'intense' : 'flashee';
+  const forn = (def.fornecedor || '').trim().toLowerCase();
+  if (forn === 'manual') return 'manual';
+  const match = MODALIDADES_ENXOVAL.find(m => (m.nome || '').toLowerCase() === forn);
+  if (match) return match.id;
+  return forn.includes('intense') ? 'intense' : 'flashee';
 }
 function itemValidoParaModalidadeVistoria(item, modalidade) { return !item.modalidades || item.modalidades.includes(modalidade); }
 function calcNecessarioVistoria(item, camas, banheiros, quartos, banheirosCompletos, hospedes, lavabos, andares) {
@@ -1219,6 +1227,7 @@ async function _carregarVistoria() {
     currentImovel = { id, nome: j.imovelNome || id, comodosSnapshot: j.comodos || [] };
     VISTORIA_CAMPOS = Array.isArray(j.camposVistoria) ? j.camposVistoria : [];
     if (Array.isArray(j.itensCompras) && j.itensCompras.length) ITENS_COMPRAS = j.itensCompras;
+    if (Array.isArray(j.modalidadesEnxoval)) MODALIDADES_ENXOVAL = j.modalidadesEnxoval;
     IMOVEL_DADOS = j.imovelDados || {};
     COMPRAS_ATUAL = j.comprasAtual || {};
     return j.dados || {};
