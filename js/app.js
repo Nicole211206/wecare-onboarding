@@ -2653,6 +2653,7 @@ function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
   let setupPago=0,setupPendente=0;
   ['fotos','limpeza','vistoria'].forEach(k=>{
+    if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(ops[k]?.pago)setupPago+=custo;else setupPendente+=custo;
   });
@@ -2726,10 +2727,16 @@ function renderAbaGastos(im){
         const custo=+ops[k]?.custo||0;
         const feito=!!ops[k]?.feito;
         const pago=!!ops[k]?.pago;
+        const naoAplica=!!ops[k]?.naoAplica;
+        if(naoAplica)return`<tr style="opacity:.55;border-bottom:1px solid var(--border);">
+          <td colspan="2" style="padding:4px 8px;text-align:center;"><span class="tag tag-neutral" style="font-size:10px;">Não se aplica</span></td>
+          <td style="padding:4px 8px;">${label}</td>
+          <td style="text-align:right;padding:0 8px;"><a href="#" onclick="event.preventDefault();_onGastoSetupNaoAplica('${k}',false)" style="font-size:11px;">desfazer</a></td>
+        </tr>`;
         return`<tr style="${pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${feito?'checked':''} onchange="_onGastoSetupFeito(this,'${k}')"></td>
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
-          <td style="padding:4px 8px;">${label}</td>
+          <td style="padding:4px 8px;">${label} <a href="#" onclick="event.preventDefault();_onGastoSetupNaoAplica('${k}',true)" style="font-size:10.5px;color:var(--text-muted);margin-left:4px;">(não se aplica)</a></td>
           <td style="text-align:right;padding:0 8px;">${fmtMoeda(custo)}</td>
         </tr>`;
       }).join('')}
@@ -2745,7 +2752,7 @@ function renderAbaGastos(im){
       <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
       <button class="btn btn-sm ${im.valorSetupCobradoRecebido?'btn-sage':'btn-outline'}" onclick="_toggleSetupRecebido()"><i class="fa-solid ${im.valorSetupCobradoRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.valorSetupCobradoRecebido?'Proprietário pagou':'Marcar como pago'}</button>
     </div>
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Outros gastos de setup (ex: segunda vistoria) são adicionados na aba Produção, marcando "Gasto de Setup" no evento extra.</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup".</div>
   </div>`;
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
@@ -3078,6 +3085,16 @@ function _onGastoSetupFeito(cb,key){
   if(!im.ops)im.ops={};
   if(!im.ops[key])im.ops[key]={};
   im.ops[key].feito=cb.checked;
+  saveAll();renderAba('gastos');
+}
+// "Não se aplica" — pra imóveis que pulam uma dessas 3 fases (ex: proprietário já tinha
+// fotos profissionais, não precisou de limpeza inicial) e ficavam com a linha pendente pra
+// sempre no Setup, sem opção de tirar da tela. Exclui o item do cálculo de gasto pendente.
+function _onGastoSetupNaoAplica(key,valor){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.ops)im.ops={};
+  if(!im.ops[key])im.ops[key]={};
+  im.ops[key].naoAplica=valor;
   saveAll();renderAba('gastos');
 }
 function _onEventoSetupFeito(cb,evId){
