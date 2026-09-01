@@ -1108,9 +1108,16 @@ function _coletarDadosAba(aba,im){
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
+    im.tipoDocumento=g('d-doc-tipo')||'cpf'; im.cpf=g('d-doc-cpf');
+    im.cnpj=im.tipoDocumento==='cnpj'?g('d-doc-cnpj'):''; im.razaoSocial=im.tipoDocumento==='cnpj'?g('d-doc-razao-social'):'';
+    im.dadosBancarios=g('d-doc-dados-bancarios'); im.chavePix=g('d-doc-chave-pix');
     if(im.proprietarioId){
       const propVinculado=proprietarios.find(pr=>pr.id===im.proprietarioId);
-      if(propVinculado){propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;}
+      if(propVinculado){
+        propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;
+        propVinculado.tipoDocumento=im.tipoDocumento;propVinculado.cpf=im.cpf;propVinculado.cnpj=im.cnpj;
+        propVinculado.razaoSocial=im.razaoSocial;propVinculado.dadosBancarios=im.dadosBancarios;propVinculado.chavePix=im.chavePix;
+      }
     }
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
@@ -1257,6 +1264,15 @@ function renderAbaDados(im){
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
     <div class="form-group"><label>E-mail</label><input id="d-prop-email" type="email" class="input" value="${esc(im.proprietarioEmail||'')}" placeholder="proprietario@email.com"></div>
   </div>
+  <details style="margin:4px 0 8px;">
+    <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);user-select:none;padding:6px 0;">
+      <i class="fa-solid fa-id-card"></i> Documento e Dados Bancários
+    </summary>
+    <div style="margin-top:6px;">
+      ${_htmlCamposDocImovel(im)}
+      <div class="hint">Preenchido pela IA (aba Captação → Analisar com IA) quando encontrar num contrato, ou manualmente. Se esse imóvel estiver vinculado a um proprietário do cadastro central, editar aqui também atualiza o cadastro dele.</div>
+    </div>
+  </details>
   <div class="form-row">
     <div class="form-group"><label>Comissão WeCare (%)</label>${numInput({id:'d-comissao',value:im.comissaoWecare||20,min:0,max:100})}</div>
     <div class="form-group"><label>Base de Cálculo</label><select id="d-comissao-base" class="input">
@@ -4655,13 +4671,20 @@ function _onProprietarioSelectChange(sel,imId){
   im.proprietarioId=sel.value||null;
   if(im.proprietarioId){
     const prop=proprietarios.find(p=>p.id===im.proprietarioId);
-    if(prop){im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';}
+    if(prop){
+      im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';
+      im.tipoDocumento=prop.tipoDocumento||'cpf';im.cpf=prop.cpf||'';im.cnpj=prop.cnpj||'';
+      im.razaoSocial=prop.razaoSocial||'';im.dadosBancarios=prop.dadosBancarios||'';im.chavePix=prop.chavePix||'';
+    }
   }
   saveAll();renderAba('dados');
 }
-// Campos de documento/dados bancários (2026-09-01) só existem aqui no cadastro central
-// de Proprietários — de propósito não replicados em im.* (aba Dados do imóvel), pra não
-// expor dado sensível (CPF/CNPJ/dados bancários) nos cards de imóvel.
+// Campos de documento/dados bancários (2026-09-01, adicionado também na aba Dados do
+// imóvel em 2026-09-01 dentro de um <details> recolhido — [[project_wecare_onboarding]] —
+// pra permitir a IA da aba Captação preencher, já que ela só escreve em im.*, nunca em
+// proprietarios[]). Cadastro central de Proprietários continua a fonte "oficial"; ao
+// salvar a aba Dados, se o imóvel estiver vinculado (im.proprietarioId), esses campos são
+// espelhados pro registro central também (mesmo padrão já usado em nome/telefone/e-mail).
 function _htmlCamposDocProprietario(p){
   const tipo=p?.tipoDocumento||'cpf';
   return`<div class="form-row">
@@ -4684,6 +4707,30 @@ function _htmlCamposDocProprietario(p){
 }
 function _onTipoDocProprietarioChange(sel){
   const wrap=document.getElementById('prop-campos-cnpj');
+  if(wrap)wrap.style.display=sel.value==='cnpj'?'':'none';
+}
+function _htmlCamposDocImovel(im){
+  const tipo=im?.tipoDocumento||'cpf';
+  return`<div class="form-row">
+      <div class="form-group"><label>Tipo de documento</label>
+        <select id="d-doc-tipo" class="input" onchange="_onTipoDocImovelChange(this)">
+          <option value="cpf"${tipo==='cpf'?' selected':''}>Pessoa Física (CPF)</option>
+          <option value="cnpj"${tipo==='cnpj'?' selected':''}>Pessoa Jurídica (CNPJ)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>CPF</label><input id="d-doc-cpf" class="input" placeholder="000.000.000-00" value="${esc(im?.cpf||'')}"></div>
+    </div>
+    <div class="form-row" id="d-doc-campos-cnpj" style="display:${tipo==='cnpj'?'':'none'};">
+      <div class="form-group"><label>CNPJ</label><input id="d-doc-cnpj" class="input" placeholder="00.000.000/0000-00" value="${esc(im?.cnpj||'')}"></div>
+      <div class="form-group"><label>Razão Social</label><input id="d-doc-razao-social" class="input" value="${esc(im?.razaoSocial||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Dados bancários</label><textarea id="d-doc-dados-bancarios" class="input" rows="2" placeholder="Banco, agência, conta">${esc(im?.dadosBancarios||'')}</textarea></div>
+      <div class="form-group"><label>Chave PIX</label><input id="d-doc-chave-pix" class="input" value="${esc(im?.chavePix||'')}"></div>
+    </div>`;
+}
+function _onTipoDocImovelChange(sel){
+  const wrap=document.getElementById('d-doc-campos-cnpj');
   if(wrap)wrap.style.display=sel.value==='cnpj'?'':'none';
 }
 function abrirNovoProprietario(){
@@ -4740,7 +4787,10 @@ function _salvarProprietario(){
   }
   if(_novoProprietarioParaImovelId){
     const im=getImovel(_novoProprietarioParaImovelId);
-    if(im){im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;}
+    if(im){
+      im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;
+      im.tipoDocumento=p.tipoDocumento;im.cpf=p.cpf;im.cnpj=p.cnpj;im.razaoSocial=p.razaoSocial;im.dadosBancarios=p.dadosBancarios;im.chavePix=p.chavePix;
+    }
     _novoProprietarioParaImovelId=null;
     saveAll();closeModal('modal-generico');renderAba('dados');showToast('Proprietário criado e vinculado!','sage');
     return;
