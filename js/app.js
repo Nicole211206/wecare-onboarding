@@ -2052,7 +2052,7 @@ function salvarRascunhoForm(){
 }
 function importarRespostasParaRascunho(){
   const im=getImovel(_imovelAtivoId);if(!im||!im.formRespostas)return;
-  im.formRascunho={...(im.formRespostas||{}),...(im.formRascunho||{})};
+  im.formRascunho={...(im.formRascunho||{}),...(im.formRespostas||{})};
   saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
 }
 function regenerarLinkForm(){
