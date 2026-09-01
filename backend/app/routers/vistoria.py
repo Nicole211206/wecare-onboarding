@@ -31,23 +31,33 @@ def _find_vistoria(im: dict, vistoria_id: str) -> dict | None:
     return None
 
 
-async def _resolver_link_pasta_vistoria(im: dict) -> str | None:
+def _resolver_link_pasta_vistoria_sync_check(im: dict) -> tuple[str | None, str | None]:
+    """Checagens sem rede — devolve (None, motivo) se já dá pra saber de cara que não vai dar."""
+    if not (settings.google_client_id and settings.google_client_secret and settings.google_refresh_token):
+        return None, "Integração com Google Drive não configurada neste ambiente."
+    folder_id = google_drive.extract_folder_id(im.get("captacaoLink"))
+    if not folder_id:
+        return None, "Este imóvel não tem link de pasta do Drive configurado (aba Captação)."
+    return folder_id, None
+
+
+async def _resolver_link_pasta_vistoria(im: dict) -> dict:
     """Acha (ou cria) a subpasta "Vistoria" dentro da pasta do imóvel no Drive e
     devolve o link — mesma pasta pra onde /vistoria-upload manda a mídia, exposta
     de antemão (mesmo antes do primeiro upload) pra quem preenche poder abrir e
-    conferir/subir arquivo direto lá também, sem depender só do widget de upload."""
-    if not (settings.google_client_id and settings.google_client_secret and settings.google_refresh_token):
-        return None
-    folder_id = google_drive.extract_folder_id(im.get("captacaoLink"))
+    conferir/subir arquivo direto lá também, sem depender só do widget de upload.
+    Devolve {"link":..., "erro":...} em vez de só None em caso de falha — silenciar
+    completamente escondia o motivo até de mim quando alguém reportava "não aparece"."""
+    folder_id, motivo = _resolver_link_pasta_vistoria_sync_check(im)
     if not folder_id:
-        return None
+        return {"link": None, "erro": motivo}
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             token = await google_drive.get_google_access_token(client)
             vistoria_folder_id = await google_drive.find_or_create_folder(client, token, folder_id, "Vistoria")
-        return f"https://drive.google.com/drive/folders/{vistoria_folder_id}"
-    except Exception:
-        return None
+        return {"link": f"https://drive.google.com/drive/folders/{vistoria_folder_id}", "erro": None}
+    except Exception as e:
+        return {"link": None, "erro": f"Falha ao acessar o Drive: {e}"}
 
 
 @router.get("/vistoria-load")
@@ -72,7 +82,7 @@ async def vistoria_load(id: str = "", vid: str = "", t: str = "", request: Reque
         "status": v.get("status") or "rascunho",
         "itensCompras": data.get("wc_itens") or [],
         "modalidadesEnxoval": data.get("wc_modalidades_enxoval") or [],
-        "pastaDriveLink": await _resolver_link_pasta_vistoria(im),
+        "pastaDrive": await _resolver_link_pasta_vistoria(im),
         "imovelDados": {
             "camas": im.get("camas") or [],
             "quartos": im.get("quartos") or 1,

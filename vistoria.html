@@ -917,6 +917,9 @@ select.urg-select {
       <i class="fa-solid fa-folder-open"></i> <strong>Fotos e vídeos enviados nos cômodos abaixo vão automaticamente para uma pasta do Google Drive</strong> — não precisa fazer mais nada depois de enviar aqui.
       Se preferir, também pode abrir a pasta e subir os arquivos direto por lá: <a id="pasta-drive-link" href="#" target="_blank" style="color:#0d5c33;font-weight:700;">abrir pasta no Drive <i class="fa-solid fa-up-right-from-square" style="font-size:11px;"></i></a>.
     </div>
+    <div id="pasta-drive-erro" style="display:none;margin-top:14px;padding:12px 14px;background:var(--amber-light);border:1px solid var(--amber-border);border-radius:10px;font-size:13px;color:#8a6115;">
+      <i class="fa-solid fa-triangle-exclamation"></i> Link da pasta do Drive indisponível: <span id="pasta-drive-erro-msg"></span>
+    </div>
   </div>
 </div>
 
@@ -981,7 +984,7 @@ select.urg-select {
   </div>
   <div class="section-body">
     <div class="form-grid-3">
-      <div class="form-row"><label>Quantidade de quartos</label><input type="number" min="0" id="field-qtd-quartos"></div>
+      <div class="form-row"><label>Quantidade de quartos</label><input type="number" min="0" id="field-qtd-quartos" onchange="_ajustarQtdQuartos(this)"></div>
       <div class="form-row"><label>Quantidade de banheiros</label><input type="number" min="0" id="field-qtd-banheiros"></div>
       <div class="form-row"><label>Quantidade de lavabos</label><input type="number" min="0" id="field-qtd-lavabos"></div>
     </div>
@@ -1013,14 +1016,8 @@ select.urg-select {
     <i class="fa-solid fa-chevron-down section-chevron"></i>
   </div>
   <div class="section-body">
+    <div class="hint" style="margin-bottom:10px;">Ar-condicionado (se é só frio ou quente e frio) é registrado por cômodo, na aba de cada cômodo abaixo — varia de cômodo pra cômodo.</div>
     <div class="form-row">
-      <label>Ar-condicionado quente e frio?</label>
-      <div class="pill-group" style="margin-top:6px">
-        <label class="pill-label pill-ok"><input type="radio" name="arCondQuenteFrio" value="sim"><i class="fa-solid fa-circle-check"></i> Sim</label>
-        <label class="pill-label pill-bad"><input type="radio" name="arCondQuenteFrio" value="nao"><i class="fa-solid fa-circle-xmark"></i> Não</label>
-      </div>
-    </div>
-    <div class="form-row" style="margin-top:16px">
       <label>Tem Wi-Fi?</label>
       <div class="pill-group" style="margin-top:6px">
         <label class="pill-label pill-ok"><input type="radio" name="temWifi" value="sim" onchange="_toggleCondicional('temWifi','sim','wrap-infra-wifi')"><i class="fa-solid fa-circle-check"></i> Sim</label>
@@ -1111,10 +1108,6 @@ select.urg-select {
     <div class="form-row" style="margin-top:16px">
       <label>Observações finais</label>
       <textarea id="field-obs-finais" placeholder="Observações gerais sobre a vistoria..." style="min-height:100px"></textarea>
-    </div>
-    <div class="form-row" style="margin-top:16px">
-      <label>Nome do Vistoriador *</label>
-      <input type="text" id="field-nome-conclusao" placeholder="Nome completo">
     </div>
   </div>
 </div>
@@ -1396,6 +1389,24 @@ function getComodosAtuais() {
   return (currentImovel.comodosSnapshot && currentImovel.comodosSnapshot.length) ? currentImovel.comodosSnapshot : getComodos(currentImovel);
 }
 
+// Se o vistoriador contar mais quartos do que o imóvel tem cadastrado no admin ("Estrutura
+// do Imóvel" diz 2 mas o snapshot só trouxe 1), adiciona aba(s) de Quarto extra na hora — só
+// ACRESCENTA, nunca remove aba existente (evitaria perder vídeo/irregularidade já preenchido
+// nela). Coleta o que já foi digitado antes de reconstruir e restaura depois, pra não perder
+// nada nos cômodos que já existiam.
+function _ajustarQtdQuartos(inputEl) {
+  const novoTotal = Math.max(0, parseInt(inputEl.value) || 0);
+  const listaAtual = getComodosAtuais().slice();
+  const quartosAtuais = listaAtual.filter(n => n.startsWith('Quarto')).length;
+  if (novoTotal <= quartosAtuais) return;
+  const dadosAtuais = collectFormData();
+  for (let i = quartosAtuais + 1; i <= novoTotal; i++) listaAtual.push('Quarto ' + i);
+  currentImovel.comodosSnapshot = listaAtual;
+  buildComodos();
+  _restaurarDados(dadosAtuais);
+  updateProgress();
+}
+
 // Carrega a vistoria (imóvel, cômodos travados na criação, checklist configurado e
 // rascunho já salvo) via link escopado — id do imóvel + id da vistoria + token.
 // Não usa localStorage nem token mestre: essa página roda no navegador de alguém
@@ -1413,10 +1424,14 @@ async function _carregarVistoria() {
     VISTORIA_CAMPOS = Array.isArray(j.camposVistoria) ? j.camposVistoria : [];
     if (Array.isArray(j.itensCompras) && j.itensCompras.length) ITENS_COMPRAS = j.itensCompras;
     if (Array.isArray(j.modalidadesEnxoval)) MODALIDADES_ENXOVAL = j.modalidadesEnxoval;
-    if (j.pastaDriveLink) {
+    if (j.pastaDrive && j.pastaDrive.link) {
       const info = document.getElementById('pasta-drive-info');
       const link = document.getElementById('pasta-drive-link');
-      if (info && link) { link.href = j.pastaDriveLink; info.style.display = ''; }
+      if (info && link) { link.href = j.pastaDrive.link; info.style.display = ''; }
+    } else if (j.pastaDrive && j.pastaDrive.erro) {
+      const erroBox = document.getElementById('pasta-drive-erro');
+      const erroMsg = document.getElementById('pasta-drive-erro-msg');
+      if (erroBox && erroMsg) { erroMsg.textContent = j.pastaDrive.erro; erroBox.style.display = ''; }
     }
     IMOVEL_DADOS = j.imovelDados || {};
     COMPRAS_ATUAL = j.comprasAtual || {};
@@ -1494,7 +1509,6 @@ function _restaurarDados(dados) {
   if (dados.vistoriador) document.getElementById('field-vistoriador').value = dados.vistoriador;
   if (dados.aptoPara) { const r = document.querySelector(`input[name="apto"][value="${dados.aptoPara}"]`); if (r) r.checked = true; }
   if (dados.obsFinais) document.getElementById('field-obs-finais').value = dados.obsFinais;
-  if (dados.nomeConc) document.getElementById('field-nome-conclusao').value = dados.nomeConc;
   if (dados.obsProprietaria) document.getElementById('field-obs-proprietaria').value = dados.obsProprietaria;
 
   const acesso = dados.acesso || {};
@@ -1520,7 +1534,6 @@ function _restaurarDados(dados) {
   if (estrutura.voltagem) document.getElementById('field-voltagem').value = estrutura.voltagem;
 
   const infra = dados.infra || {};
-  if (infra.arCondQuenteFrio) { const r = document.querySelector(`input[name="arCondQuenteFrio"][value="${infra.arCondQuenteFrio}"]`); if (r) r.checked = true; }
   if (infra.temWifi) { const r = document.querySelector(`input[name="temWifi"][value="${infra.temWifi}"]`); if (r) r.checked = true; }
   if (infra.wifiFunciona) { const r = document.querySelector(`input[name="wifiFunciona"][value="${infra.wifiFunciona}"]`); if (r) r.checked = true; }
   if (infra.operadoraInternet) document.getElementById('field-operadora-internet').value = infra.operadoraInternet;
@@ -1959,6 +1972,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   buildItensObrigatorios();
   _renderItensExtras();
   _restaurarDados(dados);
+  if ((dados.estrutura || {}).qtdQuartos) _ajustarQtdQuartos(document.getElementById('field-qtd-quartos'));
   updateProgress();
 
   if (VISTORIA_STATUS === 'enviado') {
@@ -2016,7 +2030,7 @@ function updateProgress() {
   if (estruturaOk) done++;
   document.querySelector('.nav-item[href="#sec-estrutura"]')?.classList.toggle('done', estruturaOk);
 
-  const infraOk = !!(_valorRadio('arCondQuenteFrio') || _valorRadio('temWifi'));
+  const infraOk = !!_valorRadio('temWifi');
   if (infraOk) done++;
   document.querySelector('.nav-item[href="#sec-infra"]')?.classList.toggle('done', infraOk);
 
@@ -2031,8 +2045,7 @@ function updateProgress() {
   });
 
   // Conclusão
-  const concOk = !!(document.querySelector('input[name="apto"]:checked') &&
-    document.getElementById('field-nome-conclusao').value.trim());
+  const concOk = !!document.querySelector('input[name="apto"]:checked');
   if (concOk) done++;
   const concNav = document.querySelector('.nav-item[href="#sec-conclusao"]');
   if (concNav) concNav.classList.toggle('done', concOk);
@@ -2126,7 +2139,6 @@ function _coletarEstrutura() {
 }
 function _coletarInfra() {
   return {
-    arCondQuenteFrio: _valorRadio('arCondQuenteFrio'),
     temWifi: _valorRadio('temWifi'),
     wifiFunciona: _valorRadio('wifiFunciona'),
     operadoraInternet: _valorCampo('field-operadora-internet'),
@@ -2160,7 +2172,6 @@ function collectFormData() {
     obsProprietaria: document.getElementById('field-obs-proprietaria').value,
     aptoPara: (document.querySelector('input[name="apto"]:checked') || {}).value || null,
     obsFinais: document.getElementById('field-obs-finais').value,
-    nomeConc: document.getElementById('field-nome-conclusao').value,
     pendencias: irregularidades.map(c => ({ comodo: c.nome, descricao: c.irregularidade, prioridade: c.prioridade || null }))
   };
 }
@@ -2183,12 +2194,6 @@ function submitVistoria() {
   if (!document.querySelector('input[name="apto"]:checked')) {
     showToast('Indique se o imóvel está apto para operação.');
     document.getElementById('sec-conclusao').classList.remove('collapsed');
-    return;
-  }
-  if (!document.getElementById('field-nome-conclusao').value.trim()) {
-    showToast('Informe o nome completo na conclusão.');
-    document.getElementById('sec-conclusao').classList.remove('collapsed');
-    document.getElementById('field-nome-conclusao').focus();
     return;
   }
 

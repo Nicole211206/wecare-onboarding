@@ -2723,16 +2723,11 @@ function renderAbaGastos(im){
       <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
       <tbody>
       ${['fotos','limpeza','vistoria'].map(k=>{
+        if(ops[k]?.naoAplica)return''; // marcado "não se aplica" na aba Produção — nem entra aqui
         const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
         const custo=+ops[k]?.custo||0;
         const feito=!!ops[k]?.feito;
         const pago=!!ops[k]?.pago;
-        const naoAplica=!!ops[k]?.naoAplica;
-        if(naoAplica)return`<tr style="opacity:.55;border-bottom:1px solid var(--border);">
-          <td colspan="2" style="padding:4px 8px;text-align:center;"><span class="tag tag-neutral" style="font-size:10px;">Não se aplica</span></td>
-          <td style="padding:4px 8px;">${label}</td>
-          <td style="text-align:right;padding:0 8px;">—</td>
-        </tr>`;
         return`<tr style="${pago?'opacity:.55;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${feito?'checked':''} onchange="_onGastoSetupFeito(this,'${k}')"></td>
           <td style="padding:4px 8px;text-align:center;"><input type="checkbox" ${pago?'checked':''} onchange="_onGastoSetupPago(this,'${k}')"></td>
@@ -4412,7 +4407,7 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
   };
   const acessoHtml=fichaHtml('Acesso ao Imóvel',d.acesso,[['senhaPorta','Senha da porta'],['modeloFechadura','Modelo da fechadura'],['andarAreasComuns','Andar das áreas comuns'],['contatoPortaria','Contato da portaria'],['portaria24h','Portaria 24hrs'],['temGaragem','Tem garagem'],['acessoGaragem','Como acessa a garagem'],['prestadorLivre','Prestador entra a qualquer momento'],['horariosPermitidos','Horários permitidos']]);
   const estruturaHtml=fichaHtml('Estrutura do Imóvel',d.estrutura,[['qtdQuartos','Quartos'],['qtdBanheiros','Banheiros'],['qtdLavabos','Lavabos'],['temVaranda','Tem varanda'],['tamanhoCamas','Tamanho das camas'],['tamanhoTV','Tamanho da TV'],['voltagem','Voltagem']]);
-  const infraHtml=fichaHtml('Infraestrutura e Conforto',d.infra,[['arCondQuenteFrio','Ar-condicionado quente e frio'],['temWifi','Tem Wi-Fi'],['wifiFunciona','Wi-Fi funcionando'],['operadoraInternet','Operadora de internet']]);
+  const infraHtml=fichaHtml('Infraestrutura e Conforto',d.infra,[['temWifi','Tem Wi-Fi'],['wifiFunciona','Wi-Fi funcionando'],['operadoraInternet','Operadora de internet']]);
   const itensEncontradosHtml=(d.itensEncontrados||[]).filter(it=>it.item).length
     ?`<div style="margin-top:10px;"><div class="form-section-title" style="margin-bottom:4px;">Itens Extras Encontrados</div>${(d.itensEncontrados||[]).filter(it=>it.item).map(it=>`<div style="font-size:12.5px;padding:3px 0;">${esc(it.item)}${it.quantidade?` (${esc(String(it.quantidade))})`:''}${it.observacao?` — ${esc(it.observacao)}`:''}${it.oQueFazer?` · <em>${esc(it.oQueFazer)}</em>`:''}</div>`).join('')}</div>`
     :'';
