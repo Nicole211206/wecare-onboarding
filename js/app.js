@@ -523,6 +523,7 @@ function modalidadeEnxovalAtual(im){
   const def=im.defEnxoval||{};
   if((def.tipo||'comprado')!=='aluguel')return'comprado';
   const forn=(def.fornecedor||'').trim().toLowerCase();
+  if(forn==='manual')return'manual';
   const match=MODALIDADES_ENXOVAL.find(m=>m.nome.toLowerCase()===forn);
   if(match)return match.id;
   return forn.includes('intense')?'intense':'flashee'; // fallback p/ dado antigo fora do catálogo
@@ -1791,7 +1792,7 @@ function renderAbaDefinicoes(im){
   <div class="form-group">
     <label>Modalidade</label>
     <select id="def-enxoval-tipo" class="input" onchange="_onEnxovalTipoChange(this)">
-      <option value="comprado"${(im.defEnxoval?.tipo||'comprado')==='comprado'?' selected':''}>Comprado (Buddemeyer)</option>
+      <option value="comprado"${(im.defEnxoval?.tipo||'comprado')==='comprado'?' selected':''}>Comprado</option>
       <option value="aluguel"${im.defEnxoval?.tipo==='aluguel'?' selected':''}>Alugado</option>
     </select>
   </div>
@@ -1800,6 +1801,7 @@ function renderAbaDefinicoes(im){
     <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
     <select id="def-enxoval-forn-select" class="input" onchange="_recalcEnxovalValores()" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
       ${MODALIDADES_ENXOVAL.map(m=>`<option value="${esc(m.nome)}"${im.defEnxoval?.fornecedor===m.nome?' selected':''}>${esc(m.nome)}</option>`).join('')}
+      <option value="Manual"${im.defEnxoval?.fornecedor==='Manual'?' selected':''}>Manual (exceção)</option>
     </select>
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
@@ -1807,6 +1809,7 @@ function renderAbaDefinicoes(im){
     <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
+  ${im.defEnxoval?.fornecedor==='Manual'?'<div class="hint">Fornecedor "Manual" não recalcula os valores automaticamente — digite o valor mensal e o setup direto, pra casos de exceção.</div>':''}
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-clock"></i> Prazo</div>
   <div class="form-group">
@@ -1836,6 +1839,10 @@ function _valorEnxovalMensal(hospedes,fornecedorNome,campo){
   const h=+hospedes||0;if(h<=0)return 0;
   const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
   if(!m)return campo==='cobrado'?h*110:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
+  // Fornecedor que cobra por reserva (não por mês) não dá pra prever quantas reservas caem
+  // no mês, então o valor "mensal" usado pra preencher a aba Contrato é o mínimo mensal
+  // garantido, não a fórmula/tabela por hóspede (essa continua configurável só de referência).
+  if(m.baseCobranca==='reserva')return+(campo==='custo'?m.minimoMensalCusto:m.minimoMensalCobrado)||0;
   if(m.precificacaoMensal==='tabela'){
     const linhas=m.mensalTabela||[];
     const exata=linhas.find(l=>l.hospedes===h);
@@ -1868,6 +1875,7 @@ function _recalcEnxovalValores(){
   const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
   const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
   if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
+  if(fornecedor==='Manual')return; // não recalcula — deixa o valor digitado à mão como está
   const im=getImovel(_imovelAtivoId);
   mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
   setupEl.value=_valorEnxovalAutoSetup(fornecedor);
@@ -2277,7 +2285,7 @@ function renderAbaCompras(im){
     </div>
   </div>
 
-  <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval Buddemeyer</div>
+  <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval</div>
   <textarea id="wamsg-enxoval" class="input" rows="9" style="font-size:11.5px;font-family:monospace;" readonly onclick="this.select()">${esc(msgWA)}</textarea>
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
   </div>`;
@@ -3466,7 +3474,7 @@ function renderAbaEnxoval(im){
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
     <div style="border:2px solid var(--rose);border-radius:12px;padding:16px;">
-      <div style="font-weight:700;font-size:14px;color:var(--rose);margin-bottom:12px;"><i class="fa-solid fa-shopping-bag"></i> Compra — Buddemeyer</div>
+      <div style="font-weight:700;font-size:14px;color:var(--rose);margin-bottom:12px;"><i class="fa-solid fa-shopping-bag"></i> Compra — Enxoval Próprio</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
         <thead><tr style="background:#fdf0f4"><th style="text-align:left;padding:4px;">Item (${tipo})</th><th>Qtd</th><th>Un</th><th>Total</th></tr></thead>
         <tbody>${linhasBud.map(l=>`<tr style="border-bottom:1px solid #f0e0e8;">
@@ -3494,11 +3502,11 @@ function renderAbaEnxoval(im){
 
   <div class="form-section-title"><i class="fa-solid fa-scale-balanced"></i> Comparativo</div>
   <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:20px;">
-    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:8px;">Critério</th><th style="text-align:center;">Buddemeyer</th><th style="text-align:center;">Flashee</th></tr></thead>
+    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:8px;">Critério</th><th style="text-align:center;">Comprado</th><th style="text-align:center;">Flashee</th></tr></thead>
     <tbody>
       <tr><td style="padding:6px 8px;">Investimento inicial</td><td style="text-align:center;">${fmtMoeda(totalBud)}</td><td style="text-align:center;">${fmtMoeda(flasheeSetup)}</td></tr>
       <tr><td style="padding:6px 8px;">Custo mensal</td><td style="text-align:center;">R$ 0</td><td style="text-align:center;">${fmtMoeda(flasheeMensal)}/mês</td></tr>
-      <tr><td style="padding:6px 8px;">Ponto de equilíbrio</td><td colspan="2" style="text-align:center;">${eqMeses?eqMeses+' meses (Flashee supera Buddemeyer)':'—'}</td></tr>
+      <tr><td style="padding:6px 8px;">Ponto de equilíbrio</td><td colspan="2" style="text-align:center;">${eqMeses?eqMeses+' meses (Flashee supera Comprado)':'—'}</td></tr>
       <tr><td style="padding:6px 8px;">Propriedade do enxoval</td><td style="text-align:center;">Proprietário</td><td style="text-align:center;">Flashee</td></tr>
     </tbody>
   </table>
@@ -3984,7 +3992,7 @@ async function gerarPDFOutrasInformacoes(){
   ${sec('⚙️','Definições Operacionais',`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       ${campo('Serviços contratados',defs.length?defs.join(', '):'Nenhum')}
-      ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?'Aluguel mensal (Flashee)':'Comprado (Buddemeyer)')}
+      ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?('Aluguel mensal — '+(im.defEnxoval?.fornecedor||'')):'Comprado')}
       ${campo('Equipe de limpeza',im.defLimpeza?.responsavel)}
     </div>
   `)}
@@ -5324,7 +5332,7 @@ function _calcOrcamentoTotais(orc){
 async function gerarPDFOrcamentoAvulso(id){
   const o=orcamentos.find(x=>x.id===id);if(!o)return;
   const totais=_calcOrcamentoTotais(o);
-  const fornecedorLabel={comprado:'Comprado (Buddemeyer)',flashee:'Aluguel — Flashee',intense:'Aluguel — Intense Clean'}[o.fornecedorEnxoval]||o.fornecedorEnxoval||'';
+  const fornecedorLabel={comprado:'Comprado',flashee:'Aluguel — Flashee',intense:'Aluguel — Intense Clean'}[o.fornecedorEnxoval]||o.fornecedorEnxoval||'';
   const imFake={nome:o.nomeCliente||'Orçamento',proprietarioNome:'',endereco:''};
 
   const linhaTabela=(label,qtd,valorUnit,total)=>`<tr style="border-bottom:1px solid #EFE7D6;">
@@ -6217,6 +6225,7 @@ function _adicionarEtapaModelo(mi){
 function _htmlBlocoModalidadeEnxoval(m,i){
   const precTabela=m.precificacaoMensal==='tabela';
   const tabela=m.mensalTabela||[];
+  const porReserva=m.baseCobranca==='reserva';
   return`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
       <input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-weight:700;flex:1;max-width:260px;" onchange="_atualizarModalidadeEnxoval(${i})">
@@ -6231,7 +6240,19 @@ function _htmlBlocoModalidadeEnxoval(m,i){
       `:''}
     </div>
 
-    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor mensal (aluguel) — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
+    <div style="display:flex;gap:14px;margin-bottom:10px;">
+      <label style="font-size:12px;"><input type="radio" name="me-basecobranca-${i}" value="mensal"${!porReserva?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra por mês</label>
+      <label style="font-size:12px;"><input type="radio" name="me-basecobranca-${i}" value="reserva"${porReserva?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra por reserva</label>
+    </div>
+    ${porReserva?`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Mínimo mensal — Custo</label><input type="number" id="me-minimocusto-${i}" class="input" min="0" step="10" value="${m.minimoMensalCusto||0}" style="width:90px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Mínimo mensal — Cobrado</label><input type="number" id="me-minimocobrado-${i}" class="input" min="0" step="10" value="${m.minimoMensalCobrado||0}" style="width:90px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Ex: R$180 por reserva, mas garante um mínimo de R$${m.minimoMensalCobrado||590}/mês — esse mínimo é o que preenche automaticamente o valor mensal na aba Contrato (não dá pra saber de antemão quantas reservas vão cair no mês).</div>
+    `:''}
+
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor ${porReserva?'por reserva':'por mês'} — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
     <div style="display:flex;gap:14px;margin-bottom:8px;">
       <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="formula"${!precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Fórmula (inicial + por hóspede extra)</label>
       <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="tabela"${precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Tabela por quantidade de hóspedes</label>
@@ -6285,6 +6306,13 @@ function _atualizarModalidadeEnxoval(i){
     m.setupCusto=+setupCustoEl.value||0;
     m.setupCobrado=+document.getElementById(`me-setupcobrado-${i}`)?.value||0;
   }
+  const basecobrancaSel=document.querySelector(`input[name="me-basecobranca-${i}"]:checked`);
+  m.baseCobranca=basecobrancaSel?.value==='reserva'?'reserva':'mensal';
+  const minimoCustoEl=document.getElementById(`me-minimocusto-${i}`);
+  if(minimoCustoEl){
+    m.minimoMensalCusto=+minimoCustoEl.value||0;
+    m.minimoMensalCobrado=+document.getElementById(`me-minimocobrado-${i}`)?.value||0;
+  }
   const precifSel=document.querySelector(`input[name="me-precif-${i}"]:checked`);
   m.precificacaoMensal=precifSel?.value==='tabela'?'tabela':'formula';
   const baseCustoEl=document.getElementById(`me-basecusto-${i}`);
@@ -6321,6 +6349,7 @@ function _adicionarModalidadeEnxoval(){
   if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
   const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
   MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,setupCusto:0,setupCobrado:0,
+    baseCobranca:'mensal',minimoMensalCusto:0,minimoMensalCobrado:0,
     precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:0,mensalExtraCusto:0,mensalExtraCobrado:0,mensalTabela:[]});
   saveAll();renderConfig();
   showToast('Fornecedor adicionado! Configure setup e valor mensal no bloco novo.','sage');

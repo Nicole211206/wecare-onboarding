@@ -242,6 +242,8 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
                 "mensalBaseCusto": m.mensal_base_custo, "mensalBaseCobrado": m.mensal_base_cobrado,
                 "mensalExtraCusto": m.mensal_extra_custo, "mensalExtraCobrado": m.mensal_extra_cobrado,
                 "mensalTabela": m.mensal_tabela,
+                "baseCobranca": m.base_cobranca,
+                "minimoMensalCusto": m.minimo_mensal_custo, "minimoMensalCobrado": m.minimo_mensal_cobrado,
             }
             for m in db.scalars(select(models.ModalidadeEnxoval).order_by(models.ModalidadeEnxoval.ordem))
         ],
@@ -489,6 +491,8 @@ def put_state(db: Session, state: dict) -> None:
                     mensal_base_custo=m.get("mensalBaseCusto"), mensal_base_cobrado=m.get("mensalBaseCobrado"),
                     mensal_extra_custo=m.get("mensalExtraCusto"), mensal_extra_cobrado=m.get("mensalExtraCobrado"),
                     mensal_tabela=m.get("mensalTabela"),
+                    base_cobranca=m.get("baseCobranca"),
+                    minimo_mensal_custo=m.get("minimoMensalCusto"), minimo_mensal_cobrado=m.get("minimoMensalCobrado"),
                     ordem=idx,
                 )
             )

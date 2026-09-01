@@ -34,6 +34,9 @@ _COLUNAS_NOVAS = [
     "ALTER TABLE proprietarios ADD COLUMN razao_social VARCHAR",
     "ALTER TABLE proprietarios ADD COLUMN dados_bancarios VARCHAR",
     "ALTER TABLE proprietarios ADD COLUMN chave_pix VARCHAR",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN base_cobranca VARCHAR",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_custo NUMERIC",
+    "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_cobrado NUMERIC",
 ]
 for _sql in _COLUNAS_NOVAS:
     try:

@@ -218,6 +218,9 @@ class ModalidadeEnxoval(Base):
     mensal_extra_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     mensal_extra_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     mensal_tabela: Mapped[list | None] = mapped_column(JSON)
+    base_cobranca: Mapped[str | None] = mapped_column(String)
+    minimo_mensal_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    minimo_mensal_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
