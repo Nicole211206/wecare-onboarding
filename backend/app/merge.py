@@ -19,10 +19,15 @@ def has_val(v: Any) -> bool:
 def merge_item_arrays_by_id(old_arr: list | None, new_arr: list | None) -> list:
     """Recupera itens de array que sumiram numa sincronização catastrófica
     (encolhida brusca), casando por `id`. Respeita exclusão de propósito
-    quando a encolhida NÃO é catastrófica."""
+    quando a encolhida NÃO é catastrófica.
+
+    Incidente 2026-09-03: listas pequenas (ex: 2 manutenções) que iam a zero
+    também caíam na regra de "catastrófica" (len(new_a)==0 and len(old_a)>0),
+    então apagar os últimos itens de uma lista pequena nunca "pegava" —
+    voltava sempre. Exige len(old_a)>=5 pra considerar zerar suspeito."""
     old_a = old_arr if isinstance(old_arr, list) else []
     new_a = new_arr if isinstance(new_arr, list) else []
-    catastrofica = (len(new_a) == 0 and len(old_a) > 0) or (len(old_a) >= 8 and len(new_a) <= 2)
+    catastrofica = (len(new_a) == 0 and len(old_a) >= 5) or (len(old_a) >= 8 and len(new_a) <= 2)
     if not catastrofica:
         return new_a
     new_ids = {x["id"] for x in new_a if isinstance(x, dict) and x.get("id")}
