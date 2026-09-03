@@ -840,9 +840,34 @@ select.urg-select {
       Cabeçalho
       <span class="nav-check"><i class="fa-solid fa-check"></i></span>
     </a>
+    <a class="nav-item" href="#sec-acesso" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-key"></i></span>
+      Acesso ao Imóvel
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>
+    <a class="nav-item" href="#sec-estrutura" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-ruler-combined"></i></span>
+      Estrutura do Imóvel
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>
+    <a class="nav-item" href="#sec-infra" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-wifi"></i></span>
+      Infraestrutura e Conforto
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>
     <div id="nav-geral"></div>
     <div id="nav-comodos"></div>
     <div id="nav-itens"></div>
+    <a class="nav-item" href="#sec-extras" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-box-open"></i></span>
+      Itens Extras
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>
+    <a class="nav-item" href="#sec-solicitacoes" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-comment-dots"></i></span>
+      Solicitações da Proprietária
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>
     <a class="nav-item" href="#sec-conclusao" onclick="navClick(this)">
       <span class="nav-icon ic-fin"><i class="fa-solid fa-circle-check"></i></span>
       Conclusão
@@ -888,6 +913,130 @@ select.urg-select {
       <label>Nome do Vistoriador *</label>
       <input type="text" id="field-vistoriador" placeholder="Digite seu nome completo" required>
     </div>
+    <div id="pasta-drive-info" style="display:none;margin-top:14px;padding:12px 14px;background:var(--green-light);border:1px solid var(--green);border-radius:10px;font-size:13px;color:#155d3a;">
+      <i class="fa-solid fa-folder-open"></i> <strong>Fotos e vídeos enviados nos cômodos abaixo vão automaticamente para uma pasta do Google Drive</strong> — não precisa fazer mais nada depois de enviar aqui.
+      Se preferir, também pode abrir a pasta e subir os arquivos direto por lá: <a id="pasta-drive-link" href="#" target="_blank" style="color:#0d5c33;font-weight:700;">abrir pasta no Drive <i class="fa-solid fa-up-right-from-square" style="font-size:11px;"></i></a>.
+    </div>
+    <div id="pasta-drive-erro" style="display:none;margin-top:14px;padding:12px 14px;background:var(--amber-light);border:1px solid var(--amber-border);border-radius:10px;font-size:13px;color:#8a6115;">
+      <i class="fa-solid fa-triangle-exclamation"></i> Link da pasta do Drive indisponível: <span id="pasta-drive-erro-msg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SEÇÃO — ACESSO AO IMÓVEL
+══════════════════════════════════════════ -->
+<div class="section-card" id="sec-acesso">
+  <div class="section-header" onclick="toggleSection('sec-acesso')">
+    <div class="section-icon ic-dec"><i class="fa-solid fa-key"></i></div>
+    <div class="section-title">Acesso ao Imóvel</div>
+    <i class="fa-solid fa-chevron-down section-chevron"></i>
+  </div>
+  <div class="section-body">
+    <div class="form-grid">
+      <div class="form-row"><label>Senha da porta</label><input type="text" id="field-senha-porta"></div>
+      <div class="form-row"><label>Modelo da fechadura eletrônica</label><input type="text" id="field-modelo-fechadura"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Andar das áreas comuns</label><input type="text" id="field-andar-areas-comuns"></div>
+      <div class="form-row"><label>Contato da portaria (telefone/ramal)</label><input type="text" id="field-contato-portaria"></div>
+    </div>
+    <div class="form-row">
+      <label>Portaria 24hrs?</label>
+      <div class="pill-group" style="margin-top:6px">
+        <label class="pill-label pill-ok"><input type="radio" name="portaria24h" value="sim"><i class="fa-solid fa-circle-check"></i> Sim</label>
+        <label class="pill-label pill-bad"><input type="radio" name="portaria24h" value="nao"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:16px">
+      <label>Tem garagem?</label>
+      <div class="pill-group" style="margin-top:6px">
+        <label class="pill-label pill-ok"><input type="radio" name="temGaragem" value="sim" onchange="_toggleCondicional('temGaragem','sim','wrap-acesso-garagem')"><i class="fa-solid fa-circle-check"></i> Sim</label>
+        <label class="pill-label pill-bad"><input type="radio" name="temGaragem" value="nao" onchange="_toggleCondicional('temGaragem','sim','wrap-acesso-garagem')"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+      </div>
+    </div>
+    <div class="form-row" id="wrap-acesso-garagem" style="margin-top:12px;display:none;">
+      <label>Como acessa a garagem?</label>
+      <input type="text" id="field-acesso-garagem">
+    </div>
+    <div class="form-row" style="margin-top:16px">
+      <label>Prestador de serviço pode entrar a qualquer momento?</label>
+      <div class="pill-group" style="margin-top:6px">
+        <label class="pill-label pill-ok"><input type="radio" name="prestadorLivre" value="sim" onchange="_toggleCondicional('prestadorLivre','nao','wrap-acesso-horarios')"><i class="fa-solid fa-circle-check"></i> Sim</label>
+        <label class="pill-label pill-bad"><input type="radio" name="prestadorLivre" value="nao" onchange="_toggleCondicional('prestadorLivre','nao','wrap-acesso-horarios')"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+      </div>
+    </div>
+    <div class="form-row" id="wrap-acesso-horarios" style="margin-top:12px;display:none;">
+      <label>Se não, quais horários são permitidos?</label>
+      <input type="text" id="field-horarios-permitidos">
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SEÇÃO — ESTRUTURA DO IMÓVEL
+══════════════════════════════════════════ -->
+<div class="section-card" id="sec-estrutura">
+  <div class="section-header" onclick="toggleSection('sec-estrutura')">
+    <div class="section-icon ic-dec"><i class="fa-solid fa-ruler-combined"></i></div>
+    <div class="section-title">Estrutura do Imóvel</div>
+    <i class="fa-solid fa-chevron-down section-chevron"></i>
+  </div>
+  <div class="section-body">
+    <div class="form-grid-3">
+      <div class="form-row"><label>Quantidade de quartos</label><input type="number" min="0" id="field-qtd-quartos" onchange="_ajustarQtdQuartos(this)"></div>
+      <div class="form-row"><label>Quantidade de banheiros</label><input type="number" min="0" id="field-qtd-banheiros"></div>
+      <div class="form-row"><label>Quantidade de lavabos</label><input type="number" min="0" id="field-qtd-lavabos"></div>
+    </div>
+    <div class="form-row">
+      <label>Tem varanda?</label>
+      <div class="pill-group" style="margin-top:6px">
+        <label class="pill-label pill-ok"><input type="radio" name="temVaranda" value="sim"><i class="fa-solid fa-circle-check"></i> Sim</label>
+        <label class="pill-label pill-bad"><input type="radio" name="temVaranda" value="nao"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:16px">
+      <label>Tamanho das camas (descreva por quarto)</label>
+      <textarea id="field-tamanho-camas" placeholder="Ex.: Quarto 1 - Queen / Quarto 2 - Solteiro e Solteiro"></textarea>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Tamanho da TV</label><input type="text" id="field-tamanho-tv"></div>
+      <div class="form-row"><label>Voltagem do imóvel</label><input type="text" id="field-voltagem" placeholder="110V / 220V / Bivolt"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SEÇÃO — INFRAESTRUTURA E CONFORTO
+══════════════════════════════════════════ -->
+<div class="section-card" id="sec-infra">
+  <div class="section-header" onclick="toggleSection('sec-infra')">
+    <div class="section-icon ic-dec"><i class="fa-solid fa-wifi"></i></div>
+    <div class="section-title">Infraestrutura e Conforto</div>
+    <i class="fa-solid fa-chevron-down section-chevron"></i>
+  </div>
+  <div class="section-body">
+    <div class="hint" style="margin-bottom:10px;">Ar-condicionado (se é só frio ou quente e frio) é registrado por cômodo, na aba de cada cômodo abaixo — varia de cômodo pra cômodo.</div>
+    <div class="form-row">
+      <label>Tem Wi-Fi?</label>
+      <div class="pill-group" style="margin-top:6px">
+        <label class="pill-label pill-ok"><input type="radio" name="temWifi" value="sim" onchange="_toggleCondicional('temWifi','sim','wrap-infra-wifi')"><i class="fa-solid fa-circle-check"></i> Sim</label>
+        <label class="pill-label pill-bad"><input type="radio" name="temWifi" value="nao" onchange="_toggleCondicional('temWifi','sim','wrap-infra-wifi')"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+      </div>
+    </div>
+    <div id="wrap-infra-wifi" style="display:none;">
+      <div class="form-row" style="margin-top:12px">
+        <label>Wi-Fi está funcionando?</label>
+        <div class="pill-group" style="margin-top:6px">
+          <label class="pill-label pill-ok"><input type="radio" name="wifiFunciona" value="sim"><i class="fa-solid fa-circle-check"></i> Sim</label>
+          <label class="pill-label pill-bad"><input type="radio" name="wifiFunciona" value="nao"><i class="fa-solid fa-circle-xmark"></i> Não</label>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label>Qual operadora de internet?</label>
+        <input type="text" id="field-operadora-internet">
+      </div>
+    </div>
   </div>
 </div>
 
@@ -899,6 +1048,39 @@ select.urg-select {
 
 <!-- Itens obrigatórios gerados dinamicamente via JS -->
 <div id="itens-container"></div>
+
+<!-- ═══════════════════════════════════════
+     SEÇÃO — ITENS EXTRAS
+══════════════════════════════════════════ -->
+<div class="section-card" id="sec-extras">
+  <div class="section-header" onclick="toggleSection('sec-extras')">
+    <div class="section-icon ic-dec"><i class="fa-solid fa-box-open"></i></div>
+    <div class="section-title">Itens Extras</div>
+    <i class="fa-solid fa-chevron-down section-chevron"></i>
+  </div>
+  <div class="section-body">
+    <div class="hint" style="margin-bottom:10px;">Itens que existem no imóvel mas não estão na lista de itens obrigatórios da WeCare.</div>
+    <div id="extras-lista"></div>
+    <button type="button" class="btn btn-outline btn-sm" onclick="adicionarItemExtra()" style="margin-top:8px;"><i class="fa-solid fa-plus"></i> Adicionar item extra</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SEÇÃO — SOLICITAÇÕES DA PROPRIETÁRIA
+══════════════════════════════════════════ -->
+<div class="section-card" id="sec-solicitacoes">
+  <div class="section-header" onclick="toggleSection('sec-solicitacoes')">
+    <div class="section-icon ic-dec"><i class="fa-solid fa-comment-dots"></i></div>
+    <div class="section-title">Solicitações da Proprietária</div>
+    <i class="fa-solid fa-chevron-down section-chevron"></i>
+  </div>
+  <div class="section-body">
+    <div class="form-row">
+      <label>Solicitações extras / observações da proprietária</label>
+      <textarea id="field-obs-proprietaria" placeholder="Pedidos ou observações que a proprietária passou durante a vistoria..." style="min-height:80px"></textarea>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════
      CONCLUSÃO
@@ -926,10 +1108,6 @@ select.urg-select {
     <div class="form-row" style="margin-top:16px">
       <label>Observações finais</label>
       <textarea id="field-obs-finais" placeholder="Observações gerais sobre a vistoria..." style="min-height:100px"></textarea>
-    </div>
-    <div class="form-row" style="margin-top:16px">
-      <label>Nome do Vistoriador *</label>
-      <input type="text" id="field-nome-conclusao" placeholder="Nome completo">
     </div>
   </div>
 </div>
@@ -1112,6 +1290,7 @@ const VISTORIA_COMODO_TIPOS = ['Quarto','Sala','Cozinha','Banheiro Completo','La
 // telas (app.js e vistoria.html) não compartilham módulo JS (mesmo padrão de
 // getComodos/_getComodosImovel). Vistoriador só registra "quanto já tem" por item —
 // isso alimenta direto im.compras[subKey].qtdTem no admin, sem passo manual no meio.
+let MODALIDADES_ENXOVAL = [];
 let ITENS_COMPRAS = [
   {cat:'Cama',nome:'Jogo de Cama Basic Percalle',tipoPreco:'enxoval',qtdRule:'3-colchao',modalidades:['comprado']},
   {cat:'Cama',nome:'Cobertor Aspen II',tipoPreco:'enxoval',qtdRule:'2-colchao',modalidades:['comprado']},
@@ -1171,10 +1350,17 @@ const CAMA_LEITOS = {'Solteiro':1,'Casal':1,'Queen':1,'King':1,'Sofá-cama Solte
 
 function _qtdComodoVal(v) { if (v === true) return 1; if (!v) return 0; const n = parseInt(v); return isNaN(n) ? 0 : n; }
 function totalLeitosVistoria(camas) { return (camas || []).reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0); }
+// Mesma lógica de app.js:modalidadeEnxovalAtual — casa o fornecedor salvo com o catálogo
+// MODALIDADES_ENXOVAL (carregado em /vistoria-load) em vez de só adivinhar por substring,
+// senão fornecedor custom ou "Manual" caía sempre no fallback errado (flashee/intense).
 function modalidadeEnxovalAtualVistoria(imDados) {
   const def = (imDados && imDados.defEnxoval) || {};
   if ((def.tipo || 'comprado') !== 'aluguel') return 'comprado';
-  return (def.fornecedor || '').toLowerCase().includes('intense') ? 'intense' : 'flashee';
+  const forn = (def.fornecedor || '').trim().toLowerCase();
+  if (forn === 'manual') return 'manual';
+  const match = MODALIDADES_ENXOVAL.find(m => (m.nome || '').toLowerCase() === forn);
+  if (match) return match.id;
+  return forn.includes('intense') ? 'intense' : 'flashee';
 }
 function itemValidoParaModalidadeVistoria(item, modalidade) { return !item.modalidades || item.modalidades.includes(modalidade); }
 function calcNecessarioVistoria(item, camas, banheiros, quartos, banheirosCompletos, hospedes, lavabos, andares) {
@@ -1203,6 +1389,24 @@ function getComodosAtuais() {
   return (currentImovel.comodosSnapshot && currentImovel.comodosSnapshot.length) ? currentImovel.comodosSnapshot : getComodos(currentImovel);
 }
 
+// Se o vistoriador contar mais quartos do que o imóvel tem cadastrado no admin ("Estrutura
+// do Imóvel" diz 2 mas o snapshot só trouxe 1), adiciona aba(s) de Quarto extra na hora — só
+// ACRESCENTA, nunca remove aba existente (evitaria perder vídeo/irregularidade já preenchido
+// nela). Coleta o que já foi digitado antes de reconstruir e restaura depois, pra não perder
+// nada nos cômodos que já existiam.
+function _ajustarQtdQuartos(inputEl) {
+  const novoTotal = Math.max(0, parseInt(inputEl.value) || 0);
+  const listaAtual = getComodosAtuais().slice();
+  const quartosAtuais = listaAtual.filter(n => n.startsWith('Quarto')).length;
+  if (novoTotal <= quartosAtuais) return;
+  const dadosAtuais = collectFormData();
+  for (let i = quartosAtuais + 1; i <= novoTotal; i++) listaAtual.push('Quarto ' + i);
+  currentImovel.comodosSnapshot = listaAtual;
+  buildComodos();
+  _restaurarDados(dadosAtuais);
+  updateProgress();
+}
+
 // Carrega a vistoria (imóvel, cômodos travados na criação, checklist configurado e
 // rascunho já salvo) via link escopado — id do imóvel + id da vistoria + token.
 // Não usa localStorage nem token mestre: essa página roda no navegador de alguém
@@ -1219,6 +1423,16 @@ async function _carregarVistoria() {
     currentImovel = { id, nome: j.imovelNome || id, comodosSnapshot: j.comodos || [] };
     VISTORIA_CAMPOS = Array.isArray(j.camposVistoria) ? j.camposVistoria : [];
     if (Array.isArray(j.itensCompras) && j.itensCompras.length) ITENS_COMPRAS = j.itensCompras;
+    if (Array.isArray(j.modalidadesEnxoval)) MODALIDADES_ENXOVAL = j.modalidadesEnxoval;
+    if (j.pastaDrive && j.pastaDrive.link) {
+      const info = document.getElementById('pasta-drive-info');
+      const link = document.getElementById('pasta-drive-link');
+      if (info && link) { link.href = j.pastaDrive.link; info.style.display = ''; }
+    } else if (j.pastaDrive && j.pastaDrive.erro) {
+      const erroBox = document.getElementById('pasta-drive-erro');
+      const erroMsg = document.getElementById('pasta-drive-erro-msg');
+      if (erroBox && erroMsg) { erroMsg.textContent = j.pastaDrive.erro; erroBox.style.display = ''; }
+    }
     IMOVEL_DADOS = j.imovelDados || {};
     COMPRAS_ATUAL = j.comprasAtual || {};
     return j.dados || {};
@@ -1237,6 +1451,52 @@ function showLinkError(msg) {
   </div>`;
 }
 
+// Mostra/esconde um bloco condicional (id wrapId) conforme a resposta de um grupo de rádio
+// (name radioName) bater com showWhenValue — usado em Acesso/Infra (garagem, portaria, wi-fi).
+function _toggleCondicional(radioName, showWhenValue, wrapId) {
+  const checked = document.querySelector(`input[name="${radioName}"]:checked`);
+  const wrap = document.getElementById(wrapId);
+  if (wrap) wrap.style.display = (checked && checked.value === showWhenValue) ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════
+// ITENS EXTRAS — achados no imóvel, fora do catálogo obrigatório da WeCare (não é lista de
+// compra, é registro informacional pra equipe decidir "o que fazer" depois — não confundir
+// com im.itensExtras do admin, que é a lista de COMPRA extra do imóvel, coisa diferente).
+// ═══════════════════════════════════════════════════════
+let _itensExtrasState = [];
+function _renderItensExtras() {
+  const wrap = document.getElementById('extras-lista');
+  if (!wrap) return;
+  if (!_itensExtrasState.length) { wrap.innerHTML = `<div class="hint">Nenhum item extra adicionado.</div>`; return; }
+  wrap.innerHTML = _itensExtrasState.map((it, i) => `
+    <div class="form-grid" style="border-bottom:1px solid var(--gray-100);padding-bottom:12px;margin-bottom:12px;align-items:end;">
+      <div class="form-row"><label>Item encontrado</label><input type="text" value="${esc(it.item || '')}" oninput="_atualizarItemExtra(${i},'item',this.value)"></div>
+      <div class="form-row"><label>Quantidade</label><input type="number" min="0" value="${esc(it.quantidade ?? '')}" oninput="_atualizarItemExtra(${i},'quantidade',this.value)"></div>
+      <div class="form-row"><label>Observação</label><input type="text" value="${esc(it.observacao || '')}" oninput="_atualizarItemExtra(${i},'observacao',this.value)"></div>
+      <div class="form-row">
+        <label>O que fazer?</label>
+        <select onchange="_atualizarItemExtra(${i},'oQueFazer',this.value)">
+          <option value="">Selecione...</option>
+          ${['Manter no imóvel', 'Perguntar à proprietária', 'Descartar', 'Registrar como item da WeCare'].map(o => `<option value="${esc(o)}"${it.oQueFazer === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}
+        </select>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="removerItemExtra(${i})" style="height:fit-content;"><i class="fa-solid fa-trash"></i></button>
+    </div>`).join('');
+}
+function adicionarItemExtra() {
+  _itensExtrasState.push({ item: '', quantidade: '', observacao: '', oQueFazer: '' });
+  _renderItensExtras();
+}
+function _atualizarItemExtra(i, campo, valor) {
+  if (!_itensExtrasState[i]) return;
+  _itensExtrasState[i][campo] = valor;
+}
+function removerItemExtra(i) {
+  _itensExtrasState.splice(i, 1);
+  _renderItensExtras();
+}
+
 // Preenche os campos da tela com um rascunho já salvo (autosave anterior ou reabertura
 // de um link já usado antes) — antes disso, um autosave existia mas nunca era recarregado.
 // idx -> quantidade de frames de mídia já salvos no servidor (de uma sessão anterior) —
@@ -1249,7 +1509,38 @@ function _restaurarDados(dados) {
   if (dados.vistoriador) document.getElementById('field-vistoriador').value = dados.vistoriador;
   if (dados.aptoPara) { const r = document.querySelector(`input[name="apto"][value="${dados.aptoPara}"]`); if (r) r.checked = true; }
   if (dados.obsFinais) document.getElementById('field-obs-finais').value = dados.obsFinais;
-  if (dados.nomeConc) document.getElementById('field-nome-conclusao').value = dados.nomeConc;
+  if (dados.obsProprietaria) document.getElementById('field-obs-proprietaria').value = dados.obsProprietaria;
+
+  const acesso = dados.acesso || {};
+  if (acesso.senhaPorta) document.getElementById('field-senha-porta').value = acesso.senhaPorta;
+  if (acesso.modeloFechadura) document.getElementById('field-modelo-fechadura').value = acesso.modeloFechadura;
+  if (acesso.andarAreasComuns) document.getElementById('field-andar-areas-comuns').value = acesso.andarAreasComuns;
+  if (acesso.contatoPortaria) document.getElementById('field-contato-portaria').value = acesso.contatoPortaria;
+  if (acesso.portaria24h) { const r = document.querySelector(`input[name="portaria24h"][value="${acesso.portaria24h}"]`); if (r) r.checked = true; }
+  if (acesso.temGaragem) { const r = document.querySelector(`input[name="temGaragem"][value="${acesso.temGaragem}"]`); if (r) r.checked = true; }
+  if (acesso.acessoGaragem) document.getElementById('field-acesso-garagem').value = acesso.acessoGaragem;
+  if (acesso.prestadorLivre) { const r = document.querySelector(`input[name="prestadorLivre"][value="${acesso.prestadorLivre}"]`); if (r) r.checked = true; }
+  if (acesso.horariosPermitidos) document.getElementById('field-horarios-permitidos').value = acesso.horariosPermitidos;
+  _toggleCondicional('temGaragem', 'sim', 'wrap-acesso-garagem');
+  _toggleCondicional('prestadorLivre', 'nao', 'wrap-acesso-horarios');
+
+  const estrutura = dados.estrutura || {};
+  if (estrutura.qtdQuartos != null) document.getElementById('field-qtd-quartos').value = estrutura.qtdQuartos;
+  if (estrutura.qtdBanheiros != null) document.getElementById('field-qtd-banheiros').value = estrutura.qtdBanheiros;
+  if (estrutura.qtdLavabos != null) document.getElementById('field-qtd-lavabos').value = estrutura.qtdLavabos;
+  if (estrutura.temVaranda) { const r = document.querySelector(`input[name="temVaranda"][value="${estrutura.temVaranda}"]`); if (r) r.checked = true; }
+  if (estrutura.tamanhoCamas) document.getElementById('field-tamanho-camas').value = estrutura.tamanhoCamas;
+  if (estrutura.tamanhoTV) document.getElementById('field-tamanho-tv').value = estrutura.tamanhoTV;
+  if (estrutura.voltagem) document.getElementById('field-voltagem').value = estrutura.voltagem;
+
+  const infra = dados.infra || {};
+  if (infra.temWifi) { const r = document.querySelector(`input[name="temWifi"][value="${infra.temWifi}"]`); if (r) r.checked = true; }
+  if (infra.wifiFunciona) { const r = document.querySelector(`input[name="wifiFunciona"][value="${infra.wifiFunciona}"]`); if (r) r.checked = true; }
+  if (infra.operadoraInternet) document.getElementById('field-operadora-internet').value = infra.operadoraInternet;
+  _toggleCondicional('temWifi', 'sim', 'wrap-infra-wifi');
+
+  if (Array.isArray(dados.itensEncontrados)) { _itensExtrasState = dados.itensEncontrados; _renderItensExtras(); }
+
   Object.entries(dados.camposGerais || {}).forEach(([label, val]) => {
     const campo = VISTORIA_CAMPOS.find(c => c.label === label && c.escopo === 'geral');
     if (!campo) return;
@@ -1266,6 +1557,7 @@ function _restaurarDados(dados) {
   (dados.comodos || []).forEach((c, idx) => {
     const irreg = document.getElementById('irreg-' + idx);
     if (irreg && c.irregularidade) irreg.value = c.irregularidade;
+    if (c.prioridade) { const p = document.getElementById('prioridade-' + idx); if (p) p.value = c.prioridade; }
     Object.entries(c.camposExtras || {}).forEach(([label, val]) => {
       const campo = VISTORIA_CAMPOS.find(x => x.label === label && x.escopo === 'comodo');
       if (!campo) return;
@@ -1410,6 +1702,15 @@ function buildComodos() {
           <label>Irregularidades encontradas</label>
           <textarea id="irreg-${idx}" rows="3" placeholder="Descreva problemas, danos ou itens com defeito neste cômodo..." oninput="updateProgress()" style="resize:vertical"></textarea>
         </div>
+        <div class="form-row" style="margin-top:8px;max-width:220px;">
+          <label>Prioridade (se houver irregularidade)</label>
+          <select id="prioridade-${idx}">
+            <option value="">Selecione...</option>
+            <option value="baixa">Baixa</option>
+            <option value="media">Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
         ${camposHtml}
       </div>
     </div>`;
@@ -1439,6 +1740,7 @@ function _gerarLinhasItensObrigatorios() {
   const rows = [];
   ITENS_COMPRAS.forEach((item, idx) => {
     if (!itemValidoParaModalidadeVistoria(item, modalidade)) return;
+    const isEnxoval = !!(item.modalidades && item.modalidades.length);
     if (item.tipoPreco === 'enxoval' && camas.length) {
       const porTipo = {};
       camas.forEach(c => { const t = CAMA_TIPO_ENXOVAL[c.tipo] || 'Solteiro'; (porTipo[t] = porTipo[t] || []).push(c); });
@@ -1448,24 +1750,19 @@ function _gerarLinhasItensObrigatorios() {
         const dashIdx = (item.qtdRule || '1-colchao').indexOf('-');
         const q = parseInt((item.qtdRule || '1-colchao').slice(0, dashIdx)) || 1;
         const qtdNec = q * camasParaItem.reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0);
-        rows.push({ subKey: `${idx}_${tipoEnx}`, cat: item.cat, label: `${item.nome} (${tipoEnx})`, qtdNec });
+        rows.push({ subKey: `${idx}_${tipoEnx}`, cat: item.cat, label: `${item.nome} (${tipoEnx})`, qtdNec, isEnxoval });
       });
     } else {
       const qtdNec = calcNecessarioVistoria(item, camas, d.banheiros, d.quartos, d.banheirosCompletos, d.maxHospedes, d.banheirosLavabo, d.andares);
-      rows.push({ subKey: String(idx), cat: item.cat, label: item.nome, qtdNec });
+      rows.push({ subKey: String(idx), cat: item.cat, label: item.nome, qtdNec, isEnxoval });
     }
   });
   return rows;
 }
 
-function buildItensObrigatorios() {
-  const container = document.getElementById('itens-container');
-  const navContainer = document.getElementById('nav-itens');
-  if (!container) return;
-  const rows = _gerarLinhasItensObrigatorios();
-  if (!rows.length) { container.innerHTML = ''; if (navContainer) navContainer.innerHTML = ''; return; }
+function _htmlLinhasItensPorCategoria(rows) {
   const cats = [...new Set(rows.map(r => r.cat))];
-  const linhasHtml = cats.map(cat => `
+  return cats.map(cat => `
     <div style="margin-bottom:16px;">
       <div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${esc(cat)}</div>
       ${rows.filter(r => r.cat === cat).map(r => {
@@ -1480,7 +1777,26 @@ function buildItensObrigatorios() {
         </div>`;
       }).join('')}
     </div>`).join('');
-  container.innerHTML = `
+}
+
+// Igual à planilha-modelo: itens gerais (sem restrição de modalidade — toalha, cozinha,
+// limpeza etc.) numa seção, e o enxoval de cama (que muda conforme Comprado/Flashee/outro
+// fornecedor) numa seção própria "Checklist de Enxoval — {fornecedor}" logo abaixo.
+function buildItensObrigatorios() {
+  const container = document.getElementById('itens-container');
+  const navContainer = document.getElementById('nav-itens');
+  if (!container) return;
+  const rows = _gerarLinhasItensObrigatorios();
+  if (!rows.length) { container.innerHTML = ''; if (navContainer) navContainer.innerHTML = ''; return; }
+  const geraisRows = rows.filter(r => !r.isEnxoval);
+  const enxovalRows = rows.filter(r => r.isEnxoval);
+  const def = (IMOVEL_DADOS || {}).defEnxoval || {};
+  const fornecedorLabel = (def.tipo || 'comprado') === 'aluguel' ? (def.fornecedor || 'fornecedor não definido') : 'Comprado';
+
+  let html = '';
+  let navHtml = '';
+  if (geraisRows.length) {
+    html += `
     <div class="section-card" id="sec-itens">
       <div class="section-header" onclick="toggleSection('sec-itens')">
         <div class="section-icon ic-dec"><i class="fa-solid fa-list-check"></i></div>
@@ -1489,15 +1805,38 @@ function buildItensObrigatorios() {
       </div>
       <div class="section-body">
         <div class="hint" style="margin-bottom:10px;">Preencha quanto já existe no imóvel de cada item — isso atualiza a lista de compras automaticamente, sem precisar reenviar depois.</div>
-        ${linhasHtml}
+        ${_htmlLinhasItensPorCategoria(geraisRows)}
       </div>
     </div>`;
-  if (navContainer) navContainer.innerHTML = `
+    navHtml += `
     <a class="nav-item" href="#sec-itens" onclick="navClick(this)">
       <span class="nav-icon ic-dec"><i class="fa-solid fa-list-check"></i></span>
       Itens Obrigatórios
       <span class="nav-check"><i class="fa-solid fa-check"></i></span>
     </a>`;
+  }
+  if (enxovalRows.length) {
+    html += `
+    <div class="section-card" id="sec-itens-enxoval">
+      <div class="section-header" onclick="toggleSection('sec-itens-enxoval')">
+        <div class="section-icon ic-dec"><i class="fa-solid fa-bed"></i></div>
+        <div class="section-title">Checklist de Enxoval — ${esc(fornecedorLabel)}</div>
+        <i class="fa-solid fa-chevron-down section-chevron"></i>
+      </div>
+      <div class="section-body">
+        <div class="hint" style="margin-bottom:10px;">Confira item a item — muda conforme a modalidade de enxoval configurada para este imóvel (${esc(fornecedorLabel)}).</div>
+        ${_htmlLinhasItensPorCategoria(enxovalRows)}
+      </div>
+    </div>`;
+    navHtml += `
+    <a class="nav-item" href="#sec-itens-enxoval" onclick="navClick(this)">
+      <span class="nav-icon ic-dec"><i class="fa-solid fa-bed"></i></span>
+      Checklist de Enxoval
+      <span class="nav-check"><i class="fa-solid fa-check"></i></span>
+    </a>`;
+  }
+  container.innerHTML = html;
+  if (navContainer) navContainer.innerHTML = navHtml;
 }
 
 function _coletarItensObrigatorios() {
@@ -1631,7 +1970,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   buildGeral();
   buildComodos();
   buildItensObrigatorios();
+  _renderItensExtras();
   _restaurarDados(dados);
+  if ((dados.estrutura || {}).qtdQuartos) _ajustarQtdQuartos(document.getElementById('field-qtd-quartos'));
   updateProgress();
 
   if (VISTORIA_STATUS === 'enviado') {
@@ -1670,7 +2011,7 @@ function closeSidebar() {
 // ═══════════════════════════════════════════════════════
 function updateProgress() {
   const comodos = getComodosAtuais();
-  const total = 1 + comodos.length + 1; // cabeçalho + cômodos + conclusão
+  const total = 1 + 3 + comodos.length + 1; // cabeçalho + acesso/estrutura/infra + cômodos + conclusão
   let done = 0;
 
   // Cabeçalho
@@ -1679,6 +2020,19 @@ function updateProgress() {
   if (cabOk) done++;
   const cabNav = document.querySelector('.nav-item[href="#sec-cab"]');
   if (cabNav) cabNav.classList.toggle('done', cabOk);
+
+  // Acesso / Estrutura / Infra — cada uma "feita" quando pelo menos o campo principal está preenchido
+  const acessoOk = !!(_valorRadio('portaria24h') || _valorRadio('temGaragem') || _valorCampo('field-senha-porta'));
+  if (acessoOk) done++;
+  document.querySelector('.nav-item[href="#sec-acesso"]')?.classList.toggle('done', acessoOk);
+
+  const estruturaOk = !!_valorCampo('field-qtd-quartos');
+  if (estruturaOk) done++;
+  document.querySelector('.nav-item[href="#sec-estrutura"]')?.classList.toggle('done', estruturaOk);
+
+  const infraOk = !!_valorRadio('temWifi');
+  if (infraOk) done++;
+  document.querySelector('.nav-item[href="#sec-infra"]')?.classList.toggle('done', infraOk);
 
   // Cômodos — marcado como done se tiver pelo menos 1 vídeo OU irregularidade preenchida
   comodos.forEach((nome, idx) => {
@@ -1691,8 +2045,7 @@ function updateProgress() {
   });
 
   // Conclusão
-  const concOk = !!(document.querySelector('input[name="apto"]:checked') &&
-    document.getElementById('field-nome-conclusao').value.trim());
+  const concOk = !!document.querySelector('input[name="apto"]:checked');
   if (concOk) done++;
   const concNav = document.querySelector('.nav-item[href="#sec-conclusao"]');
   if (concNav) concNav.classList.toggle('done', concOk);
@@ -1757,12 +2110,48 @@ function _coletarCamposComodo(campos, idx) {
   return out;
 }
 
+function _valorRadio(name) { return (document.querySelector(`input[name="${name}"]:checked`) || {}).value || ''; }
+function _valorCampo(id) { return (document.getElementById(id) || {}).value || ''; }
+
+function _coletarAcesso() {
+  return {
+    senhaPorta: _valorCampo('field-senha-porta'),
+    modeloFechadura: _valorCampo('field-modelo-fechadura'),
+    andarAreasComuns: _valorCampo('field-andar-areas-comuns'),
+    contatoPortaria: _valorCampo('field-contato-portaria'),
+    portaria24h: _valorRadio('portaria24h'),
+    temGaragem: _valorRadio('temGaragem'),
+    acessoGaragem: _valorCampo('field-acesso-garagem'),
+    prestadorLivre: _valorRadio('prestadorLivre'),
+    horariosPermitidos: _valorCampo('field-horarios-permitidos'),
+  };
+}
+function _coletarEstrutura() {
+  return {
+    qtdQuartos: _valorCampo('field-qtd-quartos'),
+    qtdBanheiros: _valorCampo('field-qtd-banheiros'),
+    qtdLavabos: _valorCampo('field-qtd-lavabos'),
+    temVaranda: _valorRadio('temVaranda'),
+    tamanhoCamas: _valorCampo('field-tamanho-camas'),
+    tamanhoTV: _valorCampo('field-tamanho-tv'),
+    voltagem: _valorCampo('field-voltagem'),
+  };
+}
+function _coletarInfra() {
+  return {
+    temWifi: _valorRadio('temWifi'),
+    wifiFunciona: _valorRadio('wifiFunciona'),
+    operadoraInternet: _valorCampo('field-operadora-internet'),
+  };
+}
+
 function collectFormData() {
   const comodos = getComodosAtuais();
   const comodosData = comodos.map((nome, idx) => ({
     nome,
     qtdVideos: (videoFiles[idx] || []).length,
     irregularidade: (document.getElementById('irreg-' + idx) || {}).value || '',
+    prioridade: (document.getElementById('prioridade-' + idx) || {}).value || '',
     camposExtras: _coletarCamposComodo(_camposComodoPara(tipoBaseComodo(nome)), idx)
   }));
 
@@ -1773,13 +2162,17 @@ function collectFormData() {
     imovelNome: currentImovel.nome,
     data: document.getElementById('field-data').value,
     vistoriador: document.getElementById('field-vistoriador').value,
+    acesso: _coletarAcesso(),
+    estrutura: _coletarEstrutura(),
+    infra: _coletarInfra(),
     comodos: comodosData,
     camposGerais: _coletarCamposGerais(),
     itensChecklist: _coletarItensObrigatorios(),
+    itensEncontrados: _itensExtrasState,
+    obsProprietaria: document.getElementById('field-obs-proprietaria').value,
     aptoPara: (document.querySelector('input[name="apto"]:checked') || {}).value || null,
     obsFinais: document.getElementById('field-obs-finais').value,
-    nomeConc: document.getElementById('field-nome-conclusao').value,
-    pendencias: irregularidades.map(c => ({ comodo: c.nome, descricao: c.irregularidade }))
+    pendencias: irregularidades.map(c => ({ comodo: c.nome, descricao: c.irregularidade, prioridade: c.prioridade || null }))
   };
 }
 
@@ -1801,12 +2194,6 @@ function submitVistoria() {
   if (!document.querySelector('input[name="apto"]:checked')) {
     showToast('Indique se o imóvel está apto para operação.');
     document.getElementById('sec-conclusao').classList.remove('collapsed');
-    return;
-  }
-  if (!document.getElementById('field-nome-conclusao').value.trim()) {
-    showToast('Informe o nome completo na conclusão.');
-    document.getElementById('sec-conclusao').classList.remove('collapsed');
-    document.getElementById('field-nome-conclusao').focus();
     return;
   }
 

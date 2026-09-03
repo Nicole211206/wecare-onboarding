@@ -18,17 +18,17 @@ let MODELOS_NEGOCIO=[];
 // Fornecedor na aba Contrato (Enxoval), e a leitura de qual modalidade um imóvel está em
 // (modalidadeEnxovalAtual, casando pelo nome exato do fornecedor escolhido).
 let MODALIDADES_ENXOVAL=[];
-function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome])];}
+function _opcoesModalidades(){return[['comprado','Comprado'],...MODALIDADES_ENXOVAL.map(m=>[m.id,m.nome]),['manual','Manual (exceção)']];}
 
 // ═══════════════════ FASES ═══════════════════
-const FASES=['contrato','setup','vistoria_compras','formulario','preparacao','anuncio'];
+const FASES=['contrato','setup','vistoria_compras','preparacao','formulario','anuncio'];
 const FASE_LABEL={
   contrato:'Contrato', setup:'Setup e Definições', vistoria_compras:'Vistoria e Compras',
-  formulario:'Formulário', preparacao:'Preparação do Imóvel', anuncio:'Criação do Anúncio'
+  preparacao:'Preparação do Imóvel', formulario:'Formulário', anuncio:'Criação do Anúncio'
 };
 const FASE_COLOR={
   contrato:'sky', setup:'gold', vistoria_compras:'peach',
-  formulario:'lav', preparacao:'rose', anuncio:'lavender'
+  preparacao:'rose', formulario:'lav', anuncio:'lavender'
 };
 // Migração: imóveis com status das fases antigas (antes do reagrupamento de 2026-07) caem na fase nova equivalente
 const FASES_LEGADO_MAP={compras:'vistoria_compras', producao:'preparacao', compilamento:'anuncio', auditoria:'anuncio'};
@@ -523,6 +523,7 @@ function modalidadeEnxovalAtual(im){
   const def=im.defEnxoval||{};
   if((def.tipo||'comprado')!=='aluguel')return'comprado';
   const forn=(def.fornecedor||'').trim().toLowerCase();
+  if(forn==='manual')return'manual';
   const match=MODALIDADES_ENXOVAL.find(m=>m.nome.toLowerCase()===forn);
   if(match)return match.id;
   return forn.includes('intense')?'intense':'flashee'; // fallback p/ dado antigo fora do catálogo
@@ -1108,9 +1109,16 @@ function _coletarDadosAba(aba,im){
   if(aba==='dados'){
     im.nome=g('d-nome')||im.nome; im.endereco=g('d-endereco');
     im.proprietarioNome=g('d-prop-nome'); im.proprietarioTel=g('d-prop-tel'); im.proprietarioEmail=g('d-prop-email');
+    im.tipoDocumento=g('d-doc-tipo')||'cpf'; im.cpf=g('d-doc-cpf');
+    im.cnpj=im.tipoDocumento==='cnpj'?g('d-doc-cnpj'):''; im.razaoSocial=im.tipoDocumento==='cnpj'?g('d-doc-razao-social'):'';
+    im.dadosBancarios=g('d-doc-dados-bancarios'); im.chavePix=g('d-doc-chave-pix');
     if(im.proprietarioId){
       const propVinculado=proprietarios.find(pr=>pr.id===im.proprietarioId);
-      if(propVinculado){propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;}
+      if(propVinculado){
+        propVinculado.nome=im.proprietarioNome||propVinculado.nome;propVinculado.telefone=im.proprietarioTel;propVinculado.email=im.proprietarioEmail;
+        propVinculado.tipoDocumento=im.tipoDocumento;propVinculado.cpf=im.cpf;propVinculado.cnpj=im.cnpj;
+        propVinculado.razaoSocial=im.razaoSocial;propVinculado.dadosBancarios=im.dadosBancarios;propVinculado.chavePix=im.chavePix;
+      }
     }
     im.comissaoWecare=gn('d-comissao'); im.comissaoBase=g('d-comissao-base');
     im.expectativaFaturamentoMensal=gn('d-faturamento-esperado');
@@ -1139,7 +1147,7 @@ function _coletarDadosAba(aba,im){
     im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
     if(!im.ops)im.ops={fotos:{},limpeza:{},vistoria:{}};
-    ['fotos','limpeza','vistoria'].forEach(op=>{
+    ['fotos','limpeza','vistoria','vistoria2'].forEach(op=>{
       if(!im.ops[op])im.ops[op]={};
       const v=gn(`ct-op-${op}`);if(v!=null)im.ops[op].custo=v;
     });
@@ -1168,6 +1176,10 @@ function _coletarDadosAba(aba,im){
       im.ops[op].hora=g(`op-${op}-hora`); im.ops[op].custo=gn(`op-${op}-custo`);
     });
     im.ops.vistoria.localizacao=g('op-vistoria-local');
+    if(!im.ops.vistoria2)im.ops.vistoria2={};
+    im.ops.vistoria2.data=g('op-vistoria2-data'); im.ops.vistoria2.responsavel=g('op-vistoria2-resp');
+    im.ops.vistoria2.hora=g('op-vistoria2-hora'); im.ops.vistoria2.custo=gn('op-vistoria2-custo');
+    im.ops.vistoria2.localizacao=g('op-vistoria2-local');
   }
   if(aba==='custos'){
     im.margemWecare=gn('cs-margem'); im.descontoTipo=g('cs-desc-tipo');
@@ -1257,6 +1269,15 @@ function renderAbaDados(im){
     <div class="form-group"><label>Telefone / WhatsApp</label><input id="d-prop-tel" class="input" value="${esc(im.proprietarioTel||'')}"></div>
     <div class="form-group"><label>E-mail</label><input id="d-prop-email" type="email" class="input" value="${esc(im.proprietarioEmail||'')}" placeholder="proprietario@email.com"></div>
   </div>
+  <details style="margin:4px 0 8px;">
+    <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text3);user-select:none;padding:6px 0;">
+      <i class="fa-solid fa-id-card"></i> Documento e Dados Bancários
+    </summary>
+    <div style="margin-top:6px;">
+      ${_htmlCamposDocImovel(im)}
+      <div class="hint">Preenchido pela IA (aba Captação → Analisar com IA) quando encontrar num contrato, ou manualmente. Se esse imóvel estiver vinculado a um proprietário do cadastro central, editar aqui também atualiza o cadastro dele.</div>
+    </div>
+  </details>
   <div class="form-row">
     <div class="form-group"><label>Comissão WeCare (%)</label>${numInput({id:'d-comissao',value:im.comissaoWecare||20,min:0,max:100})}</div>
     <div class="form-group"><label>Base de Cálculo</label><select id="d-comissao-base" class="input">
@@ -1440,7 +1461,7 @@ function renderAbaCaptacao(im){
   ${isAdmin()?(()=>{
     const custoFotosKpi=+im.ops?.fotos?.custo||0;
     const custoLimpezaKpi=+im.ops?.limpeza?.custo||0;
-    const custoVistoriaKpi=+im.ops?.vistoria?.custo||0;
+    const custoVistoriaKpi=(+im.ops?.vistoria?.custo||0)+(+im.ops?.vistoria2?.custo||0);
     const custosExtrasKpi=(im.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
     const gastoSetupKpi=custoFotosKpi+custoLimpezaKpi+custoVistoriaKpi+custosExtrasKpi;
     const valorSetupCobradoKpi=im.valorSetupCobrado||0;
@@ -1620,8 +1641,9 @@ function renderAbaContrato(im){
   const custoFotos=+ops.fotos?.custo||0;
   const custoLimpeza=+ops.limpeza?.custo||0;
   const custoVistoria=+ops.vistoria?.custo||0;
+  const custoVistoria2=+ops.vistoria2?.custo||0;
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
-  const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custosExtras;
+  const totalSetupBase=custoFotos+custoLimpeza+custoVistoria+custoVistoria2+custosExtras;
   const valorSetupCobrado=im.valorSetupCobrado||0;
   const margemSetup=valorSetupCobrado-totalSetupBase;
   const pctMargem=valorSetupCobrado>0?Math.round((margemSetup/valorSetupCobrado)*1000)/10:0;
@@ -1645,6 +1667,7 @@ function renderAbaContrato(im){
     <div class="form-group"><label>Fotos (R$)</label>${numInput({id:'ct-op-fotos',value:custoFotos,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
     <div class="form-group"><label>Limpeza (R$)</label>${numInput({id:'ct-op-limpeza',value:custoLimpeza,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
     <div class="form-group"><label>Vistoria (R$)</label>${numInput({id:'ct-op-vistoria',value:custoVistoria,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
+    <div class="form-group"><label>Segunda Vistoria (R$)</label>${numInput({id:'ct-op-vistoria2',value:custoVistoria2,min:0,step:50,oninput:'_atualizarSubtotalSetup()'})}</div>
   </div>
 
   ${gastosSetup.length?`<div style="margin-bottom:8px;">
@@ -1663,7 +1686,7 @@ function renderAbaContrato(im){
       <span id="ct-subtotal-val">${fmtMoeda(totalSetupBase)}</span>
     </div>
     <div id="ct-subtotal-detail" style="font-size:11px;color:var(--text-muted);margin-top:4px;">
-      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
+      Fotos ${fmtMoeda(custoFotos)} + Limpeza ${fmtMoeda(custoLimpeza)} + Vistoria ${fmtMoeda(custoVistoria)}${custoVistoria2?` + 2ª Vistoria ${fmtMoeda(custoVistoria2)}`:''}${custosExtras?` + Extras ${fmtMoeda(custosExtras)}`:''}
     </div>
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);margin-top:6px;">
       <span id="ct-setup-margem-label">Margem WeCare (${pctMargem}%)</span>
@@ -1716,16 +1739,17 @@ function _atualizarSubtotalSetup(){
   const f=+document.getElementById('ct-op-fotos')?.value||0;
   const l=+document.getElementById('ct-op-limpeza')?.value||0;
   const v=+document.getElementById('ct-op-vistoria')?.value||0;
+  const v2=+document.getElementById('ct-op-vistoria2')?.value||0;
   const im=getImovel(_imovelAtivoId);
   const extras=(im?.eventosExtras||[]).filter(e=>e.gastoSetup).reduce((s,g)=>s+(+g.custo||0),0);
-  const total=f+l+v+extras;
+  const total=f+l+v+v2+extras;
   const cobrado=+document.getElementById('ct-setup-cobrado')?.value||0;
   const margem=cobrado-total;
   const pct=cobrado>0?Math.round((margem/cobrado)*1000)/10:0;
   const valEl=document.getElementById('ct-subtotal-val');
   const detEl=document.getElementById('ct-subtotal-detail');
   if(valEl)valEl.textContent=fmtMoeda(total);
-  if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(extras?` + Extras ${fmtMoeda(extras)}`:'');
+  if(detEl)detEl.textContent=`Fotos ${fmtMoeda(f)} + Limpeza ${fmtMoeda(l)} + Vistoria ${fmtMoeda(v)}`+(v2?` + 2ª Vistoria ${fmtMoeda(v2)}`:'')+(extras?` + Extras ${fmtMoeda(extras)}`:'');
   const mgEl=document.getElementById('ct-setup-margem-label');
   const mgValEl=document.getElementById('ct-setup-margem-val');
   const totalEl=document.getElementById('ct-setup-total');
@@ -1775,7 +1799,7 @@ function renderAbaDefinicoes(im){
   <div class="form-group">
     <label>Modalidade</label>
     <select id="def-enxoval-tipo" class="input" onchange="_onEnxovalTipoChange(this)">
-      <option value="comprado"${(im.defEnxoval?.tipo||'comprado')==='comprado'?' selected':''}>Comprado (Buddemeyer)</option>
+      <option value="comprado"${(im.defEnxoval?.tipo||'comprado')==='comprado'?' selected':''}>Comprado</option>
       <option value="aluguel"${im.defEnxoval?.tipo==='aluguel'?' selected':''}>Alugado</option>
     </select>
   </div>
@@ -1784,6 +1808,7 @@ function renderAbaDefinicoes(im){
     <input id="def-enxoval-forn-texto" class="input" value="${esc(im.defEnxoval?.fornecedor||'')}" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">
     <select id="def-enxoval-forn-select" class="input" onchange="_recalcEnxovalValores()" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
       ${MODALIDADES_ENXOVAL.map(m=>`<option value="${esc(m.nome)}"${im.defEnxoval?.fornecedor===m.nome?' selected':''}>${esc(m.nome)}</option>`).join('')}
+      <option value="Manual"${im.defEnxoval?.fornecedor==='Manual'?' selected':''}>Manual (exceção)</option>
     </select>
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
@@ -1791,6 +1816,7 @@ function renderAbaDefinicoes(im){
     <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
+  ${im.defEnxoval?.fornecedor==='Manual'?'<div class="hint">Fornecedor "Manual" não recalcula os valores automaticamente — digite o valor mensal e o setup direto, pra casos de exceção.</div>':''}
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-clock"></i> Prazo</div>
   <div class="form-group">
@@ -1820,6 +1846,10 @@ function _valorEnxovalMensal(hospedes,fornecedorNome,campo){
   const h=+hospedes||0;if(h<=0)return 0;
   const m=MODALIDADES_ENXOVAL.find(x=>x.nome===fornecedorNome);
   if(!m)return campo==='cobrado'?h*110:0; // fallback p/ fornecedor fora do catálogo (dado antigo)
+  // Fornecedor que cobra por reserva (não por mês) não dá pra prever quantas reservas caem
+  // no mês, então o valor "mensal" usado pra preencher a aba Contrato é o mínimo mensal
+  // garantido, não a fórmula/tabela por hóspede (essa continua configurável só de referência).
+  if(m.baseCobranca==='reserva')return+(campo==='custo'?m.minimoMensalCusto:m.minimoMensalCobrado)||0;
   if(m.precificacaoMensal==='tabela'){
     const linhas=m.mensalTabela||[];
     const exata=linhas.find(l=>l.hospedes===h);
@@ -1852,6 +1882,7 @@ function _recalcEnxovalValores(){
   const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
   const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
   if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
+  if(fornecedor==='Manual')return; // não recalcula — deixa o valor digitado à mão como está
   const im=getImovel(_imovelAtivoId);
   mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
   setupEl.value=_valorEnxovalAutoSetup(fornecedor);
@@ -2052,7 +2083,7 @@ function salvarRascunhoForm(){
 }
 function importarRespostasParaRascunho(){
   const im=getImovel(_imovelAtivoId);if(!im||!im.formRespostas)return;
-  im.formRascunho={...(im.formRespostas||{}),...(im.formRascunho||{})};
+  im.formRascunho={...(im.formRascunho||{}),...(im.formRespostas||{})};
   saveAll();renderAba('formulario');showToast('Respostas do proprietário importadas.','sage');
 }
 function regenerarLinkForm(){
@@ -2261,7 +2292,7 @@ function renderAbaCompras(im){
     </div>
   </div>
 
-  <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval Buddemeyer</div>
+  <div class="form-section-title" style="margin-top:24px;"><i class="fa-brands fa-whatsapp"></i> Mensagem WhatsApp — Enxoval</div>
   <textarea id="wamsg-enxoval" class="input" rows="9" style="font-size:11.5px;font-family:monospace;" readonly onclick="this.select()">${esc(msgWA)}</textarea>
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
   </div>`;
@@ -2622,6 +2653,7 @@ function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
   let setupPago=0,setupPendente=0;
   ['fotos','limpeza','vistoria'].forEach(k=>{
+    if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(ops[k]?.pago)setupPago+=custo;else setupPendente+=custo;
   });
@@ -2691,6 +2723,7 @@ function renderAbaGastos(im){
       <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
       <tbody>
       ${['fotos','limpeza','vistoria'].map(k=>{
+        if(ops[k]?.naoAplica)return''; // marcado "não se aplica" na aba Produção — nem entra aqui
         const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
         const custo=+ops[k]?.custo||0;
         const feito=!!ops[k]?.feito;
@@ -2714,7 +2747,7 @@ function renderAbaGastos(im){
       <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
       <button class="btn btn-sm ${im.valorSetupCobradoRecebido?'btn-sage':'btn-outline'}" onclick="_toggleSetupRecebido()"><i class="fa-solid ${im.valorSetupCobradoRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.valorSetupCobradoRecebido?'Proprietário pagou':'Marcar como pago'}</button>
     </div>
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Outros gastos de setup (ex: segunda vistoria) são adicionados na aba Produção, marcando "Gasto de Setup" no evento extra.</div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup". Fase que não se aplica a este imóvel também se marca na aba Produção, dentro do card de Fotos/Limpeza/Vistoria.</div>
   </div>`;
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
@@ -3048,6 +3081,16 @@ function _onGastoSetupFeito(cb,key){
   if(!im.ops[key])im.ops[key]={};
   im.ops[key].feito=cb.checked;
   saveAll();renderAba('gastos');
+}
+// "Não se aplica" — pra imóveis que pulam uma dessas 3 fases (ex: proprietário já tinha
+// fotos profissionais, não precisou de limpeza inicial) e ficavam com a linha pendente pra
+// sempre no Setup, sem opção de tirar da tela. Exclui o item do cálculo de gasto pendente.
+function _onGastoSetupNaoAplica(key,valor){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!im.ops)im.ops={};
+  if(!im.ops[key])im.ops[key]={};
+  im.ops[key].naoAplica=valor;
+  saveAll();renderAba(_abaAtiva);
 }
 function _onEventoSetupFeito(cb,evId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.eventosExtras)return;
@@ -3450,7 +3493,7 @@ function renderAbaEnxoval(im){
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
     <div style="border:2px solid var(--rose);border-radius:12px;padding:16px;">
-      <div style="font-weight:700;font-size:14px;color:var(--rose);margin-bottom:12px;"><i class="fa-solid fa-shopping-bag"></i> Compra — Buddemeyer</div>
+      <div style="font-weight:700;font-size:14px;color:var(--rose);margin-bottom:12px;"><i class="fa-solid fa-shopping-bag"></i> Compra — Enxoval Próprio</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
         <thead><tr style="background:#fdf0f4"><th style="text-align:left;padding:4px;">Item (${tipo})</th><th>Qtd</th><th>Un</th><th>Total</th></tr></thead>
         <tbody>${linhasBud.map(l=>`<tr style="border-bottom:1px solid #f0e0e8;">
@@ -3478,11 +3521,11 @@ function renderAbaEnxoval(im){
 
   <div class="form-section-title"><i class="fa-solid fa-scale-balanced"></i> Comparativo</div>
   <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:20px;">
-    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:8px;">Critério</th><th style="text-align:center;">Buddemeyer</th><th style="text-align:center;">Flashee</th></tr></thead>
+    <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:8px;">Critério</th><th style="text-align:center;">Comprado</th><th style="text-align:center;">Flashee</th></tr></thead>
     <tbody>
       <tr><td style="padding:6px 8px;">Investimento inicial</td><td style="text-align:center;">${fmtMoeda(totalBud)}</td><td style="text-align:center;">${fmtMoeda(flasheeSetup)}</td></tr>
       <tr><td style="padding:6px 8px;">Custo mensal</td><td style="text-align:center;">R$ 0</td><td style="text-align:center;">${fmtMoeda(flasheeMensal)}/mês</td></tr>
-      <tr><td style="padding:6px 8px;">Ponto de equilíbrio</td><td colspan="2" style="text-align:center;">${eqMeses?eqMeses+' meses (Flashee supera Buddemeyer)':'—'}</td></tr>
+      <tr><td style="padding:6px 8px;">Ponto de equilíbrio</td><td colspan="2" style="text-align:center;">${eqMeses?eqMeses+' meses (Flashee supera Comprado)':'—'}</td></tr>
       <tr><td style="padding:6px 8px;">Propriedade do enxoval</td><td style="text-align:center;">Proprietário</td><td style="text-align:center;">Flashee</td></tr>
     </tbody>
   </table>
@@ -3510,7 +3553,11 @@ function renderAbaOperacional(im){
 
   const sCard=(titulo,icon,cor,id,op,hint='')=>`
   <div style="border:2px solid var(--${cor});border-radius:12px;padding:16px;margin-bottom:16px;">
-    <div style="font-weight:700;font-size:14px;color:var(--${cor});margin-bottom:10px;"><i class="fa-solid fa-${icon}"></i> ${titulo}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--${cor});"><i class="fa-solid fa-${icon}"></i> ${titulo}</div>
+      <label class="checkbox-label" style="font-size:12px;font-weight:400;"><input type="checkbox" ${op.naoAplica?'checked':''} onchange="_onGastoSetupNaoAplica('${id}',this.checked)"> Não se aplica a este imóvel</label>
+    </div>
+    <div style="${op.naoAplica?'opacity:.45;pointer-events:none;':''}">
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="op-${id}-data" type="date" class="input" value="${op.data||''}"></div>
       <div class="form-group"><label>Hora</label><input id="op-${id}-hora" type="time" class="input" value="${op.hora||''}"></div>
@@ -3523,6 +3570,7 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('${id}')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+    </div>
   </div>`;
 
   return`<div class="form-grid">
@@ -3532,7 +3580,11 @@ function renderAbaOperacional(im){
   ${sCard('Primeira Limpeza','broom','peach','limpeza',ops.limpeza,
     plS.length?`💡 Sugestão (${quartos}q): `+plS.map(p=>`${p.empresa} custo R$ ${p.custo} / cobrado R$ ${p.cobrado}`).join(' · '):'')}
   <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
-    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Vistoria</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--sage);"><i class="fa-solid fa-magnifying-glass"></i> Vistoria</div>
+      <label class="checkbox-label" style="font-size:12px;font-weight:400;"><input type="checkbox" ${ops.vistoria?.naoAplica?'checked':''} onchange="_onGastoSetupNaoAplica('vistoria',this.checked)"> Não se aplica a este imóvel</label>
+    </div>
+    <div style="${ops.vistoria?.naoAplica?'opacity:.45;pointer-events:none;':''}">
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="op-vistoria-data" type="date" class="input" value="${ops.vistoria?.data||''}"></div>
       <div class="form-group"><label>Hora</label><input id="op-vistoria-hora" type="time" class="input" value="${ops.vistoria?.hora||''}"></div>
@@ -3551,10 +3603,33 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+    </div>
+  </div>
+
+  <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
+    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Segunda Vistoria</div>
+    <div class="form-row">
+      <div class="form-group"><label>Data</label><input id="op-vistoria2-data" type="date" class="input" value="${ops.vistoria2?.data||''}"></div>
+      <div class="form-group"><label>Hora</label><input id="op-vistoria2-hora" type="time" class="input" value="${ops.vistoria2?.hora||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Responsável</label><input id="op-vistoria2-resp" class="input" value="${esc(ops.vistoria2?.responsavel||'')}"></div>
+      <div class="form-group"><label>Custo (R$)</label><input id="op-vistoria2-custo" type="number" class="input" value="${ops.vistoria2?.custo||0}"></div>
+    </div>
+    <div class="form-group"><label>Localização</label>
+      <select id="op-vistoria2-local" class="input">
+        <option value="central"${(ops.vistoria2?.localizacao||'central')==='central'?' selected':''}>Central (SP)</option>
+        <option value="litoral"${ops.vistoria2?.localizacao==='litoral'?' selected':''}>Litoral</option>
+        <option value="interior"${ops.vistoria2?.localizacao==='interior'?' selected':''}>Interior</option>
+      </select>
+    </div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
+      <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
+    </button>
   </div>
 
   <div class="form-section-title" style="margin-top:8px;"><i class="fa-solid fa-calendar-plus"></i> Outros Eventos</div>
-  <div class="hint" style="margin-bottom:10px;">Ex: segunda vistoria, instalação de internet, manutenção agendada — aparecem no Calendário junto com fotos/limpeza/vistoria.</div>
+  <div class="hint" style="margin-bottom:10px;">Ex: instalação de internet, manutenção agendada — aparecem no Calendário junto com fotos/limpeza/vistoria.</div>
   ${(im.eventosExtras||[]).length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
     <thead><tr style="background:var(--surface-2)">
       <th style="text-align:left;padding:6px 8px;">Título</th>
@@ -3662,7 +3737,7 @@ async function gerarPDFOrcamento(){
   const frete=im.freteTotal||0;
   const custoFotos=+im.ops?.fotos?.custo||0;
   const custoLimpeza=+im.ops?.limpeza?.custo||0;
-  const custoVistoria=+im.ops?.vistoria?.custo||0;
+  const custoVistoria=(+im.ops?.vistoria?.custo||0)+(+im.ops?.vistoria2?.custo||0);
   const gastosSetup=(im.eventosExtras||[]).filter(e=>e.gastoSetup);
   const custosExtras=gastosSetup.reduce((s,g)=>s+(+g.custo||0),0);
   const linhasExtras=gastosSetup.map(g=>`<tr><td style="padding:7px 10px;">${esc(g.titulo)}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(+g.custo||0)}</td></tr>`).join('');
@@ -3968,7 +4043,7 @@ async function gerarPDFOutrasInformacoes(){
   ${sec('⚙️','Definições Operacionais',`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       ${campo('Serviços contratados',defs.length?defs.join(', '):'Nenhum')}
-      ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?'Aluguel mensal (Flashee)':'Comprado (Buddemeyer)')}
+      ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?('Aluguel mensal — '+(im.defEnxoval?.fornecedor||'')):'Comprado')}
       ${campo('Equipe de limpeza',im.defLimpeza?.responsavel)}
     </div>
   `)}
@@ -4314,7 +4389,7 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
     const midias=Array.isArray(c.midiaFrames)?c.midiaFrames:[];
     const midiasDrive=Array.isArray(c.midiaDrive)?c.midiaDrive:[];
     return`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
-      <strong>${esc(c.nome)}</strong>${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
+      <strong>${esc(c.nome)}</strong>${c.prioridade?` <span class="tag tag-${c.prioridade==='alta'?'rose':(c.prioridade==='media'?'gold':'sage')}" style="font-size:10px;">${esc(c.prioridade)}</span>`:''}${c.irregularidade?`<div style="color:var(--rose);font-size:12.5px;">⚠ ${esc(c.irregularidade)}</div>`:''}
       ${extras.length?`<div style="font-size:12.5px;color:var(--text-muted);">${extras.map(([k,val])=>`${esc(k)}: ${val===true?'✓':esc(String(val))}`).join(' · ')}</div>`:''}
       ${midiasDrive.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midiasDrive.map(f=>`<a href="${esc(f.driveLink||'#')}" target="_blank" style="display:flex;align-items:center;gap:4px;font-size:12px;padding:4px 8px;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);"><i class="fa-brands fa-google-drive"></i> ${f.tipo==='video'?'Vídeo':'Foto'}</a>`).join('')}</div>`:''}
       ${midias.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${midias.map(f=>`<img src="data:image/jpeg;base64,${f}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('data:image/jpeg;base64,${f}','_blank')">`).join('')}</div>`:''}
@@ -4322,6 +4397,20 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
   }).join('')||'<div class="text-muted" style="font-size:13px;">Sem detalhes de cômodos registrados.</div>';
   const geraisHtml=Object.entries(d.camposGerais||{}).filter(([,val])=>val!==''&&val!==false&&val!=null)
     .map(([k,val])=>`<div>${esc(k)}: <strong>${val===true?'Sim':esc(String(val))}</strong></div>`).join('')||'';
+  const fichaHtml=(titulo,obj,campos)=>{
+    const linhas=campos.map(([k,label])=>{
+      const val=(obj||{})[k];
+      if(val===''||val==null)return'';
+      return`<div>${esc(label)}: <strong>${esc(String(val))}</strong></div>`;
+    }).filter(Boolean).join('');
+    return linhas?`<div style="margin-top:10px;"><div class="form-section-title" style="margin-bottom:4px;">${esc(titulo)}</div><div style="font-size:13px;">${linhas}</div></div>`:'';
+  };
+  const acessoHtml=fichaHtml('Acesso ao Imóvel',d.acesso,[['senhaPorta','Senha da porta'],['modeloFechadura','Modelo da fechadura'],['andarAreasComuns','Andar das áreas comuns'],['contatoPortaria','Contato da portaria'],['portaria24h','Portaria 24hrs'],['temGaragem','Tem garagem'],['acessoGaragem','Como acessa a garagem'],['prestadorLivre','Prestador entra a qualquer momento'],['horariosPermitidos','Horários permitidos']]);
+  const estruturaHtml=fichaHtml('Estrutura do Imóvel',d.estrutura,[['qtdQuartos','Quartos'],['qtdBanheiros','Banheiros'],['qtdLavabos','Lavabos'],['temVaranda','Tem varanda'],['tamanhoCamas','Tamanho das camas'],['tamanhoTV','Tamanho da TV'],['voltagem','Voltagem']]);
+  const infraHtml=fichaHtml('Infraestrutura e Conforto',d.infra,[['temWifi','Tem Wi-Fi'],['wifiFunciona','Wi-Fi funcionando'],['operadoraInternet','Operadora de internet']]);
+  const itensEncontradosHtml=(d.itensEncontrados||[]).filter(it=>it.item).length
+    ?`<div style="margin-top:10px;"><div class="form-section-title" style="margin-bottom:4px;">Itens Extras Encontrados</div>${(d.itensEncontrados||[]).filter(it=>it.item).map(it=>`<div style="font-size:12.5px;padding:3px 0;">${esc(it.item)}${it.quantidade?` (${esc(String(it.quantidade))})`:''}${it.observacao?` — ${esc(it.observacao)}`:''}${it.oQueFazer?` · <em>${esc(it.oQueFazer)}</em>`:''}</div>`).join('')}</div>`
+    :'';
   document.getElementById('generico-titulo').textContent='Detalhes da Vistoria';
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
     <div class="form-group" style="grid-column:1/-1;">
@@ -4329,6 +4418,8 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
       <div style="margin-top:4px;">${aptoLabel}</div>
       ${geraisHtml?`<div style="margin-top:8px;font-size:13px;">${geraisHtml}</div>`:''}
       ${d.obsFinais?`<div class="hint" style="margin-top:8px;">${esc(d.obsFinais)}</div>`:''}
+      ${d.obsProprietaria?`<div class="hint" style="margin-top:8px;"><strong>Solicitações da proprietária:</strong> ${esc(d.obsProprietaria)}</div>`:''}
+      ${acessoHtml}${estruturaHtml}${infraHtml}${itensEncontradosHtml}
       <div style="margin-top:12px;">${comodosHtml}</div>
     </div>
   </div>`;
@@ -4336,9 +4427,10 @@ function _verDetalhesVistoria(imovelId,vistoriaId){
 }
 // ═══════════════════ CALENDÁRIO ═══════════════════
 const CAL_TIPOS=[
-  {key:'fotos',    label:'Fotos',    icon:'fa-camera',        cor:'gold'},
-  {key:'limpeza',  label:'Limpeza',  icon:'fa-broom',         cor:'sage'},
-  {key:'vistoria', label:'Vistoria', icon:'fa-clipboard-list',cor:'sky'},
+  {key:'fotos',     label:'Fotos',            icon:'fa-camera',        cor:'gold'},
+  {key:'limpeza',   label:'Limpeza',          icon:'fa-broom',         cor:'sage'},
+  {key:'vistoria',  label:'Vistoria',         icon:'fa-clipboard-list',cor:'sky'},
+  {key:'vistoria2', label:'Segunda Vistoria', icon:'fa-clipboard-list',cor:'sky'},
 ];
 let _calMesRef=null; // 'YYYY-MM'; null = mês atual
 function _calMesAtual(){return _calMesRef||hoje().slice(0,7);}
@@ -4655,9 +4747,67 @@ function _onProprietarioSelectChange(sel,imId){
   im.proprietarioId=sel.value||null;
   if(im.proprietarioId){
     const prop=proprietarios.find(p=>p.id===im.proprietarioId);
-    if(prop){im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';}
+    if(prop){
+      im.proprietarioNome=prop.nome||'';im.proprietarioTel=prop.telefone||'';im.proprietarioEmail=prop.email||'';
+      im.tipoDocumento=prop.tipoDocumento||'cpf';im.cpf=prop.cpf||'';im.cnpj=prop.cnpj||'';
+      im.razaoSocial=prop.razaoSocial||'';im.dadosBancarios=prop.dadosBancarios||'';im.chavePix=prop.chavePix||'';
+    }
   }
   saveAll();renderAba('dados');
+}
+// Campos de documento/dados bancários (2026-09-01, adicionado também na aba Dados do
+// imóvel em 2026-09-01 dentro de um <details> recolhido — [[project_wecare_onboarding]] —
+// pra permitir a IA da aba Captação preencher, já que ela só escreve em im.*, nunca em
+// proprietarios[]). Cadastro central de Proprietários continua a fonte "oficial"; ao
+// salvar a aba Dados, se o imóvel estiver vinculado (im.proprietarioId), esses campos são
+// espelhados pro registro central também (mesmo padrão já usado em nome/telefone/e-mail).
+function _htmlCamposDocProprietario(p){
+  const tipo=p?.tipoDocumento||'cpf';
+  return`<div class="form-row">
+      <div class="form-group"><label>Tipo de documento</label>
+        <select id="prop-tipo-doc" class="input" onchange="_onTipoDocProprietarioChange(this)">
+          <option value="cpf"${tipo==='cpf'?' selected':''}>Pessoa Física (CPF)</option>
+          <option value="cnpj"${tipo==='cnpj'?' selected':''}>Pessoa Jurídica (CNPJ)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>CPF</label><input id="prop-cpf" class="input" placeholder="000.000.000-00" value="${esc(p?.cpf||'')}"></div>
+    </div>
+    <div class="form-row" id="prop-campos-cnpj" style="display:${tipo==='cnpj'?'':'none'};">
+      <div class="form-group"><label>CNPJ</label><input id="prop-cnpj" class="input" placeholder="00.000.000/0000-00" value="${esc(p?.cnpj||'')}"></div>
+      <div class="form-group"><label>Razão Social</label><input id="prop-razao-social" class="input" value="${esc(p?.razaoSocial||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Dados bancários</label><textarea id="prop-dados-bancarios" class="input" rows="2" placeholder="Banco, agência, conta">${esc(p?.dadosBancarios||'')}</textarea></div>
+      <div class="form-group"><label>Chave PIX</label><input id="prop-chave-pix" class="input" value="${esc(p?.chavePix||'')}"></div>
+    </div>`;
+}
+function _onTipoDocProprietarioChange(sel){
+  const wrap=document.getElementById('prop-campos-cnpj');
+  if(wrap)wrap.style.display=sel.value==='cnpj'?'':'none';
+}
+function _htmlCamposDocImovel(im){
+  const tipo=im?.tipoDocumento||'cpf';
+  return`<div class="form-row">
+      <div class="form-group"><label>Tipo de documento</label>
+        <select id="d-doc-tipo" class="input" onchange="_onTipoDocImovelChange(this)">
+          <option value="cpf"${tipo==='cpf'?' selected':''}>Pessoa Física (CPF)</option>
+          <option value="cnpj"${tipo==='cnpj'?' selected':''}>Pessoa Jurídica (CNPJ)</option>
+        </select>
+      </div>
+      <div class="form-group"><label>CPF</label><input id="d-doc-cpf" class="input" placeholder="000.000.000-00" value="${esc(im?.cpf||'')}"></div>
+    </div>
+    <div class="form-row" id="d-doc-campos-cnpj" style="display:${tipo==='cnpj'?'':'none'};">
+      <div class="form-group"><label>CNPJ</label><input id="d-doc-cnpj" class="input" placeholder="00.000.000/0000-00" value="${esc(im?.cnpj||'')}"></div>
+      <div class="form-group"><label>Razão Social</label><input id="d-doc-razao-social" class="input" value="${esc(im?.razaoSocial||'')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Dados bancários</label><textarea id="d-doc-dados-bancarios" class="input" rows="2" placeholder="Banco, agência, conta">${esc(im?.dadosBancarios||'')}</textarea></div>
+      <div class="form-group"><label>Chave PIX</label><input id="d-doc-chave-pix" class="input" value="${esc(im?.chavePix||'')}"></div>
+    </div>`;
+}
+function _onTipoDocImovelChange(sel){
+  const wrap=document.getElementById('d-doc-campos-cnpj');
+  if(wrap)wrap.style.display=sel.value==='cnpj'?'':'none';
 }
 function abrirNovoProprietario(){
   _editProprietarioIdx=null;
@@ -4668,6 +4818,7 @@ function abrirNovoProprietario(){
       <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input"></div>
       <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input"></div>
     </div>
+    ${_htmlCamposDocProprietario(null)}
     <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2"></textarea></div>
     <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
   </div>`;
@@ -4683,6 +4834,7 @@ function editarProprietario(idx){
       <div class="form-group"><label>Telefone / WhatsApp</label><input id="prop-tel" class="input" value="${esc(p.telefone||'')}"></div>
       <div class="form-group"><label>E-mail</label><input id="prop-email" type="email" class="input" value="${esc(p.email||'')}"></div>
     </div>
+    ${_htmlCamposDocProprietario(p)}
     <div class="form-group"><label>Observações</label><textarea id="prop-obs" class="input" rows="2">${esc(p.obs||'')}</textarea></div>
     <div style="margin-top:12px;"><button class="btn btn-sm btn-sage" onclick="_salvarProprietario()"><i class="fa-solid fa-save"></i> Salvar</button></div>
   </div>`;
@@ -4691,9 +4843,16 @@ function editarProprietario(idx){
 function _salvarProprietario(){
   const nome=document.getElementById('prop-nome').value.trim();
   if(!nome){showToast('Informe o nome.','peach');return;}
+  const tipoDocumento=document.getElementById('prop-tipo-doc')?.value||'cpf';
   const p={nome,
     telefone:document.getElementById('prop-tel')?.value.trim()||'',
     email:document.getElementById('prop-email')?.value.trim()||'',
+    tipoDocumento,
+    cpf:document.getElementById('prop-cpf')?.value.trim()||'',
+    cnpj:tipoDocumento==='cnpj'?(document.getElementById('prop-cnpj')?.value.trim()||''):'',
+    razaoSocial:tipoDocumento==='cnpj'?(document.getElementById('prop-razao-social')?.value.trim()||''):'',
+    dadosBancarios:document.getElementById('prop-dados-bancarios')?.value.trim()||'',
+    chavePix:document.getElementById('prop-chave-pix')?.value.trim()||'',
     obs:document.getElementById('prop-obs')?.value.trim()||''};
   if(_editProprietarioIdx!=null){
     p.id=proprietarios[_editProprietarioIdx].id;
@@ -4704,7 +4863,10 @@ function _salvarProprietario(){
   }
   if(_novoProprietarioParaImovelId){
     const im=getImovel(_novoProprietarioParaImovelId);
-    if(im){im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;}
+    if(im){
+      im.proprietarioId=p.id;im.proprietarioNome=p.nome;im.proprietarioTel=p.telefone;im.proprietarioEmail=p.email;
+      im.tipoDocumento=p.tipoDocumento;im.cpf=p.cpf;im.cnpj=p.cnpj;im.razaoSocial=p.razaoSocial;im.dadosBancarios=p.dadosBancarios;im.chavePix=p.chavePix;
+    }
     _novoProprietarioParaImovelId=null;
     saveAll();closeModal('modal-generico');renderAba('dados');showToast('Proprietário criado e vinculado!','sage');
     return;
@@ -4726,9 +4888,13 @@ function abrirDetalheProprietario(id){
   imoveisDele.forEach(im=>(im.comprasLotes||[]).filter(l=>l.loteCompartilhadoId).forEach(l=>{
     if(!lotesCompartilhados.some(x=>x.loteCompartilhadoId===l.loteCompartilhadoId))lotesCompartilhados.push({...l,imovelNome:im.nome});
   }));
+  const docLinha=p.tipoDocumento==='cnpj'
+    ?[p.razaoSocial,p.cnpj?`CNPJ ${p.cnpj}`:'',p.cpf?`CPF ${p.cpf}`:''].filter(Boolean).join(' · ')
+    :(p.cpf?`CPF ${p.cpf}`:'');
   document.getElementById('generico-titulo').textContent=p.nome;
   document.getElementById('generico-body').innerHTML=`<div class="form-grid">
     <div class="hint" style="margin-bottom:6px;">${esc(p.telefone||'sem telefone')} · ${esc(p.email||'sem e-mail')} <button class="btn btn-xs btn-outline" style="margin-left:8px;" onclick="editarProprietario(${proprietarios.indexOf(p)})"><i class="fa-solid fa-pen"></i> Editar dados</button></div>
+    ${docLinha?`<div class="hint" style="margin-bottom:6px;">${esc(docLinha)}</div>`:''}
 
     <div class="form-section-title" style="margin-top:10px;"><i class="fa-solid fa-house"></i> Imóveis (${imoveisDele.length})</div>
     ${imoveisDele.length?`<div style="margin-bottom:14px;">${imoveisDele.map(im=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="closeModal('modal-generico');showPanel('kanban',document.querySelector('.nav-item[onclick*=kanban]'));abrirDetalhe('${esc(im.id)}');"><strong>${esc(im.nome)}</strong> <span class="tag tag-${im.status==='ativo'?'sage':'gold'}" style="font-size:10px;margin-left:6px;">${esc(im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status))}</span></div>`).join('')}</div>`:`<div class="hint" style="margin-bottom:14px;">Nenhum imóvel vinculado ainda — vincule em Dados de um imóvel.</div>`}
@@ -5234,7 +5400,7 @@ function _calcOrcamentoTotais(orc){
 async function gerarPDFOrcamentoAvulso(id){
   const o=orcamentos.find(x=>x.id===id);if(!o)return;
   const totais=_calcOrcamentoTotais(o);
-  const fornecedorLabel={comprado:'Comprado (Buddemeyer)',flashee:'Aluguel — Flashee',intense:'Aluguel — Intense Clean'}[o.fornecedorEnxoval]||o.fornecedorEnxoval||'';
+  const fornecedorLabel={comprado:'Comprado',flashee:'Aluguel — Flashee',intense:'Aluguel — Intense Clean'}[o.fornecedorEnxoval]||o.fornecedorEnxoval||'';
   const imFake={nome:o.nomeCliente||'Orçamento',proprietarioNome:'',endereco:''};
 
   const linhaTabela=(label,qtd,valorUnit,total)=>`<tr style="border-bottom:1px solid #EFE7D6;">
@@ -5890,8 +6056,11 @@ function _renderConfigVistoriaCampos(){
   const el=document.getElementById('config-vistoria-campos');
   if(!el)return;
   const tipoLabel={texto:'Texto',numero:'Número',checkbox:'Sim/Não',select:'Múltipla escolha'};
+  const nomesCatalogo=new Set(ITENS_COMPRAS.map(i=>i.nome.toLowerCase()));
+  const duplicados=VISTORIA_CAMPOS.filter(c=>nomesCatalogo.has((c.label||'').toLowerCase()));
   el.innerHTML=`
     <div class="hint" style="margin-bottom:10px;">Vídeo por cômodo e irregularidades continuam fixos. Aqui você adiciona campos extras — gerais (uma vez na vistoria) ou por cômodo (repetem em cada cômodo do tipo escolhido).</div>
+    ${duplicados.length?`<div class="hint" style="margin-bottom:10px;color:var(--brand-red,#c0392b);"><i class="fa-solid fa-triangle-exclamation"></i> ${duplicados.length} campo(s) abaixo (marcado "⚠ duplicado") tem o mesmo nome de um item do catálogo de Compras — já aparece sozinho na seção "Itens Obrigatórios"/"Checklist de Enxoval" da vistoria, perguntar de novo aqui é redundante. Considere apagar.</div>`:''}
     <div style="margin-bottom:12px;">
       <button class="btn btn-sm btn-sage" onclick="abrirModalNovoCampoVistoria()"><i class="fa-solid fa-plus"></i> Novo Campo</button>
     </div>
@@ -5905,7 +6074,7 @@ function _renderConfigVistoriaCampos(){
       </tr></thead>
       <tbody>
       ${VISTORIA_CAMPOS.map((c,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:7px 10px;">${esc(c.label)}</td>
+        <td style="padding:7px 10px;">${esc(c.label)}${nomesCatalogo.has((c.label||'').toLowerCase())?' <span class="tag tag-rose" style="font-size:10px;">⚠ duplicado</span>':''}</td>
         <td style="padding:7px 10px;">${tipoLabel[c.tipo]||c.tipo}</td>
         <td style="padding:7px 10px;">${c.escopo==='geral'?'Geral da vistoria':`Cômodo: ${c.comodosTipos==='todos'?'todos':esc((c.comodosTipos||[]).join(', '))}`}</td>
         <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerCampoVistoria(${i})"><i class="fa-solid fa-trash"></i></button></td>
@@ -6127,6 +6296,7 @@ function _adicionarEtapaModelo(mi){
 function _htmlBlocoModalidadeEnxoval(m,i){
   const precTabela=m.precificacaoMensal==='tabela';
   const tabela=m.mensalTabela||[];
+  const porReserva=m.baseCobranca==='reserva';
   return`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
       <input id="me-nome-${i}" class="input" value="${esc(m.nome)}" style="font-weight:700;flex:1;max-width:260px;" onchange="_atualizarModalidadeEnxoval(${i})">
@@ -6141,7 +6311,19 @@ function _htmlBlocoModalidadeEnxoval(m,i){
       `:''}
     </div>
 
-    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor mensal (aluguel) — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
+    <div style="display:flex;gap:14px;margin-bottom:10px;">
+      <label style="font-size:12px;"><input type="radio" name="me-basecobranca-${i}" value="mensal"${!porReserva?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra por mês</label>
+      <label style="font-size:12px;"><input type="radio" name="me-basecobranca-${i}" value="reserva"${porReserva?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Cobra por reserva</label>
+    </div>
+    ${porReserva?`
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Mínimo mensal — Custo</label><input type="number" id="me-minimocusto-${i}" class="input" min="0" step="10" value="${m.minimoMensalCusto||0}" style="width:90px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+      <div><label style="font-size:11px;color:var(--text-muted);display:block;">Mínimo mensal — Cobrado</label><input type="number" id="me-minimocobrado-${i}" class="input" min="0" step="10" value="${m.minimoMensalCobrado||0}" style="width:90px;padding:4px 6px;font-size:12.5px;" onchange="_atualizarModalidadeEnxoval(${i})"></div>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Ex: R$180 por reserva, mas garante um mínimo de R$${m.minimoMensalCobrado||590}/mês — esse mínimo é o que preenche automaticamente o valor mensal na aba Contrato (não dá pra saber de antemão quantas reservas vão cair no mês).</div>
+    `:''}
+
+    <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Valor ${porReserva?'por reserva':'por mês'} — Custo = o que a gente paga · Cobrado = o que cobramos do proprietário</div>
     <div style="display:flex;gap:14px;margin-bottom:8px;">
       <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="formula"${!precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Fórmula (inicial + por hóspede extra)</label>
       <label style="font-size:12px;"><input type="radio" name="me-precif-${i}" value="tabela"${precTabela?' checked':''} onchange="_atualizarModalidadeEnxoval(${i})"> Tabela por quantidade de hóspedes</label>
@@ -6195,6 +6377,13 @@ function _atualizarModalidadeEnxoval(i){
     m.setupCusto=+setupCustoEl.value||0;
     m.setupCobrado=+document.getElementById(`me-setupcobrado-${i}`)?.value||0;
   }
+  const basecobrancaSel=document.querySelector(`input[name="me-basecobranca-${i}"]:checked`);
+  m.baseCobranca=basecobrancaSel?.value==='reserva'?'reserva':'mensal';
+  const minimoCustoEl=document.getElementById(`me-minimocusto-${i}`);
+  if(minimoCustoEl){
+    m.minimoMensalCusto=+minimoCustoEl.value||0;
+    m.minimoMensalCobrado=+document.getElementById(`me-minimocobrado-${i}`)?.value||0;
+  }
   const precifSel=document.querySelector(`input[name="me-precif-${i}"]:checked`);
   m.precificacaoMensal=precifSel?.value==='tabela'?'tabela':'formula';
   const baseCustoEl=document.getElementById(`me-basecusto-${i}`);
@@ -6231,6 +6420,7 @@ function _adicionarModalidadeEnxoval(){
   if(MODALIDADES_ENXOVAL.some(m=>m.nome.toLowerCase()===nome.toLowerCase())){showToast('Já existe um fornecedor com esse nome.','peach');return;}
   const id=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('mod_'+uid());
   MODALIDADES_ENXOVAL.push({id,nome,temSetup:false,setupCusto:0,setupCobrado:0,
+    baseCobranca:'mensal',minimoMensalCusto:0,minimoMensalCobrado:0,
     precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:0,mensalExtraCusto:0,mensalExtraCobrado:0,mensalTabela:[]});
   saveAll();renderConfig();
   showToast('Fornecedor adicionado! Configure setup e valor mensal no bloco novo.','sage');

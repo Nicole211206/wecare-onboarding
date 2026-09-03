@@ -189,6 +189,12 @@ class Proprietario(Base):
     telefone: Mapped[str | None] = mapped_column(String)
     email: Mapped[str | None] = mapped_column(String)
     obs: Mapped[str | None] = mapped_column(String)
+    tipo_documento: Mapped[str | None] = mapped_column(String)
+    cpf: Mapped[str | None] = mapped_column(String)
+    cnpj: Mapped[str | None] = mapped_column(String)
+    razao_social: Mapped[str | None] = mapped_column(String)
+    dados_bancarios: Mapped[str | None] = mapped_column(String)
+    chave_pix: Mapped[str | None] = mapped_column(String)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
@@ -212,6 +218,9 @@ class ModalidadeEnxoval(Base):
     mensal_extra_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     mensal_extra_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     mensal_tabela: Mapped[list | None] = mapped_column(JSON)
+    base_cobranca: Mapped[str | None] = mapped_column(String)
+    minimo_mensal_custo: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
+    minimo_mensal_cobrado: Mapped[float | None] = mapped_column(Numeric(asdecimal=False))
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 
