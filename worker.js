@@ -27,10 +27,14 @@ const STATS_KEY = 'wc_stats';
 // imóvel inteiro), mesma regra de listKeys/listKeysEstritas abaixo. Antes recuperava QUALQUER
 // item ausente incondicionalmente, o que impedia apagar itensExtras/eventosExtras/vistorias
 // de vez — a exclusão sempre "voltava" na sincronização seguinte.
+// Incidente 2026-09-03: listas pequenas (ex: 2 manutenções) que iam a zero também caíam na
+// regra de "catastrófica" (newA.length===0 && oldA.length>0), então apagar os últimos itens de
+// uma lista pequena nunca "pegava" — voltava sempre. Exige oldA.length>=5 pra considerar zerar
+// suspeito; listas pequenas indo a zero agora são aceitas como exclusão de propósito.
 function mergeItemArraysById(oldArr, newArr) {
   const oldA = Array.isArray(oldArr) ? oldArr : [];
   const newA = Array.isArray(newArr) ? newArr : [];
-  const catastrofica = (newA.length === 0 && oldA.length > 0) || (oldA.length >= 8 && newA.length <= 2);
+  const catastrofica = (newA.length === 0 && oldA.length >= 5) || (oldA.length >= 8 && newA.length <= 2);
   if (!catastrofica) return newA;
   const newIds = new Set(newA.filter(x => x && x.id).map(x => x.id));
   const recuperados = oldA.filter(x => x && x.id && !newIds.has(x.id));
