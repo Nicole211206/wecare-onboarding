@@ -1167,7 +1167,7 @@ function _coletarDadosAba(aba,im){
     im.fechaduraEletronica=im.defOperacionais['fechaduraEletronica']||false;
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
     const _enxTipo=g('def-enxoval-tipo');
-    im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
+    im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup'),custoAluguelMensal:gn('def-enxoval-custo')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
   }
   if(aba==='operacional'){
@@ -1818,8 +1818,12 @@ function renderAbaDefinicoes(im){
     </select>
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
-    <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
+    <div class="form-group"><label>Valor Mensal cobrado do proprietário (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}" oninput="_atualizarMargemEnxoval()"></div>
     <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
+  </div>
+  <div class="form-row" id="def-enxoval-custo-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
+    <div class="form-group"><label>Custo Mensal — o que a WeCare paga (R$)</label><input id="def-enxoval-custo" type="number" class="input" value="${im.defEnxoval?.custoAluguelMensal||0}" oninput="_atualizarMargemEnxoval()"></div>
+    <div class="form-group"><label>Margem</label><div id="def-enxoval-margem" class="input" style="background:var(--surface-2);display:flex;align-items:center;font-weight:600;color:${((+im.defEnxoval?.valorAluguelMensal||0)-(+im.defEnxoval?.custoAluguelMensal||0))>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda((+im.defEnxoval?.valorAluguelMensal||0)-(+im.defEnxoval?.custoAluguelMensal||0))}</div></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
   ${im.defEnxoval?.fornecedor==='Manual'?'<div class="hint">Fornecedor "Manual" não recalcula os valores automaticamente — digite o valor mensal e o setup direto, pra casos de exceção.</div>':''}
@@ -1836,10 +1840,12 @@ function _onEnxovalTipoChange(sel){
   const txt=document.getElementById('def-enxoval-forn-texto');
   const sel2=document.getElementById('def-enxoval-forn-select');
   const valoresRow=document.getElementById('def-enxoval-valores-row');
+  const custoRow=document.getElementById('def-enxoval-custo-row');
   const compradoHint=document.getElementById('def-enxoval-comprado-hint');
   if(txt)txt.style.display=aluguel?'none':'';
   if(sel2)sel2.style.display=aluguel?'':'none';
   if(valoresRow)valoresRow.style.display=aluguel?'':'none';
+  if(custoRow)custoRow.style.display=aluguel?'':'none';
   if(compradoHint)compradoHint.style.display=aluguel?'none':'';
   _recalcEnxovalValores();
 }
@@ -1878,20 +1884,32 @@ function _valorEnxovalSetup(fornecedorNome,campo){
 // (o que é passado pro proprietário), não o custo interno.
 function _valorEnxovalAutoMensal(hospedes,fornecedorNome){return _valorEnxovalMensal(hospedes,fornecedorNome,'cobrado');}
 function _valorEnxovalAutoSetup(fornecedorNome){return _valorEnxovalSetup(fornecedorNome,'cobrado');}
+function _atualizarMargemEnxoval(){
+  const cobrado=+document.getElementById('def-enxoval-mensal')?.value||0;
+  const custo=+document.getElementById('def-enxoval-custo')?.value||0;
+  const margemEl=document.getElementById('def-enxoval-margem');
+  if(!margemEl)return;
+  const margem=cobrado-custo;
+  margemEl.textContent=fmtMoeda(margem);
+  margemEl.style.color=margem>=0?'var(--sage)':'var(--rose)';
+}
 function _recalcEnxovalValores(){
   const tipoSel=document.getElementById('def-enxoval-tipo');
   const mensalEl=document.getElementById('def-enxoval-mensal');
   const setupEl=document.getElementById('def-enxoval-setup');
+  const custoEl=document.getElementById('def-enxoval-custo');
   const setupWrap=document.getElementById('def-enxoval-setup-wrap');
   if(!tipoSel||!mensalEl||!setupEl)return;
-  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
+  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;if(custoEl)custoEl.value=0;_atualizarMargemEnxoval();return;}
   const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
   const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
   if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
-  if(fornecedor==='Manual')return; // não recalcula — deixa o valor digitado à mão como está
+  if(fornecedor==='Manual'){_atualizarMargemEnxoval();return;} // não recalcula — deixa o valor digitado à mão como está
   const im=getImovel(_imovelAtivoId);
   mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
   setupEl.value=_valorEnxovalAutoSetup(fornecedor);
+  if(custoEl)custoEl.value=_valorEnxovalMensal(im?.maxHospedes,fornecedor,'custo');
+  _atualizarMargemEnxoval();
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -2589,10 +2607,10 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    // Previsto pendente = preço × falta (mesma conta da aba Compras — só o que falta comprar).
-    // Uma vez pago, vira o custo cheio (preço × qtdNec), já que o "previsto" original deixa de
-    // fazer sentido depois que o qtdTem for atualizado (a falta zera e o previsto sumiria).
-    const previsto=pago?precoUn*qtdNec:precoUn*falta;
+    // Previsto = preço × falta, IGUAL à aba Compras — nunca muda de fórmula conforme o
+    // checkbox "Pago" (bug corrigido em 2026-09-01: antes virava preço × qtdNec quando pago,
+    // fazendo o número "pular" na tela sem motivo aparente pra quem só olha a aba Gastos).
+    const previsto=precoUn*falta;
     // valorPago é editável (_onCompraValorPago) — some sobre o valor previsto por padrão, mas a
     // equipe pode ajustar pro valor real pago no item, inclusive quando veio de uma compra em lote.
     const valorPago=compras[subKey]?.valorPago;
@@ -2756,19 +2774,6 @@ function renderAbaGastos(im){
     </div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup". Fase que não se aplica a este imóvel também se marca na aba Produção, dentro do card de Fotos/Limpeza/Vistoria.</div>
   </div>`;
-
-  const custoEnxovalMensal=+im.defEnxoval?.valorAluguelMensal||0;
-  const recorrentesHtml=(im.defEnxoval?.tipo==='aluguel'&&custoEnxovalMensal)?`<div style="margin-bottom:24px;">
-    <div class="form-section-title"><i class="fa-solid fa-arrows-rotate"></i> Custos Recorrentes</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 8px;">Item</th><th style="text-align:left;padding:4px 8px;">Fornecedor</th><th style="text-align:right;padding:4px 8px;">Valor / mês</th></tr></thead>
-      <tbody><tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:4px 8px;">Enxoval alugado</td>
-        <td style="padding:4px 8px;">${esc(im.defEnxoval?.fornecedor||'—')}</td>
-        <td style="text-align:right;padding:4px 8px;">${fmtMoeda(custoEnxovalMensal)}</td>
-      </tr></tbody>
-    </table>
-  </div>`:'';
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
@@ -2951,7 +2956,6 @@ function renderAbaGastos(im){
       <button class="btn btn-sm btn-outline" onclick="exportarGastosCSV()"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
     </div>
     ${setupHtml}
-    ${recorrentesHtml}
     ${comprasHtml}
     ${manutHtml}
     ${extrasHtml}
@@ -2976,8 +2980,8 @@ function _linhasRelatorioGastos(im){
     const custo=+ev.custo||0;
     linhas.push({grupo:'setup',categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
   });
-  if(im.defEnxoval?.tipo==='aluguel'&&+im.defEnxoval?.valorAluguelMensal){
-    linhas.push({grupo:'recorrente',categoria:'Custo Recorrente',item:`Enxoval alugado — ${im.defEnxoval.fornecedor||'sem fornecedor'} (mensal)`,previsto:+im.defEnxoval.valorAluguelMensal,pago:0});
+  if(im.defEnxoval?.tipo==='aluguel'&&+im.defEnxoval?.custoAluguelMensal){
+    linhas.push({grupo:'recorrente',categoria:'Custo Recorrente',item:`Enxoval alugado — ${im.defEnxoval.fornecedor||'sem fornecedor'} (mensal)`,previsto:+im.defEnxoval.custoAluguelMensal,pago:0});
   }
   _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
     linhas.push({grupo:'outros',categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
