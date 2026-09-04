@@ -3981,13 +3981,6 @@ function renderAbaFinal(im){
   <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
 
   <div class="form-group" style="margin-top:8px;">
-    <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-criado"${im.anuncioCriado?' checked':''} onchange="_onAnuncioCriadoChange(this)"> Anúncio criado</label>
-  </div>
-  <div class="form-group" id="fn-anuncio-criado-data-wrap" style="${im.anuncioCriado?'':'display:none;'}">
-    <label>Data</label><input id="fn-anuncio-criado-data" type="date" class="input" value="${im.dataAnuncioCriado||hoje()}" onchange="_onDataAnuncioCriadoChange(this)">
-  </div>
-
-  <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
   <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
@@ -4018,20 +4011,15 @@ function renderAbaFinal(im){
   </div>
   ${im.dataAtivacao?`<div style="background:var(--sage-light,#e8f5e9);border-radius:10px;padding:16px;margin-top:20px;text-align:center;">
     <div style="font-size:28px;margin-bottom:6px;">🎉</div>
-    <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
+    <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde</div>
+    <input type="date" class="input" style="width:160px;margin-top:8px;text-align:center;" value="${im.dataAtivacao}" onchange="_onDataAtivacaoChange(this)">
   </div>`:''}
   </div>`;
 }
-function _onAnuncioCriadoChange(cb){
+function _onDataAtivacaoChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  im.anuncioCriado=cb.checked;
-  if(cb.checked&&!im.dataAnuncioCriado)im.dataAnuncioCriado=hoje();
-  saveAll();renderAba('final');
-}
-function _onDataAnuncioCriadoChange(inp){
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  im.dataAnuncioCriado=inp.value||hoje();
-  saveAll();
+  im.dataAtivacao=inp.value||hoje();
+  saveAll();renderKanban();
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
