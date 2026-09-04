@@ -2950,8 +2950,8 @@ function renderAbaGastos(im){
         <div class="form-group" style="width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor Total (R$)</label><input id="lancfin-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Itens (opcional)</label><input id="lancfin-itens-input" class="input" placeholder="Ex: Cortina, tapete"></div>
-        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação</label><input id="lancfin-obs-input" class="input" placeholder="Ex: dividido com WC-00123"></div>
+        <div class="form-group" style="flex:1;min-width:220px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Itens (opcional)</label><textarea id="lancfin-itens-input" class="input" rows="3" placeholder="Ex: Cortina, tapete, luminária..."></textarea></div>
+        <div class="form-group" style="flex:1;min-width:220px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação</label><textarea id="lancfin-obs-input" class="input" rows="3" placeholder="Ex: dividido com WC-00123"></textarea></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;">
         <button class="btn btn-sm btn-sage" onclick="confirmarLancamentoFinanceiro()"><i class="fa-solid fa-check"></i> Salvar</button>
@@ -2959,16 +2959,16 @@ function renderAbaGastos(im){
       </div>
     </div>
     ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:32px;"></th></tr></thead>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:32px;"></th></tr></thead>
       <tbody>
       ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
-        <td style="padding:4px 8px;">${esc(l.fornecedor||'')}</td>
-        <td style="padding:4px 8px;color:var(--text-muted);">${esc(l.itens||'-')}</td>
-        <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
-        <td style="padding:4px 8px;color:var(--text-muted);">${esc(l.obs||'-')}</td>
-        <td><button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
+        <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+        <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
+        <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
+        <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
+        <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.obs||'-')}</td>
+        <td style="vertical-align:top;"><button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
       <tfoot><tr><td colspan="3" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
