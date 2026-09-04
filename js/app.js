@@ -1663,7 +1663,10 @@ function renderAbaContrato(im){
       ${im.contratoLink?`<a href="${esc(im.contratoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>`:''}
     </div>
   </div>
-  ${im.contratoAssinado?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Contrato assinado em <strong>${fmtDate(im.dataContratoAssinado)}</strong></div>`:''}
+  ${im.contratoAssinado?`<div class="alert-success" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span><i class="fa-solid fa-check-circle"></i> Contrato assinado em</span>
+    <input type="date" class="input" style="width:160px;" value="${im.dataContratoAssinado||hoje()}" onchange="_onDataContratoAssinadoChange(this)">
+  </div>`:''}
   <div class="form-group" style="margin-top:8px;">
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
   </div>
@@ -1784,6 +1787,11 @@ function marcarContratoAssinadoManual(){
   if(im.status==='contrato'){im.status=FASES[FASES.indexOf('contrato')+1];_addAtualizacao(im,`Avançou para a fase "${FASE_LABEL[im.status]}".`,'fase');}
   saveAll();renderKanban();renderAba('contrato');_atualizarHeaderDetalhe(im);
   showToast('Contrato marcado como assinado.','sage');
+}
+function _onDataContratoAssinadoChange(inp){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.dataContratoAssinado=inp.value||hoje();
+  saveAll();_atualizarHeaderDetalhe(im);
 }
 
 // ═══════════════════ ABA DEFINIÇÕES ═══════════════════
@@ -2928,6 +2936,45 @@ function renderAbaGastos(im){
     </table>`}
   </div>`;
 
+  const lancamentosFinanceiro=im.lancamentosFinanceiro||[];
+  const lancFinHtml=`<div style="margin-bottom:24px;border-top:2px dashed var(--border);padding-top:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-building-columns"></i> Lançamentos para o Financeiro</div>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Registro simples de compras pro Financeiro identificar/conciliar gastos. Separado do controle de Compras acima — não entra no cálculo de margem, mas sai nos relatórios (PDF/Excel) abaixo.</div>
+    <div id="form-add-lancamento-fin" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="lancfin-data-input" type="date" class="input" value="${hoje()}"></div>
+        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Fornecedor</label><input id="lancfin-fornecedor-input" class="input" placeholder="Ex: Leroy Merlin"></div>
+        <div class="form-group" style="width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor Total (R$)</label><input id="lancfin-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Itens (opcional)</label><input id="lancfin-itens-input" class="input" placeholder="Ex: Cortina, tapete"></div>
+        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação</label><input id="lancfin-obs-input" class="input" placeholder="Ex: dividido com WC-00123"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="btn btn-sm btn-sage" onclick="confirmarLancamentoFinanceiro()"><i class="fa-solid fa-check"></i> Salvar</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;">Data</th><th style="text-align:left;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:32px;"></th></tr></thead>
+      <tbody>
+      ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+        <td style="padding:4px 8px;">${esc(l.fornecedor||'')}</td>
+        <td style="padding:4px 8px;color:var(--text-muted);">${esc(l.itens||'-')}</td>
+        <td style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
+        <td style="padding:4px 8px;color:var(--text-muted);">${esc(l.obs||'-')}</td>
+        <td><button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot><tr><td colspan="3" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
+    </table>`}
+  </div>`;
+
   const _cardResumo=(titulo,r2,extra)=>`<div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:12px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-scale-balanced"></i> ${titulo}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
@@ -2960,6 +3007,7 @@ function renderAbaGastos(im){
     ${manutHtml}
     ${extrasHtml}
     ${gastosAvulsosHtml}
+    ${lancFinHtml}
     ${resumoHtml}
   </div>`;
 }
@@ -3008,6 +3056,7 @@ async function gerarPDFGastos(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const linhas=_linhasRelatorioGastos(im);
   const r=_calcResumoFinanceiro(im);
+  const lancFin=_linhasLancamentosFinanceiro(im);
   const win=window.open('','_blank');
   const headerHtml=await _pdfHeaderHtml(im,'Relatório de Gastos');
   const tabela=(titulo,lista,r2)=>{
@@ -3050,6 +3099,18 @@ async function gerarPDFGastos(){
     <div><div class="lbl">Total Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
     <div><div class="lbl">Margem Total</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
   </div>
+  ${lancFin.length?`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Lançamentos para o Financeiro</div>
+  <table>
+    <thead><tr><th>Data</th><th>Fornecedor</th><th>Itens</th><th style="text-align:right;">Valor Total</th><th>Obs</th></tr></thead>
+    <tbody>${lancFin.map(l=>`<tr>
+      <td style="padding:6px 10px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+      <td style="padding:6px 10px;">${esc(l.fornecedor)}</td>
+      <td style="padding:6px 10px;">${esc(l.itens||'-')}</td>
+      <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
+      <td style="padding:6px 10px;">${esc(l.obs||'-')}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  <div style="text-align:right;font-weight:700;margin-top:6px;">Total: ${fmtMoeda(lancFin.reduce((s,l)=>s+l.valorTotal,0))}</div>`:''}
   </body></html>`);
   win.document.close();win.print();
 }
@@ -3057,6 +3118,7 @@ function exportarGastosCSV(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const linhas=_linhasRelatorioGastos(im);
   const r=_calcResumoFinanceiro(im);
+  const lancFin=_linhasLancamentosFinanceiro(im);
   const fmtNum=v=>(+v||0).toFixed(2).replace('.',',');
   const csvEsc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const bloco=(titulo,lista,r2)=>[
@@ -3068,9 +3130,17 @@ function exportarGastosCSV(){
     [csvEsc('Margem '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
     '',
   ];
+  const blocoLancFin=lancFin.length?[
+    [csvEsc('Lançamentos para o Financeiro')].join(';'),
+    ['Data','Fornecedor','Itens','Valor Total (R$)','Obs'].map(csvEsc).join(';'),
+    ...lancFin.map(l=>[l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'',l.fornecedor,l.itens,fmtNum(l.valorTotal),l.obs].map(csvEsc).join(';')),
+    [csvEsc('Total Lançamentos'),'','',csvEsc(fmtNum(lancFin.reduce((s,l)=>s+l.valorTotal,0))),''].join(';'),
+    '',
+  ]:[];
   const linhasCsv=[
     ...bloco('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup),
     ...bloco('Itens',linhas.filter(l=>l.grupo==='outros'),r.outros),
+    ...blocoLancFin,
     [csvEsc('TOTAL GERAL'),'','',''].join(';'),
     [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
     [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
@@ -3270,6 +3340,45 @@ function _apagarGastoAvulso(id){
   if(!confirm('Apagar este gasto?'))return;
   im.gastosAvulsos=(im.gastosAvulsos||[]).filter(x=>x.id!==id);
   saveAll();renderAba('gastos');
+}
+function toggleFormLancamentoFinanceiro(){
+  const el=document.getElementById('form-add-lancamento-fin');if(!el)return;
+  const visible=el.style.display!=='none';
+  el.style.display=visible?'none':'block';
+  if(!visible){
+    const d=document.getElementById('lancfin-data-input');
+    const f=document.getElementById('lancfin-fornecedor-input');
+    const v=document.getElementById('lancfin-valor-input');
+    const it=document.getElementById('lancfin-itens-input');
+    const o=document.getElementById('lancfin-obs-input');
+    if(d)d.value=hoje();
+    if(f){f.value='';f.focus();}
+    if(v)v.value='0';
+    if(it)it.value='';
+    if(o)o.value='';
+  }
+}
+function confirmarLancamentoFinanceiro(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const data=(document.getElementById('lancfin-data-input')||{}).value||hoje();
+  const fornecedor=((document.getElementById('lancfin-fornecedor-input')||{}).value||'').trim();
+  const valorTotal=+(document.getElementById('lancfin-valor-input')||{}).value||0;
+  const itens=((document.getElementById('lancfin-itens-input')||{}).value||'').trim();
+  const obs=((document.getElementById('lancfin-obs-input')||{}).value||'').trim();
+  if(!fornecedor){showToast('Informe o fornecedor.','peach');return;}
+  if(!valorTotal){showToast('Informe o valor total.','peach');return;}
+  if(!im.lancamentosFinanceiro)im.lancamentosFinanceiro=[];
+  im.lancamentosFinanceiro.push({id:uid(),data,fornecedor,valorTotal,itens,obs});
+  saveAll();renderAba('gastos');showToast('Lançamento adicionado!','sage');
+}
+function _apagarLancamentoFinanceiro(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Apagar este lançamento?'))return;
+  im.lancamentosFinanceiro=(im.lancamentosFinanceiro||[]).filter(x=>x.id!==id);
+  saveAll();renderAba('gastos');
+}
+function _linhasLancamentosFinanceiro(im){
+  return (im.lancamentosFinanceiro||[]).map(l=>({data:l.data,fornecedor:l.fornecedor||'',itens:l.itens||'',valorTotal:+l.valorTotal||0,obs:l.obs||''}));
 }
 function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -3862,6 +3971,7 @@ function renderAbaFinal(im){
   ${_checklistItem('Primeira limpeza realizada',!!(im.ops?.limpeza?.data))}
   ${_checklistItem('Vistoria realizada',!!(im.ops?.vistoria?.data))}
   ${_checklistItem('Compras concluídas',_todasComprasFeitas(im))}
+  ${_checklistItem('Anúncio criado',!!im.anuncioCriado)}
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-pdf"></i> Relatórios Compilados</div>
   <div class="hint" style="margin-bottom:8px;">Dois relatórios separados pra não confundir o agente de criação de anúncio: um só com as respostas do formulário, outro só com os dados operacionais/administrativos.</div>
@@ -3878,6 +3988,13 @@ function renderAbaFinal(im){
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
   <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
+
+  <div class="form-group" style="margin-top:8px;">
+    <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-criado"${im.anuncioCriado?' checked':''} onchange="_onAnuncioCriadoChange(this)"> Anúncio criado</label>
+  </div>
+  <div class="form-group" id="fn-anuncio-criado-data-wrap" style="${im.anuncioCriado?'':'display:none;'}">
+    <label>Data</label><input id="fn-anuncio-criado-data" type="date" class="input" value="${im.dataAnuncioCriado||hoje()}" onchange="_onDataAnuncioCriadoChange(this)">
+  </div>
 
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
@@ -3913,6 +4030,17 @@ function renderAbaFinal(im){
     <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
   </div>`:''}
   </div>`;
+}
+function _onAnuncioCriadoChange(cb){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.anuncioCriado=cb.checked;
+  if(cb.checked&&!im.dataAnuncioCriado)im.dataAnuncioCriado=hoje();
+  saveAll();renderAba('final');
+}
+function _onDataAnuncioCriadoChange(inp){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.dataAnuncioCriado=inp.value||hoje();
+  saveAll();
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
