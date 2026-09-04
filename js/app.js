@@ -3964,16 +3964,7 @@ async function gerarPDFOrcamento(){
 function renderAbaFinal(im){
   const resp=im.responsavelCriacao||'';
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist Final</div>
-  ${_checklistItem('Contrato assinado',im.contratoAssinado)}
-  ${_checklistItem('Formulário enviado pelo proprietário',!!im.formEnviadoEm)}
-  ${_checklistItem('Fotos realizadas',!!(im.ops?.fotos?.data&&im.ops?.fotos?.responsavel))}
-  ${_checklistItem('Primeira limpeza realizada',!!(im.ops?.limpeza?.data))}
-  ${_checklistItem('Vistoria realizada',!!(im.ops?.vistoria?.data))}
-  ${_checklistItem('Compras concluídas',_todasComprasFeitas(im))}
-  ${_checklistItem('Anúncio criado',!!im.anuncioCriado)}
-
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-pdf"></i> Relatórios Compilados</div>
+  <div class="form-section-title"><i class="fa-solid fa-file-pdf"></i> Relatórios Compilados</div>
   <div class="hint" style="margin-bottom:8px;">Dois relatórios separados pra não confundir o agente de criação de anúncio: um só com as respostas do formulário, outro só com os dados operacionais/administrativos.</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-outline btn-sm" onclick="gerarPDFFormulario()"><i class="fa-solid fa-file-pdf"></i> PDF do Formulário</button>
@@ -4286,17 +4277,6 @@ function pedirCotacaoJarvis(modo){
     ${listHtml}`;
   document.getElementById('modal-generico').classList.add('open');
 }
-function _checklistItem(label,ok){
-  return`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
-    <span style="font-size:18px;">${ok?'✅':'⏳'}</span>
-    <span style="${ok?'':'color:var(--text-muted);'}">${label}</span>
-  </div>`;
-}
-function _todasComprasFeitas(im){
-  if(!im.compras)return false;
-  return ITENS_COMPRAS.every((_,idx)=>im.compras[idx]?.comprado);
-}
-
 // ═══════════════════ DASHBOARD ═══════════════════
 function renderDashboard(){
   const total=imoveis.length;
