@@ -1191,6 +1191,12 @@ function _coletarDadosAba(aba,im){
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
     im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
+    im.anuncioConjuntoValorMinNoite=gn('fn-ac-min-noite');
+    im.anuncioConjuntoValorBaseNoite=gn('fn-ac-base-noite');
+    im.anuncioConjuntoTaxaHospedeExtra=gn('fn-ac-taxa-extra');
+    im.anuncioConjuntoTaxaHospedeExtraAcimaDe=gn('fn-ac-extra-acima');
+    im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
+    im.anuncioConjuntoTaxaLimpeza=gn('fn-ac-taxa-limpeza');
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -2652,7 +2658,7 @@ function _valorPagoOuPrevisto(pago,previsto,override){
 function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
   let setupPago=0,setupPendente=0;
-  ['fotos','limpeza','vistoria'].forEach(k=>{
+  ['fotos','limpeza','vistoria','vistoria2'].forEach(k=>{
     if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(ops[k]?.pago)setupPago+=custo;else setupPendente+=custo;
@@ -2722,9 +2728,10 @@ function renderAbaGastos(im){
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
       <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
       <tbody>
-      ${['fotos','limpeza','vistoria'].map(k=>{
+      ${['fotos','limpeza','vistoria','vistoria2'].map(k=>{
         if(ops[k]?.naoAplica)return''; // marcado "não se aplica" na aba Produção — nem entra aqui
-        const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
+        if(k==='vistoria2'&&!ops.vistoria2?.data&&!ops.vistoria2?.custo)return''; // só mostra se tiver algo preenchido — nem todo imóvel tem segunda vistoria
+        const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria',vistoria2:'Segunda Vistoria'}[k];
         const custo=+ops[k]?.custo||0;
         const feito=!!ops[k]?.feito;
         const pago=!!ops[k]?.pago;
@@ -2749,6 +2756,19 @@ function renderAbaGastos(im){
     </div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup". Fase que não se aplica a este imóvel também se marca na aba Produção, dentro do card de Fotos/Limpeza/Vistoria.</div>
   </div>`;
+
+  const custoEnxovalMensal=+im.defEnxoval?.valorAluguelMensal||0;
+  const recorrentesHtml=(im.defEnxoval?.tipo==='aluguel'&&custoEnxovalMensal)?`<div style="margin-bottom:24px;">
+    <div class="form-section-title"><i class="fa-solid fa-arrows-rotate"></i> Custos Recorrentes</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 8px;">Item</th><th style="text-align:left;padding:4px 8px;">Fornecedor</th><th style="text-align:right;padding:4px 8px;">Valor / mês</th></tr></thead>
+      <tbody><tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;">Enxoval alugado</td>
+        <td style="padding:4px 8px;">${esc(im.defEnxoval?.fornecedor||'—')}</td>
+        <td style="text-align:right;padding:4px 8px;">${fmtMoeda(custoEnxovalMensal)}</td>
+      </tr></tbody>
+    </table>
+  </div>`:'';
 
   const loteFormHtml=`<div id="form-add-lote" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:12px;">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
@@ -2931,6 +2951,7 @@ function renderAbaGastos(im){
       <button class="btn btn-sm btn-outline" onclick="exportarGastosCSV()"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
     </div>
     ${setupHtml}
+    ${recorrentesHtml}
     ${comprasHtml}
     ${manutHtml}
     ${extrasHtml}
@@ -2944,8 +2965,9 @@ function renderAbaGastos(im){
 function _linhasRelatorioGastos(im){
   const linhas=[];
   const ops=im.ops||{};
-  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'};
-  ['fotos','limpeza','vistoria'].forEach(k=>{
+  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria',vistoria2:'Segunda Vistoria'};
+  ['fotos','limpeza','vistoria','vistoria2'].forEach(k=>{
+    if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(!custo)return;
     linhas.push({grupo:'setup',categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
@@ -2954,6 +2976,9 @@ function _linhasRelatorioGastos(im){
     const custo=+ev.custo||0;
     linhas.push({grupo:'setup',categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
   });
+  if(im.defEnxoval?.tipo==='aluguel'&&+im.defEnxoval?.valorAluguelMensal){
+    linhas.push({grupo:'recorrente',categoria:'Custo Recorrente',item:`Enxoval alugado — ${im.defEnxoval.fornecedor||'sem fornecedor'} (mensal)`,previsto:+im.defEnxoval.valorAluguelMensal,pago:0});
+  }
   _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
     linhas.push({grupo:'outros',categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
   });
@@ -3853,9 +3878,24 @@ function renderAbaFinal(im){
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
-  <div class="form-row" id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
-    <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
-    <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
+    <div class="form-row">
+      <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
+      <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+    </div>
+    <div class="hint" style="margin:6px 0;">Preços do anúncio em conjunto — podem ser diferentes dos preços do imóvel sozinho (aba Contrato).</div>
+    <div class="form-row">
+      <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'fn-ac-taxa-extra',value:im.anuncioConjuntoTaxaHospedeExtra||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'fn-ac-extra-acima',value:im.anuncioConjuntoTaxaHospedeExtraAcimaDe||0,min:0})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Caução (R$)</label>${numInput({id:'fn-ac-caucao',value:im.anuncioConjuntoCaucao||0,min:0,step:50})}</div>
+      <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'fn-ac-taxa-limpeza',value:im.anuncioConjuntoTaxaLimpeza||0,min:0,step:10})}</div>
+    </div>
   </div>
 
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
