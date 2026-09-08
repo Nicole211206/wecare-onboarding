@@ -1167,7 +1167,7 @@ function _coletarDadosAba(aba,im){
     im.fechaduraEletronica=im.defOperacionais['fechaduraEletronica']||false;
     im.defLimpeza={responsavel:g('def-limpeza-resp')};
     const _enxTipo=g('def-enxoval-tipo');
-    im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup')};
+    im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup'),custoAluguelMensal:gn('def-enxoval-custo')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
   }
   if(aba==='operacional'){
@@ -1191,6 +1191,12 @@ function _coletarDadosAba(aba,im){
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
     im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
+    im.anuncioConjuntoValorMinNoite=gn('fn-ac-min-noite');
+    im.anuncioConjuntoValorBaseNoite=gn('fn-ac-base-noite');
+    im.anuncioConjuntoTaxaHospedeExtra=gn('fn-ac-taxa-extra');
+    im.anuncioConjuntoTaxaHospedeExtraAcimaDe=gn('fn-ac-extra-acima');
+    im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
+    im.anuncioConjuntoTaxaLimpeza=gn('fn-ac-taxa-limpeza');
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -1657,7 +1663,10 @@ function renderAbaContrato(im){
       ${im.contratoLink?`<a href="${esc(im.contratoLink)}" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-external-link-alt"></i></a>`:''}
     </div>
   </div>
-  ${im.contratoAssinado?`<div class="alert-success"><i class="fa-solid fa-check-circle"></i> Contrato assinado em <strong>${fmtDate(im.dataContratoAssinado)}</strong></div>`:''}
+  ${im.contratoAssinado?`<div class="alert-success" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span><i class="fa-solid fa-check-circle"></i> Contrato assinado em</span>
+    <input type="date" class="input" style="width:160px;" value="${im.dataContratoAssinado||hoje()}" onchange="_onDataContratoAssinadoChange(this)">
+  </div>`:''}
   <div class="form-group" style="margin-top:8px;">
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
   </div>
@@ -1779,6 +1788,11 @@ function marcarContratoAssinadoManual(){
   saveAll();renderKanban();renderAba('contrato');_atualizarHeaderDetalhe(im);
   showToast('Contrato marcado como assinado.','sage');
 }
+function _onDataContratoAssinadoChange(inp){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.dataContratoAssinado=inp.value||hoje();
+  saveAll();_atualizarHeaderDetalhe(im);
+}
 
 // ═══════════════════ ABA DEFINIÇÕES ═══════════════════
 function renderAbaDefinicoes(im){
@@ -1812,8 +1826,12 @@ function renderAbaDefinicoes(im){
     </select>
   </div>
   <div class="form-row" id="def-enxoval-valores-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
-    <div class="form-group"><label>Valor Mensal (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}"></div>
+    <div class="form-group"><label>Valor Mensal cobrado do proprietário (R$)</label><input id="def-enxoval-mensal" type="number" class="input" value="${im.defEnxoval?.valorAluguelMensal||0}" oninput="_atualizarMargemEnxoval()"></div>
     <div class="form-group" id="def-enxoval-setup-wrap" style="${MODALIDADES_ENXOVAL.find(m=>m.nome===im.defEnxoval?.fornecedor)?.temSetup===false?'display:none;':''}"><label>Setup (R$)</label><input id="def-enxoval-setup" type="number" class="input" value="${im.defEnxoval?.valorSetupAluguel||0}"></div>
+  </div>
+  <div class="form-row" id="def-enxoval-custo-row" style="${im.defEnxoval?.tipo==='aluguel'?'':'display:none;'}">
+    <div class="form-group"><label>Custo Mensal — o que a WeCare paga (R$)</label><input id="def-enxoval-custo" type="number" class="input" value="${im.defEnxoval?.custoAluguelMensal||0}" oninput="_atualizarMargemEnxoval()"></div>
+    <div class="form-group"><label>Margem</label><div id="def-enxoval-margem" class="input" style="background:var(--surface-2);display:flex;align-items:center;font-weight:600;color:${((+im.defEnxoval?.valorAluguelMensal||0)-(+im.defEnxoval?.custoAluguelMensal||0))>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda((+im.defEnxoval?.valorAluguelMensal||0)-(+im.defEnxoval?.custoAluguelMensal||0))}</div></div>
   </div>
   <div class="hint" id="def-enxoval-comprado-hint" style="${im.defEnxoval?.tipo==='aluguel'?'display:none;':''}">Enxoval comprado não tem valor mensal nem setup.</div>
   ${im.defEnxoval?.fornecedor==='Manual'?'<div class="hint">Fornecedor "Manual" não recalcula os valores automaticamente — digite o valor mensal e o setup direto, pra casos de exceção.</div>':''}
@@ -1830,10 +1848,12 @@ function _onEnxovalTipoChange(sel){
   const txt=document.getElementById('def-enxoval-forn-texto');
   const sel2=document.getElementById('def-enxoval-forn-select');
   const valoresRow=document.getElementById('def-enxoval-valores-row');
+  const custoRow=document.getElementById('def-enxoval-custo-row');
   const compradoHint=document.getElementById('def-enxoval-comprado-hint');
   if(txt)txt.style.display=aluguel?'none':'';
   if(sel2)sel2.style.display=aluguel?'':'none';
   if(valoresRow)valoresRow.style.display=aluguel?'':'none';
+  if(custoRow)custoRow.style.display=aluguel?'':'none';
   if(compradoHint)compradoHint.style.display=aluguel?'none':'';
   _recalcEnxovalValores();
 }
@@ -1872,20 +1892,32 @@ function _valorEnxovalSetup(fornecedorNome,campo){
 // (o que é passado pro proprietário), não o custo interno.
 function _valorEnxovalAutoMensal(hospedes,fornecedorNome){return _valorEnxovalMensal(hospedes,fornecedorNome,'cobrado');}
 function _valorEnxovalAutoSetup(fornecedorNome){return _valorEnxovalSetup(fornecedorNome,'cobrado');}
+function _atualizarMargemEnxoval(){
+  const cobrado=+document.getElementById('def-enxoval-mensal')?.value||0;
+  const custo=+document.getElementById('def-enxoval-custo')?.value||0;
+  const margemEl=document.getElementById('def-enxoval-margem');
+  if(!margemEl)return;
+  const margem=cobrado-custo;
+  margemEl.textContent=fmtMoeda(margem);
+  margemEl.style.color=margem>=0?'var(--sage)':'var(--rose)';
+}
 function _recalcEnxovalValores(){
   const tipoSel=document.getElementById('def-enxoval-tipo');
   const mensalEl=document.getElementById('def-enxoval-mensal');
   const setupEl=document.getElementById('def-enxoval-setup');
+  const custoEl=document.getElementById('def-enxoval-custo');
   const setupWrap=document.getElementById('def-enxoval-setup-wrap');
   if(!tipoSel||!mensalEl||!setupEl)return;
-  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;return;}
+  if(tipoSel.value!=='aluguel'){mensalEl.value=0;setupEl.value=0;if(custoEl)custoEl.value=0;_atualizarMargemEnxoval();return;}
   const fornecedor=document.getElementById('def-enxoval-forn-select')?.value;
   const entry=MODALIDADES_ENXOVAL.find(m=>m.nome===fornecedor);
   if(setupWrap)setupWrap.style.display=(entry?entry.temSetup:true)?'':'none';
-  if(fornecedor==='Manual')return; // não recalcula — deixa o valor digitado à mão como está
+  if(fornecedor==='Manual'){_atualizarMargemEnxoval();return;} // não recalcula — deixa o valor digitado à mão como está
   const im=getImovel(_imovelAtivoId);
   mensalEl.value=_valorEnxovalAutoMensal(im?.maxHospedes,fornecedor);
   setupEl.value=_valorEnxovalAutoSetup(fornecedor);
+  if(custoEl)custoEl.value=_valorEnxovalMensal(im?.maxHospedes,fornecedor,'custo');
+  _atualizarMargemEnxoval();
 }
 
 // ═══════════════════ ABA FORMULÁRIO ═══════════════════
@@ -2583,10 +2615,10 @@ function _rowsComprasTodos(im){
     const comprado=compras[subKey]?.comprado||false;
     const pago=compras[subKey]?.pago||false;
     const loteId=compras[subKey]?.loteId||null;
-    // Previsto pendente = preço × falta (mesma conta da aba Compras — só o que falta comprar).
-    // Uma vez pago, vira o custo cheio (preço × qtdNec), já que o "previsto" original deixa de
-    // fazer sentido depois que o qtdTem for atualizado (a falta zera e o previsto sumiria).
-    const previsto=pago?precoUn*qtdNec:precoUn*falta;
+    // Previsto = preço × falta, IGUAL à aba Compras — nunca muda de fórmula conforme o
+    // checkbox "Pago" (bug corrigido em 2026-09-01: antes virava preço × qtdNec quando pago,
+    // fazendo o número "pular" na tela sem motivo aparente pra quem só olha a aba Gastos).
+    const previsto=precoUn*falta;
     // valorPago é editável (_onCompraValorPago) — some sobre o valor previsto por padrão, mas a
     // equipe pode ajustar pro valor real pago no item, inclusive quando veio de uma compra em lote.
     const valorPago=compras[subKey]?.valorPago;
@@ -2652,7 +2684,7 @@ function _valorPagoOuPrevisto(pago,previsto,override){
 function _calcResumoFinanceiro(im){
   const ops=im.ops||{};
   let setupPago=0,setupPendente=0;
-  ['fotos','limpeza','vistoria'].forEach(k=>{
+  ['fotos','limpeza','vistoria','vistoria2'].forEach(k=>{
     if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(ops[k]?.pago)setupPago+=custo;else setupPendente+=custo;
@@ -2722,9 +2754,10 @@ function renderAbaGastos(im){
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
       <thead><tr style="background:var(--surface-2)"><th>Feito</th><th>Pago</th><th style="text-align:left;">Item</th><th style="text-align:right;padding:0 8px;">Custo</th></tr></thead>
       <tbody>
-      ${['fotos','limpeza','vistoria'].map(k=>{
+      ${['fotos','limpeza','vistoria','vistoria2'].map(k=>{
         if(ops[k]?.naoAplica)return''; // marcado "não se aplica" na aba Produção — nem entra aqui
-        const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'}[k];
+        if(k==='vistoria2'&&!ops.vistoria2?.data&&!ops.vistoria2?.custo)return''; // só mostra se tiver algo preenchido — nem todo imóvel tem segunda vistoria
+        const label={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria',vistoria2:'Segunda Vistoria'}[k];
         const custo=+ops[k]?.custo||0;
         const feito=!!ops[k]?.feito;
         const pago=!!ops[k]?.pago;
@@ -2903,6 +2936,45 @@ function renderAbaGastos(im){
     </table>`}
   </div>`;
 
+  const lancamentosFinanceiro=im.lancamentosFinanceiro||[];
+  const lancFinHtml=`<div style="margin-bottom:24px;border-top:2px dashed var(--border);padding-top:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-building-columns"></i> Lançamentos para o Financeiro</div>
+      <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+    </div>
+    <div class="hint" style="margin-bottom:10px;">Registro simples de compras pro Financeiro identificar/conciliar gastos. Separado do controle de Compras acima — não entra no cálculo de margem, mas sai nos relatórios (PDF/Excel) abaixo.</div>
+    <div id="form-add-lancamento-fin" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="lancfin-data-input" type="date" class="input" value="${hoje()}"></div>
+        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Fornecedor</label><input id="lancfin-fornecedor-input" class="input" placeholder="Ex: Leroy Merlin"></div>
+        <div class="form-group" style="width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor Total (R$)</label><input id="lancfin-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <div class="form-group" style="flex:1;min-width:220px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Itens (opcional)</label><textarea id="lancfin-itens-input" class="input" rows="3" placeholder="Ex: Cortina, tapete, luminária..."></textarea></div>
+        <div class="form-group" style="flex:1;min-width:220px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação</label><textarea id="lancfin-obs-input" class="input" rows="3" placeholder="Ex: dividido com WC-00123"></textarea></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="btn btn-sm btn-sage" onclick="confirmarLancamentoFinanceiro()"><i class="fa-solid fa-check"></i> Salvar</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:32px;"></th></tr></thead>
+      <tbody>
+      ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+        <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
+        <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
+        <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
+        <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.obs||'-')}</td>
+        <td style="vertical-align:top;"><button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot><tr><td colspan="3" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
+    </table>`}
+  </div>`;
+
   const _cardResumo=(titulo,r2,extra)=>`<div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:12px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-scale-balanced"></i> ${titulo}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
@@ -2935,6 +3007,7 @@ function renderAbaGastos(im){
     ${manutHtml}
     ${extrasHtml}
     ${gastosAvulsosHtml}
+    ${lancFinHtml}
     ${resumoHtml}
   </div>`;
 }
@@ -2944,8 +3017,9 @@ function renderAbaGastos(im){
 function _linhasRelatorioGastos(im){
   const linhas=[];
   const ops=im.ops||{};
-  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria'};
-  ['fotos','limpeza','vistoria'].forEach(k=>{
+  const labelOp={fotos:'Sessão de Fotos',limpeza:'Primeira Limpeza',vistoria:'Vistoria',vistoria2:'Segunda Vistoria'};
+  ['fotos','limpeza','vistoria','vistoria2'].forEach(k=>{
+    if(ops[k]?.naoAplica)return;
     const custo=+ops[k]?.custo||0;
     if(!custo)return;
     linhas.push({grupo:'setup',categoria:'Setup',item:labelOp[k],previsto:custo,pago:ops[k]?.pago?custo:0});
@@ -2954,6 +3028,9 @@ function _linhasRelatorioGastos(im){
     const custo=+ev.custo||0;
     linhas.push({grupo:'setup',categoria:'Setup',item:ev.titulo||'Evento extra',previsto:custo,pago:ev.pago?custo:0});
   });
+  if(im.defEnxoval?.tipo==='aluguel'&&+im.defEnxoval?.custoAluguelMensal){
+    linhas.push({grupo:'recorrente',categoria:'Custo Recorrente',item:`Enxoval alugado — ${im.defEnxoval.fornecedor||'sem fornecedor'} (mensal)`,previsto:+im.defEnxoval.custoAluguelMensal,pago:0});
+  }
   _rowsComprasRelevantes(im).filter(x=>!x.loteId).forEach(x=>{
     linhas.push({grupo:'outros',categoria:'Compras — '+x.cat,item:x.label,previsto:x.previsto,pago:x.pago?(x.valorPago!=null?x.valorPago:x.previsto):0});
   });
@@ -2979,6 +3056,7 @@ async function gerarPDFGastos(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const linhas=_linhasRelatorioGastos(im);
   const r=_calcResumoFinanceiro(im);
+  const lancFin=_linhasLancamentosFinanceiro(im);
   const win=window.open('','_blank');
   const headerHtml=await _pdfHeaderHtml(im,'Relatório de Gastos');
   const tabela=(titulo,lista,r2)=>{
@@ -3021,6 +3099,18 @@ async function gerarPDFGastos(){
     <div><div class="lbl">Total Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
     <div><div class="lbl">Margem Total</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
   </div>
+  ${lancFin.length?`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Lançamentos para o Financeiro</div>
+  <table>
+    <thead><tr><th>Data</th><th>Fornecedor</th><th>Itens</th><th style="text-align:right;">Valor Total</th><th>Obs</th></tr></thead>
+    <tbody>${lancFin.map(l=>`<tr>
+      <td style="padding:6px 10px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+      <td style="padding:6px 10px;">${esc(l.fornecedor)}</td>
+      <td style="padding:6px 10px;">${esc(l.itens||'-')}</td>
+      <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
+      <td style="padding:6px 10px;">${esc(l.obs||'-')}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  <div style="text-align:right;font-weight:700;margin-top:6px;">Total: ${fmtMoeda(lancFin.reduce((s,l)=>s+l.valorTotal,0))}</div>`:''}
   </body></html>`);
   win.document.close();win.print();
 }
@@ -3028,6 +3118,7 @@ function exportarGastosCSV(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const linhas=_linhasRelatorioGastos(im);
   const r=_calcResumoFinanceiro(im);
+  const lancFin=_linhasLancamentosFinanceiro(im);
   const fmtNum=v=>(+v||0).toFixed(2).replace('.',',');
   const csvEsc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const bloco=(titulo,lista,r2)=>[
@@ -3039,9 +3130,17 @@ function exportarGastosCSV(){
     [csvEsc('Margem '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
     '',
   ];
+  const blocoLancFin=lancFin.length?[
+    [csvEsc('Lançamentos para o Financeiro')].join(';'),
+    ['Data','Fornecedor','Itens','Valor Total (R$)','Obs'].map(csvEsc).join(';'),
+    ...lancFin.map(l=>[l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'',l.fornecedor,l.itens,fmtNum(l.valorTotal),l.obs].map(csvEsc).join(';')),
+    [csvEsc('Total Lançamentos'),'','',csvEsc(fmtNum(lancFin.reduce((s,l)=>s+l.valorTotal,0))),''].join(';'),
+    '',
+  ]:[];
   const linhasCsv=[
     ...bloco('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup),
     ...bloco('Itens',linhas.filter(l=>l.grupo==='outros'),r.outros),
+    ...blocoLancFin,
     [csvEsc('TOTAL GERAL'),'','',''].join(';'),
     [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
     [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
@@ -3241,6 +3340,45 @@ function _apagarGastoAvulso(id){
   if(!confirm('Apagar este gasto?'))return;
   im.gastosAvulsos=(im.gastosAvulsos||[]).filter(x=>x.id!==id);
   saveAll();renderAba('gastos');
+}
+function toggleFormLancamentoFinanceiro(){
+  const el=document.getElementById('form-add-lancamento-fin');if(!el)return;
+  const visible=el.style.display!=='none';
+  el.style.display=visible?'none':'block';
+  if(!visible){
+    const d=document.getElementById('lancfin-data-input');
+    const f=document.getElementById('lancfin-fornecedor-input');
+    const v=document.getElementById('lancfin-valor-input');
+    const it=document.getElementById('lancfin-itens-input');
+    const o=document.getElementById('lancfin-obs-input');
+    if(d)d.value=hoje();
+    if(f){f.value='';f.focus();}
+    if(v)v.value='0';
+    if(it)it.value='';
+    if(o)o.value='';
+  }
+}
+function confirmarLancamentoFinanceiro(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const data=(document.getElementById('lancfin-data-input')||{}).value||hoje();
+  const fornecedor=((document.getElementById('lancfin-fornecedor-input')||{}).value||'').trim();
+  const valorTotal=+(document.getElementById('lancfin-valor-input')||{}).value||0;
+  const itens=((document.getElementById('lancfin-itens-input')||{}).value||'').trim();
+  const obs=((document.getElementById('lancfin-obs-input')||{}).value||'').trim();
+  if(!fornecedor){showToast('Informe o fornecedor.','peach');return;}
+  if(!valorTotal){showToast('Informe o valor total.','peach');return;}
+  if(!im.lancamentosFinanceiro)im.lancamentosFinanceiro=[];
+  im.lancamentosFinanceiro.push({id:uid(),data,fornecedor,valorTotal,itens,obs});
+  saveAll();renderAba('gastos');showToast('Lançamento adicionado!','sage');
+}
+function _apagarLancamentoFinanceiro(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Apagar este lançamento?'))return;
+  im.lancamentosFinanceiro=(im.lancamentosFinanceiro||[]).filter(x=>x.id!==id);
+  saveAll();renderAba('gastos');
+}
+function _linhasLancamentosFinanceiro(im){
+  return (im.lancamentosFinanceiro||[]).map(l=>({data:l.data,fornecedor:l.fornecedor||'',itens:l.itens||'',valorTotal:+l.valorTotal||0,obs:l.obs||''}));
 }
 function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -3826,15 +3964,7 @@ async function gerarPDFOrcamento(){
 function renderAbaFinal(im){
   const resp=im.responsavelCriacao||'';
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-list-check"></i> Checklist Final</div>
-  ${_checklistItem('Contrato assinado',im.contratoAssinado)}
-  ${_checklistItem('Formulário enviado pelo proprietário',!!im.formEnviadoEm)}
-  ${_checklistItem('Fotos realizadas',!!(im.ops?.fotos?.data&&im.ops?.fotos?.responsavel))}
-  ${_checklistItem('Primeira limpeza realizada',!!(im.ops?.limpeza?.data))}
-  ${_checklistItem('Vistoria realizada',!!(im.ops?.vistoria?.data))}
-  ${_checklistItem('Compras concluídas',_todasComprasFeitas(im))}
-
-  <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-file-pdf"></i> Relatórios Compilados</div>
+  <div class="form-section-title"><i class="fa-solid fa-file-pdf"></i> Relatórios Compilados</div>
   <div class="hint" style="margin-bottom:8px;">Dois relatórios separados pra não confundir o agente de criação de anúncio: um só com as respostas do formulário, outro só com os dados operacionais/administrativos.</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-outline btn-sm" onclick="gerarPDFFormulario()"><i class="fa-solid fa-file-pdf"></i> PDF do Formulário</button>
@@ -3853,9 +3983,24 @@ function renderAbaFinal(im){
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
-  <div class="form-row" id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
-    <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
-    <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
+    <div class="form-row">
+      <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
+      <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+    </div>
+    <div class="hint" style="margin:6px 0;">Preços do anúncio em conjunto — podem ser diferentes dos preços do imóvel sozinho (aba Contrato).</div>
+    <div class="form-row">
+      <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'fn-ac-taxa-extra',value:im.anuncioConjuntoTaxaHospedeExtra||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'fn-ac-extra-acima',value:im.anuncioConjuntoTaxaHospedeExtraAcimaDe||0,min:0})}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Caução (R$)</label>${numInput({id:'fn-ac-caucao',value:im.anuncioConjuntoCaucao||0,min:0,step:50})}</div>
+      <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'fn-ac-taxa-limpeza',value:im.anuncioConjuntoTaxaLimpeza||0,min:0,step:10})}</div>
+    </div>
   </div>
 
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
@@ -3866,9 +4011,15 @@ function renderAbaFinal(im){
   </div>
   ${im.dataAtivacao?`<div style="background:var(--sage-light,#e8f5e9);border-radius:10px;padding:16px;margin-top:20px;text-align:center;">
     <div style="font-size:28px;margin-bottom:6px;">🎉</div>
-    <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde ${fmtDate(im.dataAtivacao)}</div>
+    <div style="font-weight:700;font-size:16px;color:var(--sage);">Imóvel Ativo desde</div>
+    <input type="date" class="input" style="width:160px;margin-top:8px;text-align:center;" value="${im.dataAtivacao}" onchange="_onDataAtivacaoChange(this)">
   </div>`:''}
   </div>`;
+}
+function _onDataAtivacaoChange(inp){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  im.dataAtivacao=inp.value||hoje();
+  saveAll();renderKanban();
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
@@ -4114,17 +4265,6 @@ function pedirCotacaoJarvis(modo){
     ${listHtml}`;
   document.getElementById('modal-generico').classList.add('open');
 }
-function _checklistItem(label,ok){
-  return`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
-    <span style="font-size:18px;">${ok?'✅':'⏳'}</span>
-    <span style="${ok?'':'color:var(--text-muted);'}">${label}</span>
-  </div>`;
-}
-function _todasComprasFeitas(im){
-  if(!im.compras)return false;
-  return ITENS_COMPRAS.every((_,idx)=>im.compras[idx]?.comprado);
-}
-
 // ═══════════════════ DASHBOARD ═══════════════════
 function renderDashboard(){
   const total=imoveis.length;
