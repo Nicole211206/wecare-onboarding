@@ -42,10 +42,14 @@ def contar_comprados(compras: dict | None) -> int:
 def merge_compras(old_compras: dict | None, new_compras: dict | None) -> dict:
     """compras não é array (é objeto solto por imóvel) — mede quantos itens
     do catálogo estão marcados como comprado; se despencar catastroficamente,
-    o 'novo' compras é provavelmente uma versão antiga do cliente."""
+    o 'novo' compras é provavelmente uma versão antiga do cliente.
+
+    Mesmo incidente 2026-09-03 de merge_item_arrays_by_id: exige old_count>=5
+    pra considerar zerar suspeito, senão desmarcar os últimos comprados de um
+    imóvel pequeno nunca "pegava"."""
     old_count = contar_comprados(old_compras)
     new_count = contar_comprados(new_compras)
-    catastrofica = (new_count == 0 and old_count > 0) or (old_count >= 8 and new_count <= 2)
+    catastrofica = (new_count == 0 and old_count >= 5) or (old_count >= 8 and new_count <= 2)
     return (old_compras or {}) if catastrofica else (new_compras or {})
 
 
@@ -90,10 +94,14 @@ def merge_status_ativacao(old: dict | None, novo: dict) -> dict:
 def merge_array_simples(old_arr: list | None, new_arr: list | None) -> list:
     """plataformas/camas — listas curtas reescritas por inteiro, sem id nos
     itens. Mesma regra de encolhida catastrófica, sem recuperação item-a-item
-    (não dá pra casar por id)."""
+    (não dá pra casar por id).
+
+    Mesmo incidente 2026-09-03 de merge_item_arrays_by_id: exige old_a com
+    >=5 itens pra considerar zerar suspeito, senão apagar a última cama/
+    plataforma de uma lista pequena nunca "pegava"."""
     old_a = old_arr if isinstance(old_arr, list) else []
     new_a = new_arr if isinstance(new_arr, list) else []
-    catastrofica = (len(new_a) == 0 and len(old_a) > 0) or (len(old_a) >= 8 and len(new_a) <= 2)
+    catastrofica = (len(new_a) == 0 and len(old_a) >= 5) or (len(old_a) >= 8 and len(new_a) <= 2)
     return old_a if catastrofica else new_a
 
 
@@ -165,7 +173,14 @@ LIST_KEYS_ESTRITAS = [
 
 
 def _encolhida_catastrofica(sv: list, iv: list) -> bool:
-    return (len(iv) == 0 and len(sv) > 0) or (len(sv) >= 8 and len(iv) <= 2)
+    """Mesmo incidente 2026-09-03 de merge_item_arrays_by_id, mas essa cópia
+    (usada por LIST_KEYS/LIST_KEYS_ESTRITAS, incluindo wc_vistoria_campos)
+    tinha ficado pra trás sem o conserto: exigia só len(sv)>0 pra tratar
+    zerar como catastrófico, então apagar os últimos campos de um catálogo
+    pequeno (ex: campos de vistoria) nunca "pegava" — voltava sempre no
+    próximo /load. Exige len(sv)>=5 pra considerar zerar suspeito, igual às
+    outras funções de merge deste módulo."""
+    return (len(iv) == 0 and len(sv) >= 5) or (len(sv) >= 8 and len(iv) <= 2)
 
 
 def merge_save(current: dict, body: dict) -> dict:

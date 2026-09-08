@@ -53,7 +53,9 @@ function contarComprados(compras) {
 function mergeCompras(oldCompras, newCompras) {
   const oldCount = contarComprados(oldCompras);
   const newCount = contarComprados(newCompras);
-  const catastrofica = (newCount === 0 && oldCount > 0) || (oldCount >= 8 && newCount <= 2);
+  // Mesmo incidente 2026-09-03 de mergeItemArraysById: exige oldCount>=5 pra
+  // considerar zerar suspeito, senão desmarcar os últimos comprados nunca "pegava".
+  const catastrofica = (newCount === 0 && oldCount >= 5) || (oldCount >= 8 && newCount <= 2);
   return catastrofica ? (oldCompras || {}) : (newCompras || {});
 }
 // Mesma lógica pro "ops" (fotos/limpeza/vistoria): se um campo de data que já estava
@@ -90,7 +92,9 @@ function mergeStatusAtivacao(old, novo) {
 function mergeArraySimples(oldArr, newArr) {
   const oldA = Array.isArray(oldArr) ? oldArr : [];
   const newA = Array.isArray(newArr) ? newArr : [];
-  const catastrofica = (newA.length === 0 && oldA.length > 0) || (oldA.length >= 8 && newA.length <= 2);
+  // Mesmo incidente 2026-09-03 de mergeItemArraysById: exige oldA.length>=5 pra
+  // considerar zerar suspeito, senão apagar a última cama/plataforma nunca "pegava".
+  const catastrofica = (newA.length === 0 && oldA.length >= 5) || (oldA.length >= 8 && newA.length <= 2);
   return catastrofica ? oldA : newA;
 }
 
@@ -318,24 +322,27 @@ export default {
 
       // Merge: incoming sobrescreve current, exceto listas que encolheriam catastroficamente
       const merged = { ...current, ...body };
+      // Incidente 2026-09-03: essa checagem exigia só sv.length>0 pra tratar zerar
+      // como catastrófico (diferente de mergeItemArraysById, que já exige >=5), então
+      // apagar os últimos itens de uma lista pequena (ex: campos de vistoria) nunca
+      // "pegava" — voltava sempre no próximo /save. Exige sv.length>=5, mesma regra
+      // das outras funções de merge acima.
       const listKeys = ['wc_imoveis','wc_prestadores','wc_users','wc_membros','wc_itens'];
       for (const k of listKeys) {
         const sv = Array.isArray(current[k]) ? current[k] : [];
         const iv = Array.isArray(body[k])    ? body[k]    : [];
         // Cair para 0, ou de ≥8 para ≤2: mantém servidor
-        if ((iv.length === 0 && sv.length > 0) || (sv.length >= 8 && iv.length <= 2)) {
+        if ((iv.length === 0 && sv.length >= 5) || (sv.length >= 8 && iv.length <= 2)) {
           merged[k] = sv;
         }
       }
       // Listas curtas e curadas manualmente (config) — só rejeita encolhida catastrófica
-      // (dispositivo desatualizado zerando a lista), mesma regra do listKeys acima. Antes
-      // qualquer encolhida era rejeitada, o que impedia até um apagar de 1 item só de
-      // colar (ex: remover 1 campo de vistoria nunca "pegava" de verdade na sincronização).
+      // (dispositivo desatualizado zerando a lista), mesma regra do listKeys acima.
       const listKeysEstritas = ['wc_def_operacionais', 'wc_limpeza_checkout', 'wc_vistoria_campos', 'wc_templates_msg', 'wc_orcamentos', 'wc_estoque_itens'];
       for (const k of listKeysEstritas) {
         const sv = Array.isArray(current[k]) ? current[k] : [];
         const iv = Array.isArray(body[k])    ? body[k]    : [];
-        if ((iv.length === 0 && sv.length > 0) || (sv.length >= 8 && iv.length <= 2)) {
+        if ((iv.length === 0 && sv.length >= 5) || (sv.length >= 8 && iv.length <= 2)) {
           merged[k] = sv;
         }
       }
