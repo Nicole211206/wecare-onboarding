@@ -120,7 +120,11 @@ function reconciliarSublistasImoveis(oldImoveis, newImoveis) {
     if (!im || !im.id || !oldById.has(im.id)) return im;
     const old = oldById.get(im.id);
     return {
-      ...im,
+      // Campos escalares do imóvel (nome, endereco, captacaoLink/pasta do Drive, dataCriacao,
+      // etc.) — mesma regra de mergeCamposNaoVazios usada abaixo em defLimpeza/defEnxoval: se
+      // um campo já preenchido chega vazio (dispositivo desatualizado que ainda não tinha esse
+      // valor, ex: link do Drive adicionado em outro lugar), mantém o antigo em vez de apagar.
+      ...mergeCamposNaoVazios(old, im),
       itensExtras:   mergeItemArraysById(old.itensExtras,   im.itensExtras),
       eventosExtras: mergeItemArraysById(old.eventosExtras, im.eventosExtras),
       vistorias:     mergeItemArraysById(old.vistorias,     im.vistorias),

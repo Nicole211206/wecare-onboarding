@@ -133,7 +133,14 @@ def reconciliar_sublistas_imoveis(old_imoveis: list | None, new_imoveis: list | 
             continue
         old = old_by_id[im["id"]]
         merged = {
-            **im,
+            # Campos escalares do imóvel (nome, endereco, captacaoLink/pasta do Drive,
+            # dataCriacao, etc.) — mesma regra de merge_campos_nao_vazios usada abaixo em
+            # defLimpeza/defEnxoval: se um campo já preenchido chega vazio (dispositivo
+            # desatualizado que ainda não tinha esse valor, ex: link do Drive adicionado
+            # em outro lugar), mantém o antigo em vez de apagar. Sem isso, sumia
+            # silenciosamente em qualquer sobrescrita — era o bug da "pasta do Drive que
+            # eu adicionei sumiu" reportado pela Nicole.
+            **merge_campos_nao_vazios(old, im),
             "itensExtras": merge_item_arrays_by_id(old.get("itensExtras"), im.get("itensExtras")),
             "eventosExtras": merge_item_arrays_by_id(old.get("eventosExtras"), im.get("eventosExtras")),
             "vistorias": merge_item_arrays_by_id(old.get("vistorias"), im.get("vistorias")),

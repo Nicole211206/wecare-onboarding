@@ -699,15 +699,20 @@ async function kvPull(showMsg){
       const serverTs=+(j.data.lastSaved)||0;
       // Regra 4: só sobrescreve o local se o servidor for estritamente mais novo
       if(serverTs>localTs){
+        // Regra 3 (removida — bug real, ver commit): antes, uma lista local maior
+        // que a do servidor fazia essa chave inteira ser pulada no pull, mesmo com
+        // o servidor estritamente mais novo. Isso existia pra proteger contra um
+        // dispositivo desatualizado zerando dados — mas essa proteção já é feita
+        // (melhor, item a item) no merge_save do backend ANTES do servidor aceitar
+        // a gravação. Do lado do cliente ela só causava o bug oposto: um dispositivo
+        // parado (ex: aba antiga, celular) que ainda não tinha essa lista reduzida
+        // localmente pulava o pull, e no próximo autosave/push devolvia pro servidor
+        // a versão antiga e maior, desfazendo silenciosamente a exclusão de quem
+        // editou em outro lugar — exatamente o "atualizo aqui, no dia seguinte volta
+        // pra outra configuração" reportado pela Nicole. Servidor mais novo já passou
+        // pela proteção anti-sobrescrita dele; o cliente deve confiar nele por inteiro.
         for(const k in j.data){
-          const sv=j.data[k];
-          // Regra 3: vazio/menor nunca sobrescreve cheio
-          if(Array.isArray(sv)){
-            const lv=localStorage.getItem(k);
-            const la=lv?JSON.parse(lv):[];
-            if(Array.isArray(la)&&la.length>sv.length)continue;
-          }
-          try{localStorage.setItem(k,JSON.stringify(sv));}catch{}
+          try{localStorage.setItem(k,JSON.stringify(j.data[k]));}catch{}
         }
         loadAll();
         if(_imovelAtivoId)renderAba(_abaAtiva);
