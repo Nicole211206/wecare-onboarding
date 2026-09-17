@@ -203,8 +203,15 @@ def merge_save(current: dict, body: dict) -> dict:
 
     merged["wc_imoveis"] = reconciliar_sublistas_imoveis(current.get("wc_imoveis"), merged.get("wc_imoveis"))
 
-    # lastSaved: aceita o do cliente se for mais novo
+    # lastSaved: aceita o do cliente só se for mais novo — senão mantém o
+    # atual. BUG corrigido em 2026-09-17: a spread inicial (`{**current,
+    # **body}`) já trazia o lastSaved do cliente por padrão, então um
+    # cliente desatualizado mandando um lastSaved antigo sobrescrevia o
+    # mais novo do servidor (o `if` abaixo só cobria o caso "aceitar",
+    # nunca "reverter"). Achado ao escrever os testes deste módulo.
     if body.get("lastSaved") and float(body["lastSaved"]) > float(current.get("lastSaved") or 0):
         merged["lastSaved"] = body["lastSaved"]
+    elif current.get("lastSaved") is not None:
+        merged["lastSaved"] = current["lastSaved"]
 
     return merged
