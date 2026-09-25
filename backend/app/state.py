@@ -575,6 +575,25 @@ def get_revs(db: Session) -> dict[str, int]:
     return revs
 
 
+def reler_estado(db: Session, base_url: str, token: str) -> dict:
+    """get_state "fresco", pra rota que faz `await` (Drive, IA) entre ler e gravar.
+
+    Incidente 2026-09-25: /analisar-drive lia o estado inteiro, esperava Drive + Claude
+    (dezenas de segundos) e gravava esse estado velho de volta por cima de tudo — revertendo
+    o que qualquer pessoa tivesse editado nesse meio tempo (link do Drive de outro imóvel,
+    configurações) e, com 2 análises simultâneas, a última apagava o resultado da outra.
+    /vistoria-upload idem com uploads paralelos da vistoriadora (mídias sumindo). Essas
+    rotas devem usar o 1º get_state só pra LER o que precisam, e aplicar a alteração num
+    estado relido com esta função logo antes de gravar, sem nenhum `await` entre esta
+    chamada e o commit (todas as escritas rodam no event loop, então nada intercala).
+
+    O rollback é necessário: a sessão é a mesma do 1º get_state e o identity map do
+    SQLAlchemy devolveria os objetos já carregados (com os valores antigos) em vez de
+    reler do banco. Não há nada pendente nesse ponto, então o rollback só expira o cache."""
+    db.rollback()
+    return get_state(db, base_url, token)
+
+
 def bump_rev(db: Session, chave: str) -> None:
     """Pra escrita que não passa por put_state_versionado (ex: /imovel-fotos grava linhas
     de Foto direto) — sem isso os navegadores não saberiam que precisam puxar."""

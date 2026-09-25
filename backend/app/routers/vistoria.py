@@ -229,6 +229,20 @@ async def vistoria_midia(id: str = "", vid: str = "", t: str = "", request: Requ
     }
 
 
+def _midia_drive_do_comodo(v: dict, comodo_idx: int) -> list:
+    """Garante a estrutura v.dados.comodos[comodo_idx].midiaDrive e devolve a lista."""
+    if not isinstance(v.get("dados"), dict):
+        v["dados"] = {}
+    if not isinstance(v["dados"].get("comodos"), list):
+        v["dados"]["comodos"] = []
+    comodos = v["dados"]["comodos"]
+    while len(comodos) <= comodo_idx:
+        comodos.append({})
+    if not isinstance(comodos[comodo_idx].get("midiaDrive"), list):
+        comodos[comodo_idx]["midiaDrive"] = []
+    return comodos[comodo_idx]["midiaDrive"]
+
+
 @router.post("/vistoria-upload")
 async def vistoria_upload(
     id: str = Form(...),
@@ -261,17 +275,7 @@ async def vistoria_upload(
     if v.get("status") == "enviado":
         return {"ok": False, "error": "Vistoria já enviada"}
 
-    if not isinstance(v.get("dados"), dict):
-        v["dados"] = {}
-    if not isinstance(v["dados"].get("comodos"), list):
-        v["dados"]["comodos"] = []
-    comodos = v["dados"]["comodos"]
-    while len(comodos) <= comodoIdx:
-        comodos.append({})
-    if not isinstance(comodos[comodoIdx].get("midiaDrive"), list):
-        comodos[comodoIdx]["midiaDrive"] = []
-
-    if len(comodos[comodoIdx]["midiaDrive"]) >= MAX_MIDIA_POR_COMODO:
+    if len(_midia_drive_do_comodo(v, comodoIdx)) >= MAX_MIDIA_POR_COMODO:
         return {"ok": False, "error": "Limite de mídia deste cômodo atingido"}
 
     folder_id = google_drive.extract_folder_id(im.get("captacaoLink"))
@@ -290,7 +294,17 @@ async def vistoria_upload(
     except Exception as e:
         return {"ok": False, "error": f"Falha ao enviar pro Drive: {e}"}
 
-    comodos[comodoIdx]["midiaDrive"].append(
+    # Relê antes de gravar (ver state.reler_estado): a vistoriadora costuma subir vários
+    # arquivos em paralelo, e cada upload leva segundos — com o estado lido lá em cima, o
+    # último upload a terminar apagava as mídias registradas pelos outros. Sem `await`
+    # daqui até o commit.
+    data = state.reler_estado(db, str(request.base_url).rstrip("/"), "")
+    im = _find_imovel(data, id)
+    v = _find_vistoria(im, vid) if im else None
+    if not v:
+        return {"ok": False, "error": "Vistoria não encontrada"}
+    midia_drive = _midia_drive_do_comodo(v, comodoIdx)
+    midia_drive.append(
         {
             "driveFileId": resultado.get("id"),
             "driveLink": resultado.get("webViewLink"),
@@ -305,6 +319,6 @@ async def vistoria_upload(
     db.commit()
     return {
         "ok": True,
-        "total": len(comodos[comodoIdx]["midiaDrive"]),
+        "total": len(midia_drive),
         "driveLink": resultado.get("webViewLink"),
     }

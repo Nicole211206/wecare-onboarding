@@ -83,12 +83,13 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
     if not imovel_id:
         return {"ok": False, "error": "id obrigatório"}
 
+    # Só leitura (link, nome) — a gravação no fim usa um estado relido (state.reler_estado),
+    # porque entre aqui e lá há dezenas de segundos de `await` no Drive e no Claude.
     data = state.get_state(db, str(request.base_url).rstrip("/"), token)
-    imoveis = data.setdefault("wc_imoveis", [])
-    im = next((i for i in imoveis if str(i.get("id")) == imovel_id), None)
+    im = next((i for i in data.get("wc_imoveis") or [] if str(i.get("id")) == imovel_id), None)
+    existia = im is not None
     if im is None:
         im = {"id": imovel_id}
-        imoveis.append(im)
 
     captacao_link = body.get("captacaoLink") or im.get("captacaoLink") or ""
     if captacao_link:
@@ -228,6 +229,18 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
     except Exception as e:
         return {"ok": False, "error": f"Erro Claude: {e}"}
 
+    # Sem nenhum `await` daqui até o commit (ver state.reler_estado).
+    data = state.reler_estado(db, str(request.base_url).rstrip("/"), token)
+    imoveis = data.setdefault("wc_imoveis", [])
+    im = next((i for i in imoveis if str(i.get("id")) == imovel_id), None)
+    if im is None:
+        if existia:
+            # apagado por alguém durante a análise — não ressuscita
+            return {"ok": False, "error": "Imóvel foi apagado durante a análise"}
+        im = {"id": imovel_id}
+        imoveis.append(im)
+    if captacao_link:
+        im["captacaoLink"] = captacao_link
     _aplicar_resultado_drive(im, resultado)
     im["claudeAnalisadoEm"] = datetime.now(timezone.utc).isoformat()
     im["arquivosAnalisados"] = len(files)
