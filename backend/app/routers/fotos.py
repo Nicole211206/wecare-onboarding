@@ -169,6 +169,7 @@ async def imovel_fotos_post(
                 continue
 
     if total:
+        state.bump_rev(db, "wc_imoveis")
         db.commit()
     return {"ok": True, "total": total}
 
@@ -277,6 +278,6 @@ async def jarvis_notify(
                 im["formRascunho"][k] = v
 
     im["jarvisPreenchidoEm"] = datetime.now(timezone.utc).isoformat()
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {"ok": True, "imovel": {"id": im["id"], "nome": im.get("nome"), "status": im.get("status")}}

@@ -19,7 +19,9 @@ def _base_url(request: Request) -> str:
 
 @router.get("/load")
 def load(request: Request, db: Session = Depends(get_db), token: str = Depends(require_auth)):
-    return {"ok": True, "data": state.get_state(db, _base_url(request), token)}
+    data = state.get_state(db, _base_url(request), token)
+    data["_revs"] = state.get_revs(db)
+    return {"ok": True, "data": data}
 
 
 @router.post("/save")
@@ -37,10 +39,12 @@ async def save(request: Request, db: Session = Depends(get_db), token: str = Dep
         db.add(models.Backup(hora_bucket=bucket, snapshot=current, criado_em=str(time.time())))
         db.execute(delete(models.Backup).where(models.Backup.hora_bucket < bucket - 24 * 7))
 
+    revs = state.get_revs(db)
+    body, conflitos = merge.filtrar_conflitos(body, revs)
     merged = merge.merge_save(current, body)
-    state.put_state(db, merged)
+    revs = state.put_state_versionado(db, merged)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "revs": revs, "conflitos": conflitos}
 
 
 @router.post("/stats")

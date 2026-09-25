@@ -171,7 +171,7 @@ async def vistoria_save(id: str = "", vid: str = "", t: str = "", request: Reque
                 )
 
     data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {"ok": True}
 
@@ -219,7 +219,7 @@ async def vistoria_midia(id: str = "", vid: str = "", t: str = "", request: Requ
     comodos[comodo_idx]["midiaFrames"].extend(a_adicionar)
 
     data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {
         "ok": True,
@@ -301,7 +301,7 @@ async def vistoria_upload(
     )
 
     data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {
         "ok": True,

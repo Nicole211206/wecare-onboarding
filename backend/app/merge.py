@@ -179,6 +179,48 @@ LIST_KEYS_ESTRITAS = [
 ]
 
 
+# Controle de versão por coleção (incidente 2026-09-24, "edito em Configurações e no dia
+# seguinte volta"). Os backups horários mostraram wc_itens voltando INTEIRO pra versão de
+# 3 dias antes, e wc_vistoria_campos voltando pros 57 campos antigos na manhã seguinte à
+# limpeza — sem nenhum cron/restart envolvido. Causa: um navegador desatualizado (outra aba
+# ou outro computador) mandava no /save todas as coleções do localStorage dele, e o servidor
+# aceitava tudo (a proteção acima só pega encolhida catastrófica, não "valor antigo"). A
+# decisão de puxar ou não do servidor dependia do lastSaved gerado pelo relógio do próprio
+# cliente, então qualquer autosave local fazia o cliente se achar "mais novo" e pular o pull.
+#
+# Agora cada coleção tem um número de revisão controlado pelo servidor (state.get_revs). O
+# cliente manda em `_baseRevs` a revisão que tinha quando leu cada coleção que está enviando;
+# se a coleção mudou no servidor desde então, a gravação DAQUELA coleção é recusada e o
+# cliente recarrega do servidor. Cliente sem `_baseRevs` (aba aberta com app.js antigo em
+# cache) não grava mais nenhuma coleção versionada — só wc_imoveis, que segue com o merge de
+# reconciliar_sublistas_imoveis (várias pessoas editam imóveis diferentes ao mesmo tempo, e
+# recusar a lista inteira por conflito perderia edições legítimas).
+REV_KEYS = [
+    "wc_membros", "wc_itens", "wc_enxoval", "wc_limpeza", "wc_limpeza_checkout", "wc_fotos",
+    "wc_prestadores", "wc_users", "wc_def_operacionais", "wc_vistoria_campos", "wc_templates_msg",
+    "wc_processo_texto", "wc_anotacoes_texto", "wc_manual_fornecedores", "wc_orcamentos",
+    "wc_estoque_itens", "wc_camas_custom", "wc_modelos_negocio", "wc_proprietarios",
+    "wc_modalidades_enxoval",
+]
+# Versionada (o cliente usa a revisão pra saber quando puxar), mas sem recusa por conflito.
+REV_KEYS_SEM_CONFLITO = ["wc_imoveis"]
+
+
+def filtrar_conflitos(body: dict, revs: dict) -> tuple[dict, list[str]]:
+    """Remove do body as coleções versionadas que o cliente mandou a partir de uma
+    revisão desatualizada. Retorna (body filtrado, coleções recusadas)."""
+    base = body.get("_baseRevs")
+    filtrado = {k: v for k, v in body.items() if k != "_baseRevs"}
+    conflitos = []
+    for k in REV_KEYS:
+        if k not in filtrado:
+            continue
+        if not isinstance(base, dict) or base.get(k) != revs.get(k, 0):
+            del filtrado[k]
+            conflitos.append(k)
+    return filtrado, conflitos
+
+
 def _encolhida_catastrofica(sv: list, iv: list) -> bool:
     """Mesmo incidente 2026-09-03 de merge_item_arrays_by_id, mas essa cópia
     (usada por LIST_KEYS/LIST_KEYS_ESTRITAS, incluindo wc_vistoria_campos)

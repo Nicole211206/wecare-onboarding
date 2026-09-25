@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from . import models
+from . import models, state
 from .database import Base, SessionLocal, engine
 from .routers import fotos, form, ia, onboarding, vistoria
 
@@ -73,10 +73,15 @@ _VISTORIA_CAMPOS_DUPLICADOS = [
 ]
 try:
     with SessionLocal() as _db:
-        _db.query(models.VistoriaCampo).filter(
+        _removidos = _db.query(models.VistoriaCampo).filter(
             models.VistoriaCampo.label.in_(_VISTORIA_CAMPOS_DUPLICADOS)
         ).delete(synchronize_session=False)
+        # Bump da revisão (ver merge.REV_KEYS): sem isso, navegador com os campos antigos e
+        # revisão "em dia" continuaria achando que está sincronizado e reenviaria os campos.
+        if _removidos:
+            state.bump_rev(_db, "wc_vistoria_campos")
         if not _db.query(models.VistoriaCampo).filter(models.VistoriaCampo.label == "Ar-condicionado").first():
+            state.bump_rev(_db, "wc_vistoria_campos")
             _db.add(
                 models.VistoriaCampo(
                     id="vc_ar_condicionado_migracao",

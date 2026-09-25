@@ -233,7 +233,7 @@ async def analisar_drive(request: Request, db: Session = Depends(get_db), token:
     im["arquivosAnalisados"] = len(files)
     data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
 
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {"ok": True, "arquivos": len(files), "resultado": resultado}
 

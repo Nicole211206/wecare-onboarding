@@ -8,6 +8,7 @@ combinada na conversa)."""
 from __future__ import annotations
 
 import base64
+import json
 import re
 import time
 import uuid
@@ -16,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from . import models
+from . import merge, models
 from .config import settings
 
 DATA_URL_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.DOTALL)
@@ -171,7 +172,11 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
                 "enxovalDep": i.enxoval_dep,
                 "qtdRule": i.qtd_rule,
                 "link": i.link,
-                "modalidades": i.modalidades,
+                # None, não []: no app.js, modalidades ausente = "aparece em todas" e [] =
+                # "não aparece em nenhuma" (itemValidoParaModalidade). A coluna guarda ausente
+                # como [], e devolver [] escondia o item e fazia a migração de Cozinha do
+                # loadAll "corrigir" e reenviar a cada pull (POST /save a cada 60s por aba).
+                "modalidades": i.modalidades or None,
                 "preco": i.preco,
                 "estoqueEnxoval": i.estoque_enxoval,
                 "semSofaCama": i.sem_sofa_cama,
@@ -555,6 +560,47 @@ def _set_texto(db: Session, chave: str, texto: str) -> None:
         db.add(models.ConfigTexto(chave=chave, texto=texto))
     else:
         row.texto = texto
+
+
+REV_PREFIX = "_rev:"
+
+
+def get_revs(db: Session) -> dict[str, int]:
+    """Revisão atual de cada coleção versionada (ver merge.REV_KEYS). Guardada em
+    config_textos com chave "_rev:<coleção>" pra não precisar de tabela/migração nova;
+    coleção que nunca mudou desde a introdução do controle fica em 0."""
+    revs = {k: 0 for k in (*merge.REV_KEYS, *merge.REV_KEYS_SEM_CONFLITO)}
+    for row in db.scalars(select(models.ConfigTexto).where(models.ConfigTexto.chave.like(f"{REV_PREFIX}%"))):
+        revs[row.chave[len(REV_PREFIX):]] = int(row.texto or 0)
+    return revs
+
+
+def bump_rev(db: Session, chave: str) -> None:
+    """Pra escrita que não passa por put_state_versionado (ex: /imovel-fotos grava linhas
+    de Foto direto) — sem isso os navegadores não saberiam que precisam puxar."""
+    db.flush()
+    revs = get_revs(db)
+    _set_texto(db, f"{REV_PREFIX}{chave}", str(revs.get(chave, 0) + 1))
+    # flush já: a sessão é autoflush=False, então um 2º bump_rev na mesma sessão não
+    # enxergaria a linha nova e tentaria inserir de novo (IntegrityError no commit)
+    db.flush()
+
+
+def put_state_versionado(db: Session, novo: dict) -> dict[str, int]:
+    """put_state + incrementa a revisão de cada coleção cujo conteúdo persistido mudou.
+    Toda escrita de wc_state deve passar por aqui (não por put_state direto). Compara
+    get_state antes/depois (mesma serialização dos dois lados, sem falso positivo por
+    int vs float ou campo None vs ausente). Retorna as revisões resultantes."""
+    antes = get_state(db, "", "")
+    put_state(db, novo)
+    db.flush()
+    depois = get_state(db, "", "")
+    revs = get_revs(db)
+    for k in revs:
+        if json.dumps(antes.get(k), sort_keys=True) != json.dumps(depois.get(k), sort_keys=True):
+            revs[k] += 1
+            _set_texto(db, f"{REV_PREFIX}{k}", str(revs[k]))
+    return revs
 
 
 def hourly_backup_bucket() -> int:

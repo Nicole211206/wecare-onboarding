@@ -61,6 +61,6 @@ async def form_save(id: str = "", t: str = "", request: Request = None, db: Sess
         im["formEnviadoEm"] = datetime.now(timezone.utc).isoformat()
     data["lastSaved"] = int(datetime.now(timezone.utc).timestamp() * 1000)
 
-    state.put_state(db, data)
+    state.put_state_versionado(db, data)
     db.commit()
     return {"ok": True}

@@ -557,16 +557,8 @@ function doLogin(){
 function carregarUsuarios(){try{usuarios=JSON.parse(localStorage.getItem('wc_users')||'[]');}catch{usuarios=[];}}
 function salvarUsuarios(){
   localStorage.setItem('wc_users',JSON.stringify(usuarios));
-  // push imediato para KV (sem aguardar __servidorLido — usuários precisam sincronizar sempre)
-  const s=window.WC_SYNC||{};
-  if(s.url){
-    const blob={};
-    SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
-    blob.lastSaved=Date.now();
-    localStorage.setItem('lastSaved',String(blob.lastSaved));
-    fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)}).catch(()=>{});
-  }
+  // push imediato (sem debounce) — só wc_users muda aqui, e _kvSendNow só envia o que mudou
+  _kvSendNow();
 }
 function garantirAdminPadrao(){
   carregarUsuarios();
@@ -587,13 +579,34 @@ async function sincronizarUsuariosNuvem(){
       carregarUsuarios();
     }
   }catch{}
-  // marca que já comunicou com o servidor — libera o push de dados
-  window.__servidorLido=true;
+  // Não libera o push aqui (window.__servidorLido): isso só pode acontecer depois do kvPull
+  // do iniciarApp, que é quem registra as revisões do servidor usadas no /save.
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
 const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval'];
-let _lastSentStr=null;
+// Controle de sync por coleção (incidente 2026-09-24 — ver REV_KEYS em backend/app/merge.py).
+// Antes, cada push mandava TODAS as coleções do localStorage, e a decisão de puxar do servidor
+// comparava o lastSaved do relógio de cada máquina: um navegador desatualizado que fizesse
+// qualquer autosave se achava "mais novo", pulava o pull e devolvia pro servidor a versão
+// antiga de Configurações inteira (itens voltando, campos de vistoria voltando no dia seguinte).
+// Agora, por coleção:
+//   _sync.revs[k]   = revisão do servidor sobre a qual o conteúdo local de k foi baseado
+//   _sync.hashes[k] = hash do conteúdo de k nesse momento (pra saber se mudou localmente)
+// Só coleções alteradas localmente são enviadas, junto com a revisão-base; o servidor recusa
+// (conflitos) as que mudaram lá desde então, e o cliente recarrega essas do servidor.
+// _sync fica em memória por aba (uma aba com dados velhos em memória não "herda" as revisões
+// de outra aba) e é salvo no localStorage só pra ser reaproveitado no próximo carregamento.
+const SYNC_KEYS_SEM_CONFLITO=['wc_imoveis'];
+const _SYNC_META_KEY='wc__sync_meta';
+let _sync=(()=>{try{const m=JSON.parse(localStorage.getItem(_SYNC_META_KEY)||'null');if(m&&m.revs&&m.hashes)return m;}catch{}return{revs:{},hashes:{}};})();
+function _syncPersistir(){try{localStorage.setItem(_SYNC_META_KEY,JSON.stringify(_sync));}catch{}}
+function _hashStr(s){ // FNV-1a 32 bits + tamanho — só pra detectar mudança, não é segurança
+  let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}
+  return (h>>>0).toString(36)+'.'+s.length;
+}
+function _syncHashLocal(k){const v=localStorage.getItem(k);return v===null?null:_hashStr(v);}
+function _syncSujo(k){const h=_syncHashLocal(k);return h!==null&&h!==_sync.hashes[k];}
 
 function saveAll(){
   localStorage.setItem('wc_imoveis',JSON.stringify(imoveis));
@@ -616,8 +629,6 @@ function saveAll(){
   localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
   localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
   localStorage.setItem('wc_modalidades_enxoval',JSON.stringify(MODALIDADES_ENXOVAL));
-  // atualiza lastSaved imediatamente para kvPull não sobrescrever dados locais recentes
-  localStorage.setItem('lastSaved',String(Date.now()));
   _kvPushDebounced();
   _publicarStats();
 }
@@ -630,7 +641,9 @@ function loadAll(){
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
   v=g('wc_limpeza');   {const migrado=_migrarPrecosPrimeiraLimpeza(v);if(migrado)PRECOS_PRIMEIRA_LIMPEZA=migrado;}
   v=g('wc_limpeza_checkout');if(Array.isArray(v)&&v.length)PRECOS_LIMPEZA_CHECKOUT=v;
-  v=g('wc_fotos');     if(v&&typeof v==='object')Object.assign(PRECOS_FOTOS,v);
+  // substitui (não mescla): com Object.assign, uma faixa de preço apagada em outro dispositivo
+  // continuava na memória desta aba e voltava pro servidor no próximo save
+  v=g('wc_fotos');     if(v&&typeof v==='object'){Object.keys(PRECOS_FOTOS).forEach(q=>delete PRECOS_FOTOS[q]);Object.assign(PRECOS_FOTOS,v);}
   v=g('wc_prestadores');if(Array.isArray(v))prestadores=v;
   v=g('wc_def_operacionais');if(Array.isArray(v)&&v.length)DEF_OPERACIONAIS=v;
   v=g('wc_vistoria_campos');if(Array.isArray(v))VISTORIA_CAMPOS=v;
@@ -670,21 +683,49 @@ function _kvPushDebounced(){
   if(_kvTimer)clearTimeout(_kvTimer);
   _kvTimer=setTimeout(_kvSendNow,2500);
 }
+// Monta o corpo do /save só com as coleções alteradas localmente desde a última sincronização
+// (e cuja revisão-base é conhecida — coleção nunca lida do servidor nesta máquina não é enviada).
+function _syncMontarBlob(){
+  const blob={},base={},hashes={};
+  SYNC_KEYS.forEach(k=>{
+    if(_sync.revs[k]===undefined||!_syncSujo(k))return;
+    const v=localStorage.getItem(k);
+    try{blob[k]=JSON.parse(v);}catch{return;}
+    base[k]=_sync.revs[k];hashes[k]=_hashStr(v);
+  });
+  if(!Object.keys(base).length)return null;
+  blob._baseRevs=base;
+  blob.lastSaved=Date.now();
+  return{blob,hashes};
+}
+let _kvEnviando=false,_kvPendente=false;
 async function _kvSendNow(){
   _kvTimer=null;
   const s=window.WC_SYNC||{};if(!s.url||!window.__servidorLido)return;
-  const blob={};
-  SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
-  // Regra 1: só envia se mudou de verdade
-  const blobStr=JSON.stringify(blob);
-  if(blobStr===_lastSentStr)return;
-  _lastSentStr=blobStr;
-  blob.lastSaved=Date.now();
-  localStorage.setItem('lastSaved',String(blob.lastSaved));
+  // um envio por vez: dois /save simultâneos com a mesma revisão-base gerariam conflito falso
+  if(_kvEnviando){_kvPendente=true;return;}
+  const pacote=_syncMontarBlob();if(!pacote)return;
+  _kvEnviando=true;
   try{
-    await fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(blob)});
+    const r=await fetch(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pacote.blob)});
+    const j=await r.json();
+    if(j&&j.ok&&j.revs){
+      const conflitos=new Set(j.conflitos||[]);
+      for(const k in pacote.hashes){
+        if(conflitos.has(k))continue;
+        _sync.revs[k]=j.revs[k];_sync.hashes[k]=pacote.hashes[k];
+      }
+      _syncPersistir();
+      // coleção recusada = mudou no servidor desde que esta aba leu; o kvPull traz a versão
+      // do servidor (a revisão local ficou pra trás, então ele sobrescreve)
+      if(conflitos.size)await kvPull(false);
+    }
   }catch{}
+  finally{
+    _kvEnviando=false;
+    if(_kvPendente){_kvPendente=false;_kvSendNow();}
+  }
 }
 
 async function kvPull(showMsg){
@@ -694,31 +735,38 @@ async function kvPull(showMsg){
     const r=await fetch(s.url.replace(/\/$/,'')+'/load?token='+encodeURIComponent(s.token||''));
     const j=await r.json();
     if(j&&j.data){
-      window.__servidorLido=true; // Regra 2: marca que leu o servidor
-      const localTs=+localStorage.getItem('lastSaved')||0;
-      const serverTs=+(j.data.lastSaved)||0;
-      // Regra 4: só sobrescreve o local se o servidor for estritamente mais novo
-      if(serverTs>localTs){
-        // Regra 3 (removida — bug real, ver commit): antes, uma lista local maior
-        // que a do servidor fazia essa chave inteira ser pulada no pull, mesmo com
-        // o servidor estritamente mais novo. Isso existia pra proteger contra um
-        // dispositivo desatualizado zerando dados — mas essa proteção já é feita
-        // (melhor, item a item) no merge_save do backend ANTES do servidor aceitar
-        // a gravação. Do lado do cliente ela só causava o bug oposto: um dispositivo
-        // parado (ex: aba antiga, celular) que ainda não tinha essa lista reduzida
-        // localmente pulava o pull, e no próximo autosave/push devolvia pro servidor
-        // a versão antiga e maior, desfazendo silenciosamente a exclusão de quem
-        // editou em outro lugar — exatamente o "atualizo aqui, no dia seguinte volta
-        // pra outra configuração" reportado pela Nicole. Servidor mais novo já passou
-        // pela proteção anti-sobrescrita dele; o cliente deve confiar nele por inteiro.
-        for(const k in j.data){
-          try{localStorage.setItem(k,JSON.stringify(j.data[k]));}catch{}
+      window.__servidorLido=true; // libera o push só depois de conhecer as revisões do servidor
+      const revs=j.data._revs||{};
+      let mudou=false;const sobrescritas=[];
+      SYNC_KEYS.forEach(k=>{
+        if(!(k in j.data))return;
+        const revServidor=revs[k]??0;
+        // servidor não mudou desde a base local: o local vale (igual à base, ou com edição
+        // pendente que o próximo push manda)
+        if(_sync.revs[k]===revServidor&&_sync.hashes[k]!==undefined)return;
+        const sujo=_syncSujo(k);
+        // imóveis com edição local pendente sobre uma base conhecida: mantém o local — o
+        // merge do servidor (reconciliar_sublistas_imoveis) reconcilia no próximo push
+        if(sujo&&SYNC_KEYS_SEM_CONFLITO.includes(k)&&_sync.hashes[k]!==undefined){_sync.revs[k]=revServidor;return;}
+        // demais casos: o servidor vale — inclusive por cima de edição local feita sobre uma
+        // versão que já ficou velha (é exatamente o caso do navegador desatualizado)
+        const str=JSON.stringify(j.data[k]);
+        if(localStorage.getItem(k)!==str){
+          try{localStorage.setItem(k,str);}catch{return;}
+          mudou=true;if(sujo)sobrescritas.push(k);
         }
+        _sync.revs[k]=revServidor;_sync.hashes[k]=_hashStr(str);
+      });
+      _syncPersistir();
+      if(mudou){
         loadAll();
         if(_imovelAtivoId)renderAba(_abaAtiva);
         renderKanban();
+        const cfg=document.getElementById('panel-config');
+        if(cfg&&cfg.classList.contains('active')&&typeof renderConfig==='function')renderConfig();
       }
-      if(showMsg)showToast('Sincronizado!','sage');
+      if(sobrescritas.length)showToast('Algumas configurações tinham sido alteradas em outro computador — carreguei a versão mais recente.','peach');
+      else if(showMsg)showToast('Sincronizado!','sage');
       return true;
     }
   }catch{}
@@ -6901,14 +6949,14 @@ function iniciarApp(){
     if(usuarios.length>1||(usuarios[0]&&usuarios[0].email!=='admin@wecare.com')) _kvPushDebounced();
   });
   // Regra 5: auto-pull a cada ~60s se não houver mudança pendente
-  setInterval(()=>{if(!_kvTimer)kvPull(false);},60000);
-  // Regra 6: envia ao sair/ocultar aba
+  setInterval(()=>{if(!_kvTimer&&!_kvEnviando)kvPull(false);},60000);
+  // Regra 6: envia ao sair/ocultar aba — só o que mudou, com revisão-base (sem ler a resposta:
+  // se o servidor recusar, o próximo carregamento traz a versão dele)
   window.addEventListener('beforeunload',()=>{
     if(!window.__servidorLido)return;
-    const blob={};SYNC_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)try{blob[k]=JSON.parse(v);}catch{}});
-    blob.lastSaved=Date.now();
+    const pacote=_syncMontarBlob();if(!pacote)return;
     const s=window.WC_SYNC||{};
-    if(s.url)navigator.sendBeacon(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),JSON.stringify(blob));
+    if(s.url)navigator.sendBeacon(s.url.replace(/\/$/,'')+'/save?token='+encodeURIComponent(s.token||''),JSON.stringify(pacote.blob));
   });
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden')_kvSendNow();
