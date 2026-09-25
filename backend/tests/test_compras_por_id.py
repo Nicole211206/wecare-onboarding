@@ -134,19 +134,19 @@ def test_migrar_no_banco_com_historico_e_idempotente(db_isolado):
 def test_id_do_item_sobrevive_ao_save_do_catalogo(auth_client):
     data = auth_client.get("/load").json()["data"]
     itens = [{"id": "itfixo1", "cat": "X", "nome": "Um"}, {"cat": "X", "nome": "Sem id"}]
-    auth_client.post("/save", json={"_proto": 2, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
+    auth_client.post("/save", json={"_proto": 3, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
     volta = auth_client.get("/load").json()["data"]["wc_itens"]
     assert volta[0]["id"] == "itfixo1"
     assert volta[1]["id"] and volta[1]["id"].startswith("it") and "_" not in volta[1]["id"]
 
 
-def test_vistoria_em_cache_com_chave_de_posicao_grava_pelo_id(auth_client):
+def test_vistoria_em_cache_com_chave_de_posicao_grava_pelo_id(auth_client, semear_imoveis):
     data = auth_client.get("/load").json()["data"]
     itens = [{"id": "itv0", "cat": "X", "nome": "Zero"}, {"id": "itv1", "cat": "X", "nome": "Um"}]
-    auth_client.post("/save", json={"_proto": 2, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
-    auth_client.post("/save", json={"_proto": 2, "wc_imoveis": [
+    auth_client.post("/save", json={"_proto": 3, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
+    semear_imoveis([
         {"id": "im_vc", "nome": "V", "compras": {}, "vistorias": [{"id": "v1", "token": "tk", "status": "pendente"}]},
-    ]})
+    ])
     r = auth_client.post("/vistoria-save", params={"id": "im_vc", "vid": "v1", "t": "tk"}, json={
         "enviado": True, "dados": {"itensChecklist": {"1": {"qtdTem": 2}, "itv0": {"qtdTem": 1}, "9": {"qtdTem": 7}}},
     }).json()
@@ -158,16 +158,19 @@ def test_vistoria_em_cache_com_chave_de_posicao_grava_pelo_id(auth_client):
 def test_item_sem_id_reaproveita_o_id_do_item_de_mesmo_nome(auth_client):
     data = auth_client.get("/load").json()["data"]
     itens = [{"id": "itreuso1", "cat": "X", "nome": "Escada"}]
-    auth_client.post("/save", json={"_proto": 2, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
+    auth_client.post("/save", json={"_proto": 3, "wc_itens": itens, "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
     data = auth_client.get("/load").json()["data"]
     # cliente que ainda não tinha o id manda o mesmo item sem id
-    auth_client.post("/save", json={"_proto": 2, "wc_itens": [{"cat": "X", "nome": "Escada", "preco": 9}],
+    auth_client.post("/save", json={"_proto": 3, "wc_itens": [{"cat": "X", "nome": "Escada", "preco": 9}],
                                      "_baseRevs": {"wc_itens": data["_revs"]["wc_itens"]}})
     assert auth_client.get("/load").json()["data"]["wc_itens"][0]["id"] == "itreuso1"
 
 
-def test_imovel_com_compras_por_posicao_nao_desfaz_a_migracao(auth_client):
-    auth_client.post("/save", json={"_proto": 2, "wc_imoveis": [{"id": "im_pos", "nome": "P", "compras": {"itX": {"comprado": True}}}]})
-    auth_client.post("/save", json={"_proto": 2, "wc_imoveis": [{"id": "im_pos", "nome": "P", "compras": {"3": {"comprado": False}}}]})
+def test_imovel_com_compras_por_posicao_nao_desfaz_a_migracao(auth_client, semear_imoveis):
+    # rota de patch: chave de compras por posição é ignorada (merge_campos.aplicar_patch)
+    semear_imoveis([{"id": "im_pos", "nome": "P", "compras": {"itX": {"comprado": True}}}])
+    rev = auth_client.get("/load").json()["data"]["_revs"]["wc_imoveis"]
+    auth_client.post("/save", json={"_proto": 3, "_imoveisPatch": {"base": rev, "ops": [
+        {"im": "im_pos", "caminho": ["compras", "3"], "valor": {"comprado": False}}]}})
     im = next(i for i in auth_client.get("/load").json()["data"]["wc_imoveis"] if i["id"] == "im_pos")
     assert im["compras"] == {"itX": {"comprado": True}}

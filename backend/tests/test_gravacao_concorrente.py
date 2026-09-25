@@ -75,12 +75,8 @@ def drive_fake(monkeypatch):
     return monkeypatch
 
 
-def _semear(c, imoveis):
-    assert c.post("/save", json={"_proto": 2, "wc_imoveis": imoveis}).json()["ok"]
-
-
-def test_analise_do_drive_nao_desfaz_edicao_feita_durante_a_analise(auth_client, drive_fake):
-    _semear(auth_client, [
+def test_analise_do_drive_nao_desfaz_edicao_feita_durante_a_analise(auth_client, drive_fake, semear_imoveis):
+    semear_imoveis([
         {"id": "im_a", "nome": "Imóvel A", "captacaoLink": LINK_A},
         {"id": "im_b", "nome": "Imóvel B", "captacaoLink": ""},
     ])
@@ -98,8 +94,8 @@ def test_analise_do_drive_nao_desfaz_edicao_feita_durante_a_analise(auth_client,
     assert _imovel(auth_client, "im_a")["claudeAnalisadoEm"]
 
 
-def test_analise_do_drive_nao_ressuscita_imovel_apagado_durante_a_analise(auth_client, drive_fake):
-    _semear(auth_client, [{"id": "im_c", "nome": "Imóvel C", "captacaoLink": LINK_A}, {"id": "im_d", "nome": "D"}])
+def test_analise_do_drive_nao_ressuscita_imovel_apagado_durante_a_analise(auth_client, drive_fake, semear_imoveis):
+    semear_imoveis([{"id": "im_c", "nome": "Imóvel C", "captacaoLink": LINK_A}, {"id": "im_d", "nome": "D"}])
 
     async def claude(user_content, perguntas=None):
         _outra_requisicao(lambda st: st.update(wc_imoveis=[i for i in st["wc_imoveis"] if i["id"] != "im_c"]))
@@ -112,8 +108,8 @@ def test_analise_do_drive_nao_ressuscita_imovel_apagado_durante_a_analise(auth_c
     assert "im_c" not in ids
 
 
-def test_uploads_paralelos_da_vistoria_nao_se_apagam(auth_client, drive_fake):
-    _semear(auth_client, [{
+def test_uploads_paralelos_da_vistoria_nao_se_apagam(auth_client, drive_fake, semear_imoveis):
+    semear_imoveis([{
         "id": "im_v", "nome": "Imóvel V", "captacaoLink": LINK_A,
         "vistorias": [{"id": "v1", "token": "tk", "status": "pendente", "dados": {"comodos": [{"nome": "Sala"}]}}],
     }])

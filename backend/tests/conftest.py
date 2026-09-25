@@ -45,3 +45,20 @@ def auth_client():
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def semear_imoveis():
+    """Substitui o wc_imoveis inteiro direto no banco (preparação de teste). Desde o protocolo
+    3 o /save só aceita imóveis por patch por campo (ver app/merge_campos.py)."""
+    from app import state
+    from app.database import SessionLocal
+
+    def _semear(imoveis):
+        with SessionLocal() as s:
+            st = state.get_state(s, "", "")
+            st["wc_imoveis"] = imoveis
+            state.put_state_versionado(s, st)
+            s.commit()
+
+    return _semear

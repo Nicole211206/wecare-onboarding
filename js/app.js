@@ -563,7 +563,6 @@ const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza',
 // (conflitos) as que mudaram lá desde então, e o cliente recarrega essas do servidor.
 // _sync fica em memória por aba (uma aba com dados velhos em memória não "herda" as revisões
 // de outra aba) e é salvo no localStorage só pra ser reaproveitado no próximo carregamento.
-const SYNC_KEYS_SEM_CONFLITO=['wc_imoveis'];
 const _SYNC_META_KEY='wc__sync_meta';
 let _sync=(()=>{try{const m=JSON.parse(localStorage.getItem(_SYNC_META_KEY)||'null');if(m&&m.revs&&m.hashes)return m;}catch{}return{revs:{},hashes:{}};})();
 function _syncPersistir(){try{localStorage.setItem(_SYNC_META_KEY,JSON.stringify(_sync));}catch{}}
@@ -573,6 +572,118 @@ function _hashStr(s){ // FNV-1a 32 bits + tamanho — só pra detectar mudança,
 }
 function _syncHashLocal(k){const v=localStorage.getItem(k);return v===null?null:_hashStr(v);}
 function _syncSujo(k){const h=_syncHashLocal(k);return h!==null&&h!==_sync.hashes[k];}
+
+// ── Merge por campo de wc_imoveis (2026-09-25) — espelho de backend/app/merge_campos.py ──
+// Duas pessoas no mesmo imóvel: antes valia quem salvasse por último, inclusive nos campos que
+// a outra pessoa mexeu. Agora o push manda só as "unidades" alteradas em relação à versão-base
+// (a última lida do servidor), e o pull junta (rebase) as edições locais pendentes com o que
+// veio do servidor. Unidade = campo simples | chave de objeto (compras, ops, formRascunho...) |
+// item de lista com id (vistorias, manutenções...) | lista inteira (camas, plataformas: sem id,
+// juntar por posição misturaria camas) | grupo status+statusAnterior+dataAtivacao.
+// Mesma unidade alterada dos dois lados, com valores diferentes = conflito: fica a do servidor
+// (de quem salvou primeiro) e aparece um aviso.
+const _IM_LISTAS_POR_ID=new Set(['vistorias','manutencoes','eventosExtras','itensExtras','comprasLotes','gastosAvulsos','atualizacoes','fotos']);
+const _IM_GRUPO_STATUS=['status','statusAnterior','dataAtivacao'];
+const _IM_SEP='\x1f';
+// JSON com chaves ordenadas: igualdade de valor sem depender da ordem das chaves
+function _estavel(v){
+  if(Array.isArray(v))return'['+v.map(_estavel).join(',')+']';
+  if(v&&typeof v==='object')return'{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+_estavel(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined?null:v);
+}
+function _imListaPorId(campo,v){return _IM_LISTAS_POR_ID.has(campo)&&Array.isArray(v)&&v.every(x=>x&&typeof x==='object'&&x.id);}
+function _imUnidades(im){ // Map chave -> [caminho, valor]
+  const out=new Map();im=im||{};
+  Object.keys(im).forEach(campo=>{
+    if(campo==='id'||_IM_GRUPO_STATUS.includes(campo))return;
+    const v=im[campo];
+    if(_imListaPorId(campo,v))v.forEach(x=>out.set(campo+_IM_SEP+x.id,[[campo,x.id],x]));
+    else if(v&&typeof v==='object'&&!Array.isArray(v))Object.keys(v).forEach(k=>out.set(campo+_IM_SEP+k,[[campo,k],v[k]]));
+    else out.set(campo,[[campo],v]);
+  });
+  if(_IM_GRUPO_STATUS.some(k=>k in im)){const g={};_IM_GRUPO_STATUS.forEach(k=>g[k]=im[k]??null);out.set('_status',[['_status'],g]);}
+  return out;
+}
+function _imLer(im,caminho){
+  if(!im)return null;
+  if(caminho[0]==='_status'){const g={};_IM_GRUPO_STATUS.forEach(k=>g[k]=im[k]??null);return g;}
+  const v=im[caminho[0]];
+  if(caminho.length===1)return v??null;
+  if(Array.isArray(v))return v.find(x=>x&&x.id===caminho[1])??null;
+  if(v&&typeof v==='object')return v[caminho[1]]??null;
+  return null;
+}
+function _imEscrever(im,caminho,valor,apagar){
+  if(caminho[0]==='_status'){_IM_GRUPO_STATUS.forEach(k=>im[k]=apagar?null:((valor||{})[k]??null));return;}
+  const campo=caminho[0];
+  if(caminho.length===1){if(apagar)delete im[campo];else im[campo]=valor;return;}
+  if(_IM_LISTAS_POR_ID.has(campo)){
+    const lista=Array.isArray(im[campo])?im[campo]:[];
+    const i=lista.findIndex(x=>x&&x.id===caminho[1]);
+    if(apagar){if(i>=0)lista.splice(i,1);}else if(i>=0)lista[i]=valor;else lista.push(valor);
+    im[campo]=lista;return;
+  }
+  const obj=(im[campo]&&typeof im[campo]==='object'&&!Array.isArray(im[campo]))?im[campo]:{};
+  if(apagar)delete obj[caminho[1]];else obj[caminho[1]]=valor;
+  im[campo]=obj;
+}
+// ops do patch (mesmo formato de merge_campos.aplicar_patch): {im,novo} | {im} (apagar imóvel) |
+// {im,caminho,valor} | {im,caminho,apagar:true}
+function _imDiff(base,local){
+  const b=new Map((base||[]).filter(i=>i&&i.id).map(i=>[i.id,i]));
+  const l=new Map((local||[]).filter(i=>i&&i.id).map(i=>[i.id,i]));
+  const ops=[];
+  l.forEach((im,id)=>{
+    if(!b.has(id)){ops.push({im:id,novo:im});return;}
+    const ub=_imUnidades(b.get(id)),ul=_imUnidades(im);
+    ul.forEach(([caminho,v],k)=>{const vb=ub.get(k);if(!vb||_estavel(vb[1])!==_estavel(v))ops.push({im:id,caminho,valor:v});});
+    ub.forEach(([caminho],k)=>{if(!ul.has(k))ops.push({im:id,caminho,apagar:true});});
+  });
+  b.forEach((_,id)=>{if(!l.has(id))ops.push({im:id});});
+  return ops;
+}
+function _imAplicar(lista,ops){
+  const out=JSON.parse(JSON.stringify(lista||[]));
+  ops.forEach(op=>{
+    const i=out.findIndex(x=>x&&x.id===op.im);
+    if(op.novo){if(i<0)out.push({...op.novo,id:op.im});return;}
+    if(!op.caminho){if(i>=0)out.splice(i,1);return;}
+    if(i>=0)_imEscrever(out[i],op.caminho,op.valor,op.apagar);
+  });
+  return out;
+}
+// Junta as edições locais pendentes (local - base) com a versão nova do servidor. Unidade que o
+// servidor também mudou (servidor != base) pra um valor diferente do local = conflito: vale a do
+// servidor. Retorna {lista, conflitos}.
+function _imRebase(base,local,servidor){
+  const porId=l=>new Map((l||[]).filter(i=>i&&i.id).map(i=>[i.id,i]));
+  const bI=porId(base),sI=porId(servidor);
+  const aceitas=[],conflitos=[];
+  _imDiff(base,local).forEach(op=>{
+    if(op.novo){aceitas.push(op);return;}
+    if(!op.caminho){ // apagar imóvel que outra pessoa editou: não apaga
+      if(sI.has(op.im)&&_estavel(bI.get(op.im))!==_estavel(sI.get(op.im)))conflitos.push(op);else aceitas.push(op);
+      return;
+    }
+    if(!sI.has(op.im)){conflitos.push(op);return;} // imóvel apagado por outra pessoa
+    const vb=_estavel(_imLer(bI.get(op.im),op.caminho)),vs=_estavel(_imLer(sI.get(op.im),op.caminho));
+    const vn=_estavel(op.apagar?null:op.valor);
+    if(vs!==vb&&vs!==vn)conflitos.push(op);else aceitas.push(op);
+  });
+  return{lista:_imAplicar(servidor,aceitas),conflitos};
+}
+function _avisarConflitosImoveis(conflitos){
+  if(!conflitos||!conflitos.length)return;
+  const porImovel={};
+  conflitos.forEach(c=>{const nome=(getImovel(c.im)||{}).nome||c.im;(porImovel[nome]=porImovel[nome]||new Set()).add(c.caminho?c.caminho[0]:'imóvel');});
+  const txt=Object.entries(porImovel).map(([n,cs])=>`${n} (${[...cs].join(', ')})`).join('; ');
+  showToast(`Outra pessoa alterou os mesmos campos ao mesmo tempo — mantive a versão dela: ${txt}`,'peach');
+}
+// Versão-base de wc_imoveis (o que o servidor tinha na revisão _sync.revs.wc_imoveis), pra
+// calcular o patch. Persistida porque o push pode acontecer depois de recarregar a página.
+const _SYNC_BASE_IMOVEIS_KEY='wc__base_imoveis';
+let _baseImoveisStr=(()=>{try{return localStorage.getItem(_SYNC_BASE_IMOVEIS_KEY);}catch{return null;}})();
+function _syncSetBaseImoveis(str){_baseImoveisStr=str;try{localStorage.setItem(_SYNC_BASE_IMOVEIS_KEY,str);}catch{}}
 
 function saveAll(){
   localStorage.setItem('wc_imoveis',JSON.stringify(imoveis));
@@ -654,18 +765,26 @@ function _kvPushDebounced(){
 // Monta o corpo do /save só com as coleções alteradas localmente desde a última sincronização
 // (e cuja revisão-base é conhecida — coleção nunca lida do servidor nesta máquina não é enviada).
 function _syncMontarBlob(){
-  const blob={},base={},hashes={};
+  const blob={},base={},hashes={};let imoveisStr=null;
   SYNC_KEYS.forEach(k=>{
     if(_sync.revs[k]===undefined||!_syncSujo(k))return;
     const v=localStorage.getItem(k);
+    if(k==='wc_imoveis'){
+      // imóveis: patch por campo em relação à base (nunca o wc_imoveis inteiro)
+      if(_baseImoveisStr===null)return;
+      let ops;try{ops=_imDiff(JSON.parse(_baseImoveisStr),JSON.parse(v));}catch{return;}
+      if(!ops.length){_sync.hashes[k]=_hashStr(v);return;} // só mudou a serialização
+      blob._imoveisPatch={base:_sync.revs[k],ops};hashes[k]=_hashStr(v);imoveisStr=v;
+      return;
+    }
     try{blob[k]=JSON.parse(v);}catch{return;}
     base[k]=_sync.revs[k];hashes[k]=_hashStr(v);
   });
-  if(!Object.keys(base).length)return null;
+  if(!Object.keys(hashes).length)return null;
   blob._baseRevs=base;
-  blob._proto=2; // ver PROTOCOLO_MINIMO em backend/app/merge.py
+  blob._proto=3; // ver PROTOCOLO_MINIMO em backend/app/merge.py
   blob.lastSaved=Date.now();
-  return{blob,hashes};
+  return{blob,hashes,imoveisStr};
 }
 let _kvEnviando=false,_kvPendente=false;
 async function _kvSendNow(){
@@ -681,14 +800,24 @@ async function _kvSendNow(){
     const j=await r.json();
     if(j&&j.ok&&j.revs){
       const conflitos=new Set(j.conflitos||[]);
+      let puxar=conflitos.size>0;
       for(const k in pacote.hashes){
         if(conflitos.has(k))continue;
+        if(k==='wc_imoveis'){
+          const conf=j.conflitosImoveis||[];
+          _avisarConflitosImoveis(conf);
+          if(!conf.length&&(j.revsAntes||{}).wc_imoveis===pacote.blob._imoveisPatch.base){
+            // ninguém gravou no meio: servidor = base + este patch = o que foi enviado
+            _sync.revs[k]=j.revs[k];_sync.hashes[k]=pacote.hashes[k];_syncSetBaseImoveis(pacote.imoveisStr);
+          } else puxar=true; // teve gravação de outra pessoa (ou unidade recusada): pull + rebase
+          continue;
+        }
         _sync.revs[k]=j.revs[k];_sync.hashes[k]=pacote.hashes[k];
       }
       _syncPersistir();
       // coleção recusada = mudou no servidor desde que esta aba leu; o kvPull traz a versão
       // do servidor (a revisão local ficou pra trás, então ele sobrescreve)
-      if(conflitos.size)await kvPull(false);
+      if(puxar)await kvPull(false);
     }
   }catch{}
   finally{
@@ -712,11 +841,24 @@ async function kvPull(showMsg){
         const revServidor=revs[k]??0;
         // servidor não mudou desde a base local: o local vale (igual à base, ou com edição
         // pendente que o próximo push manda)
-        if(_sync.revs[k]===revServidor&&_sync.hashes[k]!==undefined)return;
+        if(_sync.revs[k]===revServidor&&_sync.hashes[k]!==undefined&&(k!=='wc_imoveis'||_baseImoveisStr!==null))return;
         const sujo=_syncSujo(k);
-        // imóveis com edição local pendente sobre uma base conhecida: mantém o local — o
-        // merge do servidor (reconciliar_sublistas_imoveis) reconcilia no próximo push
-        if(sujo&&SYNC_KEYS_SEM_CONFLITO.includes(k)&&_sync.hashes[k]!==undefined){_sync.revs[k]=revServidor;return;}
+        if(k==='wc_imoveis'){
+          // imóveis: edição local pendente sobre uma base conhecida é juntada campo a campo com
+          // o que veio do servidor (rebase); sem edição local (ou sem base), vale o servidor
+          const strServ=JSON.stringify(j.data[k]);
+          let strNovo=strServ;
+          if(sujo&&_baseImoveisStr!==null){
+            try{
+              const {lista,conflitos}=_imRebase(JSON.parse(_baseImoveisStr),JSON.parse(localStorage.getItem(k)),j.data[k]);
+              strNovo=JSON.stringify(lista);
+              _avisarConflitosImoveis(conflitos);
+            }catch{}
+          }
+          if(localStorage.getItem(k)!==strNovo){try{localStorage.setItem(k,strNovo);}catch{return;}mudou=true;}
+          _sync.revs[k]=revServidor;_sync.hashes[k]=_hashStr(strServ);_syncSetBaseImoveis(strServ);
+          return;
+        }
         // demais casos: o servidor vale — inclusive por cima de edição local feita sobre uma
         // versão que já ficou velha (é exatamente o caso do navegador desatualizado)
         const str=JSON.stringify(j.data[k]);

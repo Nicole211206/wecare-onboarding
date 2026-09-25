@@ -16,19 +16,19 @@ def _load(c):
 
 def _save(c, body):
     """/save de um app.js atual (protocolo 2) — ver merge.PROTOCOLO_MINIMO."""
-    resp = c.post("/save", json={"_proto": 2, **body})
+    resp = c.post("/save", json={"_proto": 3, **body})
     assert resp.status_code == 200
     return resp.json()
 
 
 class TestFiltrarConflitos:
     def test_base_igual_ao_servidor_passa(self):
-        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 3}, "_proto": 2}, {"wc_itens": 3})
+        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 3}, "_proto": 3}, {"wc_itens": 3})
         assert body == {"wc_itens": []}
         assert conflitos == []
 
     def test_base_desatualizada_e_recusada(self):
-        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 2}, "_proto": 2}, {"wc_itens": 3})
+        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 2}, "_proto": 3}, {"wc_itens": 3})
         assert "wc_itens" not in body
         assert conflitos == ["wc_itens"]
 
@@ -42,7 +42,7 @@ class TestFiltrarConflitos:
             assert sorted(conflitos) == ["wc_imoveis", "wc_itens"]
 
     def test_colecao_nao_enviada_nao_e_conflito(self):
-        body, conflitos = filtrar_conflitos({"wc_templates_msg": [], "_baseRevs": {"wc_templates_msg": 0}, "_proto": 2}, {"wc_itens": 9})
+        body, conflitos = filtrar_conflitos({"wc_templates_msg": [], "_baseRevs": {"wc_templates_msg": 0}, "_proto": 3}, {"wc_itens": 9})
         assert conflitos == []
 
 
@@ -88,9 +88,10 @@ class TestSaveVersionado:
         assert "wc_itens" in r["conflitos"]
         assert _load(auth_client)["wc_itens"] == antes["wc_itens"]
 
-    def test_escrita_de_imovel_por_outra_rota_incrementa_revisao(self, auth_client):
+    def test_escrita_de_imovel_incrementa_revisao(self, auth_client):
         revs = _load(auth_client)["_revs"]
-        r = _save(auth_client, {"wc_imoveis": [{"id": "im_rev_teste", "nome": "Apto Teste"}]})
+        r = _save(auth_client, {"_imoveisPatch": {"base": revs["wc_imoveis"], "ops": [
+            {"im": "im_rev_teste", "novo": {"nome": "Apto Teste"}}]}})
         assert r["revs"]["wc_imoveis"] == revs["wc_imoveis"] + 1
 
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from . import merge, models
+from . import merge, merge_campos, models
 from .config import settings
 
 DATA_URL_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.DOTALL)
@@ -608,6 +608,19 @@ def get_revs(db: Session) -> dict[str, int]:
     return revs
 
 
+FIELD_REVS_CHAVE = "_fieldrevs:wc_imoveis"
+
+
+def get_field_revs(db: Session) -> dict[str, int]:
+    """Revisão (de wc_imoveis) em que cada unidade de cada imóvel mudou por último — ver
+    app/merge_campos.py. Chave: imovel_id + caminho, separados por merge_campos.SEP."""
+    row = db.get(models.ConfigTexto, FIELD_REVS_CHAVE)
+    try:
+        return json.loads(row.texto) if row and row.texto else {}
+    except ValueError:
+        return {}
+
+
 def reler_estado(db: Session, base_url: str, token: str) -> dict:
     """get_state "fresco", pra rota que faz `await` (Drive, IA) entre ler e gravar.
 
@@ -652,6 +665,16 @@ def put_state_versionado(db: Session, novo: dict) -> dict[str, int]:
         if json.dumps(antes.get(k), sort_keys=True) != json.dumps(depois.get(k), sort_keys=True):
             revs[k] += 1
             _set_texto(db, f"{REV_PREFIX}{k}", str(revs[k]))
+            if k == "wc_imoveis":
+                # registra a revisão de cada unidade alterada — vale pra QUALQUER escrita
+                # (/save, vistoria, análise do Drive, formulário), senão um patch baseado numa
+                # versão anterior sobrescreveria sem conflito o que essas rotas gravaram
+                fr = get_field_revs(db)
+                for chave in merge_campos.caminhos_alterados(antes.get(k), depois.get(k)):
+                    fr[chave] = revs[k]
+                vivos = {i.get("id") for i in depois.get(k) or []}
+                fr = {c: r for c, r in fr.items() if c.split(merge_campos.SEP, 1)[0] in vivos or r == revs[k]}
+                _set_texto(db, FIELD_REVS_CHAVE, json.dumps(fr))
     return revs
 
 

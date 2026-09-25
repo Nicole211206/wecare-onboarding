@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from .. import merge, models, state
+from .. import merge, merge_campos, models, state
 from ..auth import require_auth
 from ..database import get_db
 
@@ -40,11 +40,26 @@ async def save(request: Request, db: Session = Depends(get_db), token: str = Dep
         db.execute(delete(models.Backup).where(models.Backup.hora_bucket < bucket - 24 * 7))
 
     revs = state.get_revs(db)
+    patch = body.pop("_imoveisPatch", None)
+    proto_ok = merge.protocolo_ok(body)
     body, conflitos = merge.filtrar_conflitos(body, revs)
-    merged = merge.merge_save(current, body)
+    # wc_imoveis: patch por campo (ver app/merge_campos.py) — conflito é por unidade, não pela
+    # coleção inteira; o resto do patch é aplicado.
+    conflitos_imoveis: list[dict] = []
+    if isinstance(patch, dict) and proto_ok:
+        body["wc_imoveis"], conflitos_imoveis = merge_campos.aplicar_patch(
+            current.get("wc_imoveis") or [], patch, state.get_field_revs(db)
+        )
+    elif patch is not None:
+        conflitos.append("wc_imoveis")
+    merged = merge.merge_save(current, body, imoveis_por_patch="wc_imoveis" in body)
+    revs_antes = revs
     revs = state.put_state_versionado(db, merged)
     db.commit()
-    return {"ok": True, "revs": revs, "conflitos": conflitos}
+    # revsAntes: se a revisão de antes deste save era a base do cliente, ninguém gravou no meio
+    # e o estado do servidor = base + o patch dele (o cliente não precisa puxar de novo)
+    return {"ok": True, "revs": revs, "revsAntes": revs_antes, "conflitos": conflitos,
+            "conflitosImoveis": conflitos_imoveis}
 
 
 @router.post("/stats")

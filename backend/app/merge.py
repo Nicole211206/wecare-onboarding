@@ -210,19 +210,28 @@ REV_KEYS_SEM_CONFLITO = ["wc_imoveis"]
 # aberta com app.js antigo em cache: não grava NADA (fica só leitura até recarregar). v2
 # (2026-09-25): im.compras passou a ser chaveado pelo id do item — um cliente v1 regravaria
 # chaves de posição por cima das migradas, e salvaria o catálogo sem os ids dos itens.
-PROTOCOLO_MINIMO = 2
+# v3 (2026-09-25): wc_imoveis vai como patch por campo (`_imoveisPatch`, ver merge_campos.py),
+# nunca mais inteiro — um cliente v2 regravaria o imóvel inteiro por cima de edições alheias.
+PROTOCOLO_MINIMO = 3
+
+
+def protocolo_ok(body: dict) -> bool:
+    proto = body.get("_proto")
+    return isinstance(proto, int) and proto >= PROTOCOLO_MINIMO
 
 
 def filtrar_conflitos(body: dict, revs: dict) -> tuple[dict, list[str]]:
     """Remove do body as coleções versionadas que o cliente mandou a partir de uma
     revisão desatualizada. Retorna (body filtrado, coleções recusadas)."""
     base = body.get("_baseRevs")
-    proto = body.get("_proto")
     filtrado = {k: v for k, v in body.items() if k not in ("_baseRevs", "_proto")}
-    if not isinstance(proto, int) or proto < PROTOCOLO_MINIMO:
+    if not protocolo_ok(body):
         recusadas = [k for k in (*REV_KEYS, *REV_KEYS_SEM_CONFLITO) if k in filtrado]
         return {k: v for k, v in filtrado.items() if k not in recusadas}, recusadas
     conflitos = []
+    if "wc_imoveis" in filtrado:  # só por patch (_imoveisPatch) a partir do protocolo 3
+        del filtrado["wc_imoveis"]
+        conflitos.append("wc_imoveis")
     for k in REV_KEYS:
         if k not in filtrado:
             continue
@@ -257,19 +266,28 @@ def descartar_compras_por_posicao(current: dict, body: dict) -> None:
             im["compras"] = (atuais.get(im.get("id")) or {}).get("compras") or {}
 
 
-def merge_save(current: dict, body: dict) -> dict:
+def merge_save(current: dict, body: dict, imoveis_por_patch: bool = False) -> dict:
     """Porte de POST /save: incoming sobrescreve current, exceto listas que
-    encolheriam catastroficamente, e reconcilia sublistas de wc_imoveis."""
-    descartar_compras_por_posicao(current, body)
+    encolheriam catastroficamente, e reconcilia sublistas de wc_imoveis.
+
+    imoveis_por_patch: wc_imoveis do body já é o resultado de merge_campos.aplicar_patch (só
+    as unidades que o cliente de fato mudou, com conflito por campo) — não passa pelas
+    proteções de "encolhida"/"campo não esvazia", que existiam pra adivinhar o que era edição
+    de verdade num payload inteiro e impediam, por exemplo, limpar um campo de propósito."""
+    if not imoveis_por_patch:
+        descartar_compras_por_posicao(current, body)
     merged = {**current, **body}
 
     for k in (*LIST_KEYS, *LIST_KEYS_ESTRITAS):
+        if imoveis_por_patch and k == "wc_imoveis":
+            continue
         sv = current.get(k) if isinstance(current.get(k), list) else []
         iv = body.get(k) if isinstance(body.get(k), list) else []
         if _encolhida_catastrofica(sv, iv):
             merged[k] = sv
 
-    merged["wc_imoveis"] = reconciliar_sublistas_imoveis(current.get("wc_imoveis"), merged.get("wc_imoveis"))
+    if not imoveis_por_patch:
+        merged["wc_imoveis"] = reconciliar_sublistas_imoveis(current.get("wc_imoveis"), merged.get("wc_imoveis"))
 
     # lastSaved: aceita o do cliente só se for mais novo — senão mantém o
     # atual. BUG corrigido em 2026-09-17: a spread inicial (`{**current,
