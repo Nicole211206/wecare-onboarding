@@ -2622,14 +2622,16 @@ function confirmarManutencao(){
   if(!nome.trim()){showToast('Informe o nome da manutenção.','peach');return;}
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.manutencoes)im.manutencoes=[];
-  const novaManut={id:uid(),nome:nome.trim(),valor,status:'pendente'};
+  const u=getCurrentUser()||{};
+  const novaManut={id:uid(),nome:nome.trim(),valor,status:'pendente',criadoPor:u.nome||u.email||'',criadoEm:new Date().toISOString()};
   im.manutencoes.push(novaManut);
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
   // Cria card no módulo de manutenção da Claire
   fetch('https://claire.wecarehosting.com.br/api/manutencoes?token=f634ad1d7fe480e9b53fa2009a7e650e',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
+    // criadoPor: aparece no card da Claire como "Criado por X · data/hora"
+    body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0],criadoPor:novaManut.criadoPor})
   }).catch(()=>{});
 }
 function adicionarManutencao(){toggleFormManut();}
