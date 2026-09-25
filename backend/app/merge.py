@@ -206,11 +206,22 @@ REV_KEYS = [
 REV_KEYS_SEM_CONFLITO = ["wc_imoveis"]
 
 
+# Versão do protocolo do /save que o app.js manda em `_proto`. Cliente abaixo disso é uma aba
+# aberta com app.js antigo em cache: não grava NADA (fica só leitura até recarregar). v2
+# (2026-09-25): im.compras passou a ser chaveado pelo id do item — um cliente v1 regravaria
+# chaves de posição por cima das migradas, e salvaria o catálogo sem os ids dos itens.
+PROTOCOLO_MINIMO = 2
+
+
 def filtrar_conflitos(body: dict, revs: dict) -> tuple[dict, list[str]]:
     """Remove do body as coleções versionadas que o cliente mandou a partir de uma
     revisão desatualizada. Retorna (body filtrado, coleções recusadas)."""
     base = body.get("_baseRevs")
-    filtrado = {k: v for k, v in body.items() if k != "_baseRevs"}
+    proto = body.get("_proto")
+    filtrado = {k: v for k, v in body.items() if k not in ("_baseRevs", "_proto")}
+    if not isinstance(proto, int) or proto < PROTOCOLO_MINIMO:
+        recusadas = [k for k in (*REV_KEYS, *REV_KEYS_SEM_CONFLITO) if k in filtrado]
+        return {k: v for k, v in filtrado.items() if k not in recusadas}, recusadas
     conflitos = []
     for k in REV_KEYS:
         if k not in filtrado:
@@ -232,9 +243,24 @@ def _encolhida_catastrofica(sv: list, iv: list) -> bool:
     return (len(iv) == 0 and len(sv) >= 5) or (len(sv) >= 8 and len(iv) <= 2)
 
 
+def _tem_chave_de_posicao(compras) -> bool:
+    return isinstance(compras, dict) and any(str(k).partition("_")[0].isdigit() for k in compras)
+
+
+def descartar_compras_por_posicao(current: dict, body: dict) -> None:
+    """Desde 2026-09-25 im.compras é chaveado pelo id do item (ver app/migracao_compras.py).
+    Imóvel chegando com chave de posição ("7", "0_Casal") vem de um navegador que ainda não
+    puxou o estado migrado — gravar isso desfaria a migração. Mantém o compras do servidor."""
+    atuais = {i.get("id"): i for i in current.get("wc_imoveis") or [] if isinstance(i, dict)}
+    for im in body.get("wc_imoveis") or []:
+        if isinstance(im, dict) and _tem_chave_de_posicao(im.get("compras")):
+            im["compras"] = (atuais.get(im.get("id")) or {}).get("compras") or {}
+
+
 def merge_save(current: dict, body: dict) -> dict:
     """Porte de POST /save: incoming sobrescreve current, exceto listas que
     encolheriam catastroficamente, e reconcilia sublistas de wc_imoveis."""
+    descartar_compras_por_posicao(current, body)
     merged = {**current, **body}
 
     for k in (*LIST_KEYS, *LIST_KEYS_ESTRITAS):

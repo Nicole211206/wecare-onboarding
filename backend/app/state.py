@@ -166,6 +166,7 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
         ],
         "wc_itens": [
             {
+                "id": i.uid,
                 "cat": i.cat,
                 "nome": i.nome,
                 "tipoPreco": i.tipo_preco,
@@ -283,6 +284,23 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
     return state
 
 
+def novo_uid_item() -> str:
+    # mesmo formato do _novoIdItem() do app.js: "it" + [a-z0-9], sem "_" (o "_" separa o
+    # tamanho de enxoval na chave de im.compras, ex. "itab12cd_Casal")
+    return "it" + uuid.uuid4().hex[:12]
+
+
+def garantir_uid_itens(db: Session) -> int:
+    """Dá id estável aos itens do catálogo que ainda não têm (linhas de antes da coluna
+    `uid`). Roda no startup. Retorna quantos receberam id."""
+    sem = list(db.scalars(select(models.Item).where(models.Item.uid.is_(None))))
+    for item in sem:
+        item.uid = novo_uid_item()
+    if sem:
+        bump_rev(db, "wc_itens")
+    return len(sem)
+
+
 def _enxoval_precos_to_dict(db: Session) -> dict:
     out: dict[str, dict[str, float]] = {}
     for e in db.scalars(select(models.EnxovalPreco)):
@@ -371,11 +389,26 @@ def put_state(db: Session, state: dict) -> None:
             )
 
     if "wc_itens" in state:
+        # Item chegando sem id (cliente que ainda não tinha o id do servidor): reaproveita o
+        # uid do item de mesmo nome, se o nome for único — senão ganharia um uid novo e todas
+        # as marcações de im.compras daquele item ficariam órfãs.
+        uid_por_nome: dict[str, list[str]] = {}
+        for it in db.scalars(select(models.Item)):
+            if it.uid:
+                uid_por_nome.setdefault(it.nome, []).append(it.uid)
+        ids_recebidos = {i.get("id") for i in state["wc_itens"] or [] if isinstance(i, dict)}
+        for i in state["wc_itens"] or []:
+            if isinstance(i, dict) and not i.get("id"):
+                candidatos = [u for u in uid_por_nome.get(i.get("nome"), []) if u not in ids_recebidos]
+                if len(candidatos) == 1:
+                    i["id"] = candidatos[0]
+                    ids_recebidos.add(candidatos[0])
         db.execute(delete(models.Item))
         for idx, i in enumerate(state["wc_itens"] or []):
             db.add(
                 models.Item(
                     ordem=idx,
+                    uid=i.get("id") or novo_uid_item(),
                     cat=i.get("cat"),
                     nome=i.get("nome"),
                     tipo_preco=i.get("tipoPreco"),

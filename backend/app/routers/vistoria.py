@@ -24,6 +24,20 @@ def _find_imovel(data: dict, imovel_id: str) -> dict | None:
     return None
 
 
+def _chave_compras_por_id(sub_key: str, itens: list[dict]) -> str | None:
+    """Chave de im.compras é o id do item ("<id>" / "<id>_<Tamanho>") desde 2026-09-25. Uma
+    página de vistoria aberta antes disso (em cache no celular) ainda manda a chave antiga, pela
+    posição no catálogo ("7", "0_Casal") — traduz pelo catálogo atual, que é o que aquela página
+    recebeu no /vistoria-load. Posição fora do catálogo → None (descarta)."""
+    base, sep, tamanho = str(sub_key).partition("_")
+    if not base.isdigit():
+        return sub_key
+    idx = int(base)
+    if idx >= len(itens) or not itens[idx].get("id"):
+        return None
+    return f"{itens[idx]['id']}{sep}{tamanho}"
+
+
 def _find_vistoria(im: dict, vistoria_id: str) -> dict | None:
     for v in im.get("vistorias") or []:
         if v.get("id") == vistoria_id:
@@ -143,6 +157,9 @@ async def vistoria_save(id: str = "", vid: str = "", t: str = "", request: Reque
                 im["compras"] = {}
             for sub_key, info in itens_checklist.items():
                 if not isinstance(info, dict):
+                    continue
+                sub_key = _chave_compras_por_id(sub_key, data.get("wc_itens") or [])
+                if sub_key is None:
                     continue
                 if not isinstance(im["compras"].get(sub_key), dict):
                     im["compras"][sub_key] = {}

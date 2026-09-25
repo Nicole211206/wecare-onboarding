@@ -15,31 +15,34 @@ def _load(c):
 
 
 def _save(c, body):
-    resp = c.post("/save", json=body)
+    """/save de um app.js atual (protocolo 2) — ver merge.PROTOCOLO_MINIMO."""
+    resp = c.post("/save", json={"_proto": 2, **body})
     assert resp.status_code == 200
     return resp.json()
 
 
 class TestFiltrarConflitos:
     def test_base_igual_ao_servidor_passa(self):
-        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 3}}, {"wc_itens": 3})
+        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 3}, "_proto": 2}, {"wc_itens": 3})
         assert body == {"wc_itens": []}
         assert conflitos == []
 
     def test_base_desatualizada_e_recusada(self):
-        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 2}}, {"wc_itens": 3})
+        body, conflitos = filtrar_conflitos({"wc_itens": [], "_baseRevs": {"wc_itens": 2}, "_proto": 2}, {"wc_itens": 3})
         assert "wc_itens" not in body
         assert conflitos == ["wc_itens"]
 
-    def test_cliente_antigo_sem_base_nao_grava_configuracoes(self):
-        # aba com app.js antigo em cache: manda tudo, sem _baseRevs
-        body, conflitos = filtrar_conflitos({"wc_itens": [], "wc_imoveis": [], "lastSaved": 1}, {"wc_itens": 0})
-        assert "wc_itens" not in body
-        assert "wc_imoveis" in body  # imóveis seguem pelo merge de reconciliar_sublistas_imoveis
-        assert conflitos == ["wc_itens"]
+    def test_cliente_antigo_nao_grava_nada(self):
+        # aba com app.js antigo em cache (sem _proto, ou v1 com _baseRevs): não grava nenhuma
+        # coleção — nem imóveis, que ele regravaria com compras chaveado por posição
+        for body_antigo in ({"wc_itens": [], "wc_imoveis": [], "lastSaved": 1},
+                            {"wc_itens": [], "wc_imoveis": [], "_baseRevs": {"wc_itens": 0}}):
+            body, conflitos = filtrar_conflitos(body_antigo, {"wc_itens": 0})
+            assert "wc_itens" not in body and "wc_imoveis" not in body
+            assert sorted(conflitos) == ["wc_imoveis", "wc_itens"]
 
     def test_colecao_nao_enviada_nao_e_conflito(self):
-        body, conflitos = filtrar_conflitos({"wc_templates_msg": [], "_baseRevs": {"wc_templates_msg": 0}}, {"wc_itens": 9})
+        body, conflitos = filtrar_conflitos({"wc_templates_msg": [], "_baseRevs": {"wc_templates_msg": 0}, "_proto": 2}, {"wc_itens": 9})
         assert conflitos == []
 
 
@@ -81,7 +84,7 @@ class TestSaveVersionado:
 
     def test_cliente_antigo_nao_sobrescreve_configuracoes(self, auth_client):
         antes = _load(auth_client)
-        r = _save(auth_client, {"wc_itens": [{"cat": "X", "nome": "versao velha"}], "lastSaved": 1})
+        r = auth_client.post("/save", json={"wc_itens": [{"cat": "X", "nome": "versao velha"}], "lastSaved": 1}).json()
         assert "wc_itens" in r["conflitos"]
         assert _load(auth_client)["wc_itens"] == antes["wc_itens"]
 

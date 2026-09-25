@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from . import models, state
+from . import migracao_compras, models, state
 from .database import Base, SessionLocal, engine
 from .routers import fotos, form, ia, onboarding, vistoria
 
@@ -38,6 +38,7 @@ _COLUNAS_NOVAS = [
     "ALTER TABLE modalidades_enxoval ADD COLUMN base_cobranca VARCHAR",
     "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_custo NUMERIC",
     "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_cobrado NUMERIC",
+    "ALTER TABLE itens ADD COLUMN uid VARCHAR",
 ]
 for _sql in _COLUNAS_NOVAS:
     try:
@@ -96,6 +97,30 @@ try:
         _db.commit()
 except Exception:
     pass
+
+# Itens do catálogo com id estável + im.compras chaveado por esse id em vez da posição
+# (2026-09-25 — ver app/migracao_compras.py). Idempotente: sem chave de posição, não faz nada.
+# Diferente das limpezas acima, erro aqui é logado (journalctl -u wecare-onboarding) em vez de
+# engolido em silêncio — é migração de dado de cliente, precisa dar pra ver se não rodou.
+try:
+    with SessionLocal() as _db:
+        _novos = state.garantir_uid_itens(_db)
+        _db.commit()
+        _res = migracao_compras.migrar(_db)
+        _db.commit()
+        if _novos or _res:
+            print(f"[migração compras] itens com id novo: {_novos}", flush=True)
+        if _res:
+            print(
+                f"[migração compras] convertidas={_res.convertidas} deslocadas={_res.deslocadas} "
+                f"mantidas={_res.mantidas} arquivadas={sum(len(a) for a in _res.arquivadas.values())} "
+                f"avisos={len(_res.avisos)}",
+                flush=True,
+            )
+            for _aviso in _res.avisos:
+                print(f"[migração compras] AVISO {_aviso}", flush=True)
+except Exception as _e:
+    print(f"[migração compras] ERRO: {_e!r}", flush=True)
 
 app = FastAPI(title="WeCare Onboarding")
 

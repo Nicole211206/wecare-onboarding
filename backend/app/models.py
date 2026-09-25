@@ -88,9 +88,13 @@ class Item(Base):
     __tablename__ = "itens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # posição no array original — compras[] no imóvel referencia itens POR ÍNDICE
-    # (chaves "0".."50" e "N_TipoCama"), então a ordem aqui não é cosmética.
+    # posição no catálogo (ordem de exibição). Até 2026-09-25 im.compras referenciava itens
+    # por esta posição — ver `uid`.
     ordem: Mapped[int] = mapped_column(Integer, unique=True)
+    # id estável do item (o `id` do JSON; "it..." gerado no app.js) — im.compras é chaveado por
+    # ele desde 2026-09-25. A PK `id` acima não serve: put_state apaga e recria as linhas a
+    # cada save do catálogo, então o autoincrement muda toda vez.
+    uid: Mapped[str | None] = mapped_column(String)
     cat: Mapped[str | None] = mapped_column(String)
     nome: Mapped[str | None] = mapped_column(String)
     tipo_preco: Mapped[str | None] = mapped_column(String)

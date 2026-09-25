@@ -1733,6 +1733,10 @@ function buildComodos() {
 // "quanto já tem no imóvel" por item; o subKey é IDÊNTICO ao usado lá, então ao
 // enviar a vistoria isso vira o im.compras[subKey].qtdTem direto, sem retrabalho.
 // ═══════════════════════════════════════════════════════
+// Mesma chave de im.compras do admin (js/app.js): id estável do item. A posição (idx) só
+// entra como fallback se o servidor mandar um catálogo antigo sem id — e o /vistoria-save
+// traduz chave numérica pro id pelo catálogo atual (ver _chave_compras_por_id em vistoria.py).
+function _chaveItemVistoria(item, idx) { return item.id || String(idx); }
 function _gerarLinhasItensObrigatorios() {
   const d = IMOVEL_DADOS || {};
   const camas = d.camas || [];
@@ -1750,11 +1754,11 @@ function _gerarLinhasItensObrigatorios() {
         const dashIdx = (item.qtdRule || '1-colchao').indexOf('-');
         const q = parseInt((item.qtdRule || '1-colchao').slice(0, dashIdx)) || 1;
         const qtdNec = q * camasParaItem.reduce((s, c) => s + (CAMA_LEITOS[c.tipo] || 1) * (+c.qtd || 1), 0);
-        rows.push({ subKey: `${idx}_${tipoEnx}`, cat: item.cat, label: `${item.nome} (${tipoEnx})`, qtdNec, isEnxoval });
+        rows.push({ subKey: `${_chaveItemVistoria(item, idx)}_${tipoEnx}`, cat: item.cat, label: `${item.nome} (${tipoEnx})`, qtdNec, isEnxoval });
       });
     } else {
       const qtdNec = calcNecessarioVistoria(item, camas, d.banheiros, d.quartos, d.banheirosCompletos, d.maxHospedes, d.banheirosLavabo, d.andares);
-      rows.push({ subKey: String(idx), cat: item.cat, label: item.nome, qtdNec, isEnxoval });
+      rows.push({ subKey: _chaveItemVistoria(item, idx), cat: item.cat, label: item.nome, qtdNec, isEnxoval });
     }
   });
   return rows;

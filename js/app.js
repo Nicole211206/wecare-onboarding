@@ -154,6 +154,16 @@ function _seedModalidadesEnxoval(nuncaSalvo){
       precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
   ];
 }
+// Cada item do catálogo tem um id estável (item.id), e im.compras é chaveado por ele:
+// "<id>" ou "<id>_<Tamanho>" (enxoval). Até 2026-09-25 a chave era a POSIÇÃO do item no
+// catálogo, e apagar um item do meio deslocava o "comprado"/qtdTem/preço de todos os itens
+// seguintes, em todos os imóveis (migração dos dados antigos: backend/app/migracao_compras.py).
+// O id não pode ter "_" (separa o tamanho de enxoval na chave).
+function _novoIdItem(){return 'it'+uid()+uid();}
+function _novoItemCatalogo(dados){return{id:_novoIdItem(),...dados};}
+// Navegador sem o catálogo do servidor (usa o array padrão do código) ou dado antigo sem id.
+// O servidor sempre devolve id (coluna itens.uid), então isso só vale até o primeiro pull.
+function _garantirIdsItens(){ITENS_COMPRAS.forEach(i=>{if(!i.id)i.id=_novoIdItem();});}
 // _migrarCatalogoItens (2026-07-17) removida em 2026-09-25: rodava a cada loadAll em todo
 // navegador e reaplicava o catálogo de julho por cima do que a usuária editou — recriava
 // "Vassoura de Pelos" se apagada, recolocava restrição de modalidade em 7 itens, remarcava
@@ -594,6 +604,7 @@ function loadAll(){
   v=g('wc_imoveis');   if(Array.isArray(v))imoveis=v;
   v=g('wc_membros');   if(Array.isArray(v))membros=v;
   v=g('wc_itens');     if(Array.isArray(v)&&v.length)ITENS_COMPRAS=v;
+  _garantirIdsItens();
   v=g('wc_enxoval');   if(v&&typeof v==='object')PRECOS_ENXOVAL=v;
   v=g('wc_limpeza');   {const migrado=_migrarPrecosPrimeiraLimpeza(v);if(migrado)PRECOS_PRIMEIRA_LIMPEZA=migrado;}
   v=g('wc_limpeza_checkout');if(Array.isArray(v)&&v.length)PRECOS_LIMPEZA_CHECKOUT=v;
@@ -652,6 +663,7 @@ function _syncMontarBlob(){
   });
   if(!Object.keys(base).length)return null;
   blob._baseRevs=base;
+  blob._proto=2; // ver PROTOCOLO_MINIMO em backend/app/merge.py
   blob.lastSaved=Date.now();
   return{blob,hashes};
 }
@@ -2161,7 +2173,7 @@ function renderAbaCompras(im){
         // beliche conta como 2 colchões/leitos
         if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
-        const subKey=`${idx}_${tipoEnx}`;
+        const subKey=`${item.id}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
@@ -2172,7 +2184,7 @@ function renderAbaCompras(im){
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
-      const subKey=String(idx);
+      const subKey=item.id;
       const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=compras[subKey]?.qtdTem??compras[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
@@ -2586,14 +2598,14 @@ function _rowsComprasFalta(im){
         const unidadesParaItem=item.semSofaCama?unidadesTipo.filter(u=>!u.semSofaCama):unidadesTipo;
         if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
-        const subKey=`${idx}_${tipoEnx}`;
+        const subKey=`${item.id}_${tipoEnx}`;
         const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
         const falta=Math.max(0,qtdNec-qtdTem);
         if(falta>0){const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;rows.push({label:`${item.nome} (${tipoEnx})`,cat:item.cat,qtdNec,qtdTem,falta,pUn,total:pUn*falta,link:item.link||''});}
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
-      const subKey=String(idx);
+      const subKey=item.id;
       const pUn=im.compras?.[subKey]?.precoOverride!==undefined?im.compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       const qtdTem=im.compras?.[subKey]?.qtdTem??im.compras?.[subKey]?.qtdReal??0;
       const falta=Math.max(0,qtdNec-qtdTem);
@@ -2646,13 +2658,13 @@ function _rowsComprasTodos(im){
         let qtdNec=0;
         if(base==='colchao'||base==='leito')qtdNec=q*unidadesParaItem.reduce((s,u)=>s+u.qtd,0);
         else qtdNec=q;
-        const subKey=`${idx}_${tipoEnx}`;
+        const subKey=`${item.id}_${tipoEnx}`;
         const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(PRECOS_ENXOVAL[item.nome]||{})[tipoEnx]||0;
         pushRow(subKey,`${item.nome} (${tipoEnx})`,item.cat,qtdNec,precoUn);
       });
     } else {
       const qtdNec=calcNecessario(item,camas,banheiros,quartos,banheirosCompletos,hospedes,lavabos,andares);
-      const subKey=String(idx);
+      const subKey=item.id;
       const precoUn=compras[subKey]?.precoOverride!==undefined?compras[subKey].precoOverride:(item.tipoPreco==='fixo'?item.preco||0:getPrecoEnxovalUn(item.nome,camas));
       pushRow(subKey,item.nome,item.cat,qtdNec,precoUn);
     }
@@ -3819,7 +3831,7 @@ function renderAbaCustos(im){
     const camas=im.camas||[];
     const qtdNec=calcNecessario(item,camas,(im.banheirosCompletos||0)+(im.banheirosLavabo||0)||(im.banheiros||1),im.quartos||1,im.banheirosCompletos||(im.banheiros||1),im.maxHospedes||0,im.banheirosLavabo||0,im.andares||1);
     const precoUn=item.tipoPreco==='fixo'?item.preco:getPrecoEnxovalUn(item.nome,camas);
-    const qtdReal=im.compras?.[idx]?.qtdReal!=null?im.compras[idx].qtdReal:qtdNec;
+    const qtdReal=im.compras?.[item.id]?.qtdReal!=null?im.compras[item.id].qtdReal:qtdNec;
     totalCompras+=precoUn*qtdReal;
   });
   const freteCustos=im.freteTotal||0;
@@ -6791,7 +6803,7 @@ function salvarItem(){
   const enxovalDep=document.getElementById('it-enxoval-dep').value==='sim';
   const modalidades=[];
   [...document.querySelectorAll('.it-modal-check:checked')].forEach(cb=>modalidades.push(cb.dataset.modalId));
-  ITENS_COMPRAS.push({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link,modalidades:modalidades.length?modalidades:undefined});
+  ITENS_COMPRAS.push(_novoItemCatalogo({cat,nome,tipoPreco,preco:tipoPreco==='fixo'?preco:0,enxovalDep,qtdRule,link,modalidades:modalidades.length?modalidades:undefined}));
   saveAll();closeModal('modal-item');renderConfig();showToast(`"${nome}" adicionado!`,'sage');
 }
 

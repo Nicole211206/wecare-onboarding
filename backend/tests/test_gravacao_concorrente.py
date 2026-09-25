@@ -76,7 +76,7 @@ def drive_fake(monkeypatch):
 
 
 def _semear(c, imoveis):
-    assert c.post("/save", json={"wc_imoveis": imoveis}).json()["ok"]
+    assert c.post("/save", json={"_proto": 2, "wc_imoveis": imoveis}).json()["ok"]
 
 
 def test_analise_do_drive_nao_desfaz_edicao_feita_durante_a_analise(auth_client, drive_fake):
