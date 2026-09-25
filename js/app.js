@@ -55,16 +55,11 @@ function _migrarGastosSetup(){
   });
   if(mudou)saveAll();
 }
-// Migração: ITENS_COMPRAS é dado persistido (localStorage/KV) — uma vez salvo, o array do código
-// nunca mais é usado numa conta existente (loadAll sempre sobrescreve com o que já está salvo).
-// Por isso mudanças no catálogo (novos campos, itens novos, renomeações) precisam ser aplicadas aqui
-// em cima do array já carregado, SEM mexer na posição dos itens existentes — im.compras é indexado
-// pelo índice do array, então reordenar/remover um item no meio confundiria os dados já salvos.
 // Semeia os 2 modelos de negócio padrão (Gestão 360 / Gestão Online) uma única vez,
 // só se o catálogo ainda estiver vazio — depois disso é 100% editável pela usuária em
 // Configurações (renomear, apagar, criar novos), sem essa função voltar a mexer.
-function _seedModelosNegocio(){
-  if(MODELOS_NEGOCIO.length)return;
+function _seedModelosNegocio(nuncaSalvo){
+  if(MODELOS_NEGOCIO.length||!nuncaSalvo)return;
   const etapa=texto=>({id:'etp_'+uid()+uid(),texto});
   MODELOS_NEGOCIO=[
     {id:'mod_360',nome:'Gestão 360 (tudo — online e presencial)',etapas:[
@@ -124,7 +119,7 @@ function _migrarProprietarios(){
   });
   if(mudou)saveAll();
 }
-function _seedModalidadesEnxoval(){
+function _seedModalidadesEnxoval(nuncaSalvo){
   if(MODALIDADES_ENXOVAL.length){
     // migração leve: catálogo pode vir de 2 formatos anteriores — o hardcoded original
     // (sem nenhum campo de preço) ou o intermediário de uma sessão anterior (valorPorHospede/
@@ -151,6 +146,7 @@ function _seedModalidadesEnxoval(){
     if(mudou)saveAll();
     return;
   }
+  if(!nuncaSalvo)return;
   MODALIDADES_ENXOVAL=[
     {id:'flashee',nome:'Flashee',temSetup:true,setupCusto:190,setupCobrado:190,
       precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
@@ -158,53 +154,13 @@ function _seedModalidadesEnxoval(){
       precificacaoMensal:'formula',hospedesBase:2,mensalBaseCusto:0,mensalBaseCobrado:220,mensalExtraCusto:0,mensalExtraCobrado:110,mensalTabela:[]},
   ];
 }
-function _migrarCatalogoItens(){
-  let mudou=false;
-  const detector=ITENS_COMPRAS.find(i=>i.nome==='Detector de Fumaça');
-  if(detector){
-    detector.nome='Detector de Fumaça e Monóxido de Carbono';
-    detector.qtdRule='1-andar';
-    mudou=true;
-  }
-  const MODALIDADES_POR_ITEM={
-    'Jogo de Cama Basic Percalle':['comprado'],
-    'Cobertor Aspen II':['comprado'],
-    'Edredom Premier Hotel':['comprado','flashee'],
-    'Capa p/ Edredom Hotel 180 fios':['comprado','flashee'],
-    'Fronha Basic Percalle c/ Abas':['comprado'],
-    'Toalha de Banho Lory Hotel':['comprado'],
-    'Toalha de Rosto Lory Hotel':['comprado'],
-  };
-  ITENS_COMPRAS.forEach(item=>{
-    if(MODALIDADES_POR_ITEM[item.nome]&&!item.modalidades){
-      item.modalidades=MODALIDADES_POR_ITEM[item.nome];
-      mudou=true;
-    }
-  });
-  if(!ITENS_COMPRAS.some(i=>i.nome==='Vassoura de Pelos')){
-    ITENS_COMPRAS.push({cat:'Limpeza',nome:'Vassoura de Pelos',tipoPreco:'fixo',preco:50,enxovalDep:false,qtdRule:'1-unidade',modalidades:['flashee']});
-    mudou=true;
-  }
-  const protetorColchao=ITENS_COMPRAS.find(i=>i.nome==='Protetor de Colchão');
-  if(protetorColchao&&!protetorColchao.semSofaCama){
-    protetorColchao.semSofaCama=true;
-    mudou=true;
-  }
-  const ESTOQUE_ENXOVAL_ITENS=['Fronha Basic Percalle c/ Abas','Travesseiro Sanomed','Travesseiro Toque de Pluma','Protetor de Travesseiro','Toalha de Banho Lory Hotel','Toalha de Rosto Lory Hotel','Tapete Piso Luxor Hotel'];
-  ESTOQUE_ENXOVAL_ITENS.forEach(nome=>{
-    const item=ITENS_COMPRAS.find(i=>i.nome===nome);
-    if(item&&!item.estoqueEnxoval){item.estoqueEnxoval=true;mudou=true;}
-  });
-  // Itens de Cozinha são de uso comum às 3 modalidades de enxoval (comprado/Flashee/Intense)
-  // — qualquer restrição de modalidades salva neles é sempre indesejada, limpa sozinho.
-  ITENS_COMPRAS.forEach(item=>{
-    if(item.cat==='Cozinha'&&item.modalidades){
-      delete item.modalidades;
-      mudou=true;
-    }
-  });
-  if(mudou)saveAll();
-}
+// _migrarCatalogoItens (2026-07-17) removida em 2026-09-25: rodava a cada loadAll em todo
+// navegador e reaplicava o catálogo de julho por cima do que a usuária editou — recriava
+// "Vassoura de Pelos" se apagada, recolocava restrição de modalidade em 7 itens, remarcava
+// estoqueEnxoval/semSofaCama, apagava restrição posta em item de Cozinha e renomeava de volta
+// o "Detector de Fumaça". Os dados de produção já estavam todos migrados (conferido: a função
+// não alterava nada no catálogo real). Mudança de catálogo daqui pra frente se faz editando o
+// catálogo em Configurações, não com migração no loadAll.
 
 // ═══════════════════ ITENS DE COMPRAS ═══════════════════
 let ITENS_COMPRAS=[
@@ -657,12 +613,13 @@ function loadAll(){
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
   v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
   v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
-  _seedModelosNegocio();
-  _seedModalidadesEnxoval();
+  // Seed só quando a coleção nunca foi salva neste navegador (g()===null). Antes semeava
+  // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
+  _seedModelosNegocio(g('wc_modelos_negocio')===null);
+  _seedModalidadesEnxoval(g('wc_modalidades_enxoval')===null);
   _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
-  _migrarCatalogoItens();
 }
 
 let _autoSaveTimer=null;
