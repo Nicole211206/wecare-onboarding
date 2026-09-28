@@ -832,11 +832,6 @@ label, .form-label { display: block; font-size: 12px; font-weight: 600; color: v
 .dash-alerta { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
 .dash-alerta:last-child { border-bottom: none; }
 .dash-alerta i { width: 18px; text-align: center; }
-.dash-fin-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.dash-fin-row:last-child { border-bottom: none; }
-.dash-fin-row strong { font-size: 14px; }
-.dash-bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 6px 0 12px; }
-.dash-bar > div { height: 100%; background: var(--sage); border-radius: 999px; }
 @media (max-width: 900px) {
   .dash-cols { grid-template-columns: 1fr; }
   .dash-hint { display: none; }

@@ -2295,7 +2295,7 @@ function renderAbaCompras(im){
   <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px;background:var(--surface-2,#f8f4f9);border-radius:10px;flex-wrap:wrap;">
     <span style="font-size:13px;font-weight:600;"><i class="fa-solid fa-truck"></i> Frete total (R$)</span>
     ${numInput({id:'compras-frete',value:frete,min:0,step:10,onchange:'_onFreteChange(this)'})}
-    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Extras: ${fmtMoeda(totalExtras)} + Serviços opcionais: ${fmtMoeda(totalServicosOpcionais)} + Frete: ${fmtMoeda(frete)} + Manutenção: ${fmtMoeda(totalManutencao)} = <strong>${fmtMoeda(totalGeral)}</strong></span>
+    <span class="text-muted" style="font-size:12px;">Compras: ${fmtMoeda(totalEstimado)} + Extras: ${fmtMoeda(totalExtras)} + Serviços opcionais: ${fmtMoeda(totalServicosOpcionais)} + Frete: ${fmtMoeda(frete)} ${totalManutencao?`+ Manutenção: ${fmtMoeda(totalManutencao)} `:''}= <strong>${fmtMoeda(totalGeral)}</strong></span>
   </div>
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-tag"></i> Desconto</div>
@@ -3012,11 +3012,12 @@ function renderAbaGastos(im){
       <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-building-columns"></i> Lançamentos para o Financeiro</div>
       <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>
-    <div class="hint" style="margin-bottom:10px;">Registro simples de compras pro Financeiro identificar/conciliar gastos. Separado do controle de Compras acima — não entra no cálculo de margem, mas sai nos relatórios (PDF/Excel) abaixo.</div>
+    <div class="hint" style="margin-bottom:10px;">Registro simples de compras de item e pagamentos de prestador pro Financeiro identificar/conciliar gastos. Separado do controle de Compras acima — não entra no cálculo de margem, mas sai nos relatórios (PDF/Excel) abaixo.</div>
     <div id="form-add-lancamento-fin" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;">
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
         <div class="form-group" style="min-width:140px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Data</label><input id="lancfin-data-input" type="date" class="input" value="${hoje()}"></div>
-        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Fornecedor</label><input id="lancfin-fornecedor-input" class="input" placeholder="Ex: Leroy Merlin"></div>
+        <div class="form-group" style="min-width:170px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Tipo</label><select id="lancfin-tipo-input" class="input"><option value="compra">Compra de item</option><option value="prestador">Pagamento de prestador</option></select></div>
+        <div class="form-group" style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Fornecedor / Prestador</label><input id="lancfin-fornecedor-input" class="input" placeholder="Ex: Leroy Merlin"></div>
         <div class="form-group" style="width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor Total (R$)</label><input id="lancfin-valor-input" class="input" type="number" min="0" step="10" value="0"></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
@@ -3030,10 +3031,11 @@ function renderAbaGastos(im){
     </div>
     ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:64px;"></th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:120px;">Tipo</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:64px;"></th></tr></thead>
       <tbody>
       ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);${l.id===_lancFinEditId?'background:var(--amber-bg);':''}">
         <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+        <td style="padding:6px 8px;vertical-align:top;"><span class="tag ${l.tipo==='prestador'?'tag-sky':'tag-gold'}" style="font-size:10.5px;">${esc(LANCFIN_TIPOS[l.tipo||'compra']||'')}</span></td>
         <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
         <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
         <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
@@ -3041,7 +3043,7 @@ function renderAbaGastos(im){
         <td style="vertical-align:top;white-space:nowrap;"><button class="btn btn-xs btn-outline" title="Editar" onclick="_editarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
-      <tfoot><tr><td colspan="3" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
+      <tfoot><tr><td colspan="4" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
     </table>`}
   </div>`;
 
@@ -3172,9 +3174,10 @@ async function gerarPDFGastos(){
   </div>
   ${lancFin.length?`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Lançamentos para o Financeiro</div>
   <table>
-    <thead><tr><th>Data</th><th>Fornecedor</th><th>Itens</th><th style="text-align:right;">Valor Total</th><th>Obs</th></tr></thead>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Fornecedor</th><th>Itens</th><th style="text-align:right;">Valor Total</th><th>Obs</th></tr></thead>
     <tbody>${lancFin.map(l=>`<tr>
       <td style="padding:6px 10px;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
+      <td style="padding:6px 10px;">${esc(l.tipo)}</td>
       <td style="padding:6px 10px;">${esc(l.fornecedor)}</td>
       <td style="padding:6px 10px;">${esc(l.itens||'-')}</td>
       <td style="text-align:right;padding:6px 10px;font-weight:600;">${fmtMoeda(l.valorTotal)}</td>
@@ -3205,9 +3208,9 @@ function exportarGastosCSV(){
   ];
   const blocoLancFin=lancFin.length?[
     [csvEsc('Lançamentos para o Financeiro')].join(';'),
-    ['Data','Fornecedor','Itens','Valor Total (R$)','Obs'].map(csvEsc).join(';'),
-    ...lancFin.map(l=>[l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'',l.fornecedor,l.itens,fmtNum(l.valorTotal),l.obs].map(csvEsc).join(';')),
-    [csvEsc('Total Lançamentos'),'','',csvEsc(fmtNum(lancFin.reduce((s,l)=>s+l.valorTotal,0))),''].join(';'),
+    ['Data','Tipo','Fornecedor','Itens','Valor Total (R$)','Obs'].map(csvEsc).join(';'),
+    ...lancFin.map(l=>[l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'',l.tipo,l.fornecedor,l.itens,fmtNum(l.valorTotal),l.obs].map(csvEsc).join(';')),
+    [csvEsc('Total Lançamentos'),'','','',csvEsc(fmtNum(lancFin.reduce((s,l)=>s+l.valorTotal,0))),''].join(';'),
     '',
   ]:[];
   const linhasCsv=[
@@ -3442,6 +3445,7 @@ function _apagarGastoAvulso(id){
   im.gastosAvulsos=(im.gastosAvulsos||[]).filter(x=>x.id!==id);
   saveAll();renderAba('gastos');
 }
+const LANCFIN_TIPOS={compra:'Compra de item',prestador:'Pagamento de prestador'};
 // id do lançamento sendo editado (null = formulário está criando um novo)
 let _lancFinEditId=null;
 function _editarLancamentoFinanceiro(id){
@@ -3453,6 +3457,7 @@ function _editarLancamentoFinanceiro(id){
   el.style.display='block';
   const set=(k,v)=>{const i=document.getElementById(k);if(i)i.value=v;};
   set('lancfin-data-input',l.data||hoje());
+  set('lancfin-tipo-input',l.tipo||'compra');
   set('lancfin-fornecedor-input',l.fornecedor||'');
   set('lancfin-valor-input',+l.valorTotal||0);
   set('lancfin-itens-input',l.itens||'');
@@ -3471,6 +3476,7 @@ function toggleFormLancamentoFinanceiro(){
     const it=document.getElementById('lancfin-itens-input');
     const o=document.getElementById('lancfin-obs-input');
     if(d)d.value=hoje();
+    const tp=document.getElementById('lancfin-tipo-input');if(tp)tp.value='compra';
     if(f){f.value='';f.focus();}
     if(v)v.value='0';
     if(it)it.value='';
@@ -3480,6 +3486,7 @@ function toggleFormLancamentoFinanceiro(){
 function confirmarLancamentoFinanceiro(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   const data=(document.getElementById('lancfin-data-input')||{}).value||hoje();
+  const tipo=(document.getElementById('lancfin-tipo-input')||{}).value||'compra';
   const fornecedor=((document.getElementById('lancfin-fornecedor-input')||{}).value||'').trim();
   const valorTotal=+(document.getElementById('lancfin-valor-input')||{}).value||0;
   const itens=((document.getElementById('lancfin-itens-input')||{}).value||'').trim();
@@ -3488,8 +3495,8 @@ function confirmarLancamentoFinanceiro(){
   if(!valorTotal){showToast('Informe o valor total.','peach');return;}
   if(!im.lancamentosFinanceiro)im.lancamentosFinanceiro=[];
   const existente=_lancFinEditId&&im.lancamentosFinanceiro.find(x=>x.id===_lancFinEditId);
-  if(existente)Object.assign(existente,{data,fornecedor,valorTotal,itens,obs,editadoEm:new Date().toISOString()});
-  else im.lancamentosFinanceiro.push({id:uid(),data,fornecedor,valorTotal,itens,obs});
+  if(existente)Object.assign(existente,{data,tipo,fornecedor,valorTotal,itens,obs,editadoEm:new Date().toISOString()});
+  else im.lancamentosFinanceiro.push({id:uid(),data,tipo,fornecedor,valorTotal,itens,obs});
   _lancFinEditId=null;
   saveAll();renderAba('gastos');showToast(existente?'Lançamento atualizado!':'Lançamento adicionado!','sage');
 }
@@ -3500,7 +3507,7 @@ function _apagarLancamentoFinanceiro(id){
   saveAll();renderAba('gastos');
 }
 function _linhasLancamentosFinanceiro(im){
-  return (im.lancamentosFinanceiro||[]).map(l=>({data:l.data,fornecedor:l.fornecedor||'',itens:l.itens||'',valorTotal:+l.valorTotal||0,obs:l.obs||''}));
+  return (im.lancamentosFinanceiro||[]).map(l=>({data:l.data,tipo:LANCFIN_TIPOS[l.tipo||'compra']||'',fornecedor:l.fornecedor||'',itens:l.itens||'',valorTotal:+l.valorTotal||0,obs:l.obs||''}));
 }
 function enviarResumoClaire(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -3634,14 +3641,19 @@ async function gerarPDFCompras(){
       <td style="text-align:right;font-weight:600;">${fmtMoeda(r.total)}</td>
     </tr>`).join('');
   }).join('');
+  // Manutenção sem valor é só aviso ao proprietário — sem coluna de valor nem subtotal quando
+  // nenhuma tem valor; se só algumas têm (imóveis antigos), as sem valor aparecem sem preço.
+  const _manutDesc=m=>esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))+(m.obs?`<div style="font-size:11px;color:#888;">${esc(m.obs)}</div>`:'');
+  const manutComValor=totalManut>0;
   const manutHtml=manutencoes.length?`
   <div style="margin-top:28px;">
     <div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Manutenções / Reparos</div>
+    ${manutComValor?'':'<div style="font-size:12px;color:#666;margin-bottom:6px;">Itens identificados no imóvel, informados para ciência.</div>'}
     <table>
-      <thead><tr><th>Descrição</th><th style="text-align:right;">Valor estimado</th></tr></thead>
+      <thead><tr><th>Descrição</th>${manutComValor?'<th style="text-align:right;">Valor estimado</th>':''}</tr></thead>
       <tbody>`+
-      manutencoes.map(m=>`<tr><td style="padding:7px 10px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${+(m.valor??m.custo??0)?fmtMoeda(+(m.valor??m.custo)):'—'}</td></tr>`).join('')+
-      `<tr class="total-row"><td style="padding:10px;text-align:right;">Subtotal manutenções</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalManut)}</td></tr>
+      manutencoes.map(m=>{const v=+(m.valor??m.custo??0)||0;return`<tr><td style="padding:7px 10px;">${_manutDesc(m)}</td>${manutComValor?`<td style="text-align:right;padding:7px 10px;font-weight:600;">${v?fmtMoeda(v):''}</td>`:''}</tr>`;}).join('')+
+      (manutComValor?`<tr class="total-row"><td style="padding:10px;text-align:right;">Subtotal manutenções</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalManut)}</td></tr>`:'')+`
       </tbody>
     </table>
   </div>`:'';
@@ -3712,7 +3724,7 @@ async function gerarPDFCompras(){
     ${itensExtras.length?`<div class="summary-line"><span>Itens Extras</span><span>${fmtMoeda(totalExtras)}</span></div>`:''}
     ${servicosOpcionaisAtivosCompras.length?`<div class="summary-line"><span>Serviços Opcionais</span><span>${fmtMoeda(totalServicosOpcionaisCompras)}</span></div>`:''}
     ${frete?`<div class="summary-line"><span>Frete estimado</span><span>${fmtMoeda(frete)}</span></div>`:''}
-    ${manutencoes.length?`<div class="summary-line"><span>Manutenções</span><span>${fmtMoeda(totalManut)}</span></div>`:''}
+    ${totalManut>0?`<div class="summary-line"><span>Manutenções</span><span>${fmtMoeda(totalManut)}</span></div>`:''}
     <div class="summary-total"><span>Total Geral</span><span>${fmtMoeda(totalItens+totalExtras+totalServicosOpcionaisCompras+frete+totalManut)}</span></div>
   </div>`}
   </body></html>`);
@@ -4323,7 +4335,7 @@ async function gerarPDFOutrasInformacoes(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       ${campo('Serviços contratados',defs.length?defs.join(', '):'Nenhum')}
       ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?('Aluguel mensal — '+(im.defEnxoval?.fornecedor||'')):'Comprado')}
-      ${im.defEnxoval?.tipo==='aluguel'?campo('Locação do enxoval — cobrado do proprietário',(+im.defEnxoval.valorAluguelMensal?fmtMoeda(+im.defEnxoval.valorAluguelMensal)+'/mês':'Não informado')+(+im.defEnxoval.valorSetupAluguel?' + setup '+fmtMoeda(+im.defEnxoval.valorSetupAluguel):''),true):''}
+      ${im.defEnxoval?.tipo==='aluguel'?campo('Locação do enxoval — cobrado do proprietário',(+im.defEnxoval.valorAluguelMensal?fmtMoeda(+im.defEnxoval.valorAluguelMensal)+'/mês':'Não informado'),true):''}
       ${campo('Equipe de limpeza',im.defLimpeza?.responsavel)}
     </div>
   `)}
@@ -4441,41 +4453,19 @@ function renderDashboard(){
     </div>`;
   }).join('');
 
-  // Precisa de atenção: parados há muito tempo, manutenção pendente, proprietário devendo
+  // Precisa de atenção: parados há muito tempo, manutenção pendente (financeiro fica no menu Financeiro)
   const alertas=[];
   emAndamentoLista.forEach(im=>{
     const dias=diasEntre(_dataEntradaFase(im),hoje());
     if(dias!=null&&dias>30)alertas.push({im,peso:3,icon:'hourglass-half',cor:'var(--red)',txt:`<strong>${esc(im.nome)}</strong> está há ${dias} dias em "${esc(FASE_LABEL[im.status]||im.status)}"`});
     const manPend=(im.manutencoes||[]).filter(m=>m.status!=='resolvido').length;
     if(manPend)alertas.push({im,peso:2,icon:'wrench',cor:'var(--amber)',txt:`<strong>${esc(im.nome)}</strong> tem ${manPend} manutenç${manPend>1?'ões':'ão'} pendente${manPend>1?'s':''}`});
-    if(_faseAtingiuCompras(im.status)){
-      const r=_calcResumoFinanceiro(im);
-      if(r.faltaReceber>0.5)alertas.push({im,peso:1,icon:'hand-holding-dollar',cor:'var(--sky)',txt:`<strong>${esc(im.nome)}</strong>: falta receber ${fmtMoeda(r.faltaReceber)} do proprietário`});
-    }
   });
   alertas.sort((a,b)=>b.peso-a.peso);
   const atEl=document.getElementById('dash-atencao');
   if(atEl)atEl.innerHTML=alertas.length?alertas.slice(0,10).map(a=>`<div class="dash-alerta" onclick="abrirDetalhe('${a.im.id}')"><i class="fa-solid fa-${a.icon}" style="color:${a.cor};"></i><span>${a.txt}</span></div>`).join('')
     +(alertas.length>10?`<div style="font-size:12px;color:var(--text-muted);padding-top:8px;">+ ${alertas.length-10} outros</div>`:'')
     :'<div style="font-size:13px;color:var(--text-muted);"><i class="fa-solid fa-circle-check" style="color:var(--sage);"></i> Nada travado no momento.</div>';
-
-  // Financeiro consolidado dos imóveis em andamento que já chegaram em Compras
-  const finEl=document.getElementById('dash-financeiro');
-  if(finEl){
-    const lista=emAndamentoLista.filter(i=>_faseAtingiuCompras(i.status)).map(_calcResumoFinanceiro);
-    const t=k=>lista.reduce((s,r)=>s+(r[k]||0),0);
-    const cobrado=t('recebidoPrevisto'),recebido=t('recebido'),gastoPago=t('gastoPago'),pendente=t('gastoPendente'),margem=t('margem');
-    const pct=cobrado>0?Math.min(100,Math.round(recebido/cobrado*100)):0;
-    finEl.innerHTML=!lista.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum imóvel em andamento chegou na fase de compras ainda.</div>':`
-      <div style="font-size:12px;color:var(--text-muted);">Recebido dos proprietários: ${pct}% de ${fmtMoeda(cobrado)}</div>
-      <div class="dash-bar"><div style="width:${pct}%;"></div></div>
-      <div class="dash-fin-row"><span>Cobrado dos proprietários</span><strong>${fmtMoeda(cobrado)}</strong></div>
-      <div class="dash-fin-row"><span>Falta receber</span><strong style="color:var(--sky);">${fmtMoeda(Math.max(0,cobrado-recebido))}</strong></div>
-      <div class="dash-fin-row"><span>Já gasto</span><strong style="color:var(--rose);">${fmtMoeda(gastoPago)}</strong></div>
-      <div class="dash-fin-row"><span>Ainda a gastar</span><strong style="color:var(--amber);">${fmtMoeda(pendente)}</strong></div>
-      <div class="dash-fin-row"><span>Margem prevista WeCare</span><strong style="color:${margem>=0?'var(--sage)':'var(--red)'};">${fmtMoeda(margem)}</strong></div>
-      <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">${lista.length} imóve${lista.length>1?'is':'l'} · detalhes no menu Financeiro</div>`;
-  }
 
   const assinadosBody=document.getElementById('dash-assinados-body');
   if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>{
