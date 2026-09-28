@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
-from .. import models, state
+from .. import google_drive, models, state
 from ..auth import require_auth
+from ..config import settings
 from ..database import get_db
 
 router = APIRouter()
@@ -70,6 +71,54 @@ def foto(id: str = "", index: int = 0, db: Session = Depends(get_db), token: str
         media_type=f.tipo or "image/jpeg",
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+@router.post("/foto")
+async def anexo_manutencao_upload(
+    id: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    token: str = Depends(require_auth),
+):
+    """Anexo (foto/vídeo/PDF) de uma manutenção do onboarding — sobe pra subpasta
+    "Manutenções" da pasta do imóvel no Drive e devolve o link; o front guarda só o link
+    em manutencao.anexos (nada de base64 no estado). Pendurado no POST de /foto porque o
+    nginx só repassa pro backend uma allowlist fixa de caminhos — uma rota nova exigiria
+    mexer no servidor; /foto já está liberado e antes só tinha GET."""
+    if not settings.google_client_id or not settings.google_client_secret or not settings.google_refresh_token:
+        return {"ok": False, "error": "Integração com Google Drive não configurada neste ambiente"}
+    im = _find_imovel_row(db, id)
+    if not im:
+        return {"ok": False, "error": "Imóvel não encontrado (salve o imóvel antes de anexar)"}
+    folder_id = google_drive.extract_folder_id((im.extra or {}).get("captacaoLink"))
+    if not folder_id:
+        return {"ok": False, "error": "Imóvel sem pasta do Drive configurada (aba Captação)"}
+
+    content = await file.read()
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            gtoken = await google_drive.get_google_access_token(client)
+            pasta_id = await google_drive.find_or_create_folder(client, gtoken, folder_id, "Manutenções")
+            nome_arquivo = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')} - {file.filename or 'anexo'}"
+            resultado = await google_drive.upload_file(
+                client, gtoken, pasta_id, nome_arquivo, file.content_type or "application/octet-stream", content
+            )
+    except Exception as e:
+        return {"ok": False, "error": f"Falha ao enviar pro Drive: {e}"}
+
+    tipo_mime = file.content_type or ""
+    tipo = "video" if tipo_mime.startswith("video/") else "foto" if tipo_mime.startswith("image/") else "pdf" if tipo_mime == "application/pdf" else "arquivo"
+    return {
+        "ok": True,
+        "anexo": {
+            "id": uuid.uuid4().hex[:16],
+            "nome": file.filename or nome_arquivo,
+            "tipo": tipo,
+            "driveFileId": resultado.get("id"),
+            "driveLink": resultado.get("webViewLink"),
+            "enviadoEm": datetime.now(timezone.utc).isoformat(),
+        },
+    }
 
 
 @router.get("/imovel-fotos")

@@ -948,7 +948,7 @@ function salvarNovoImovel(){
 // ═══════════════════ DETALHE ═══════════════════
 function getImovel(id){return imoveis.find(x=>x.id===id);}
 function abrirDetalhe(id){
-  _imovelAtivoId=id;_abaAtiva='captacao';
+  _imovelAtivoId=id;_abaAtiva='captacao';_lancFinEditId=null;
   const im=getImovel(id);if(!im)return;
   document.getElementById('detalhe-titulo').textContent=im.nome;
   document.getElementById('detalhe-subtitulo').textContent=(im.proprietarioNome||'')+(im.endereco?' · '+im.endereco:'');
@@ -2132,7 +2132,7 @@ function renderAbaCompras(im){
   const cats=[...new Set(ITENS_COMPRAS.map(i=>i.cat))];
   let totalEstimado=0;
   const manutencoes=im.manutencoes||[];
-  let totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
+  let totalManutencao=manutencoes.reduce((s,m)=>s+(+(m.valor??m.custo??0)||0),0);
 
   // Gerar linhas — itens de enxoval expandidos por tamanho de cama
   const modalidadeAtual=modalidadeEnxovalAtual(im);
@@ -2263,30 +2263,20 @@ function renderAbaCompras(im){
     <div id="form-add-manut" style="display:none;background:var(--surface-2,#f5f0fa);border-radius:10px;padding:12px;margin-bottom:10px;display:none;">
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
         <div style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Nome da manutenção</label><input id="manut-nome-input" class="input" placeholder="Ex: Trocar torneira" style="width:100%;"></div>
-        <div style="width:100px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor (R$)</label><input id="manut-valor-input" class="input" type="number" min="0" step="10" value="0" style="width:100%;"></div>
+        <div style="width:120px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Valor (R$) — opcional</label><input id="manut-valor-input" class="input" type="number" min="0" step="10" placeholder="—" style="width:100%;"></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm btn-sage" onclick="confirmarManutencao()"><i class="fa-solid fa-check"></i> Salvar</button>
           <button class="btn btn-sm btn-outline" onclick="toggleFormManut()"><i class="fa-solid fa-xmark"></i></button>
         </div>
       </div>
+      <div style="margin-top:10px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação (opcional)</label><textarea id="manut-obs-input" class="input" rows="2" placeholder="Ex: vazamento embaixo da pia, trocar sifão"></textarea></div>
+      <div class="hint" style="margin-top:6px;">Fotos, vídeos e PDFs podem ser anexados depois de salvar, na própria linha da manutenção.</div>
     </div>
     ${!manutencoes.length?`<div style="font-size:13px;color:var(--text-muted);padding:8px 0;">Nenhuma manutenção registrada. As irregularidades da vistoria aparecem aqui.</div>`:`
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-      <thead><tr style="background:var(--surface-2)">
-        <th style="padding:6px 8px;width:32px;">✓</th>
-        <th style="padding:6px 8px;">Descrição</th>
-        <th style="text-align:right;padding:6px 8px;">Valor (R$)</th>
-        <th style="padding:6px 4px;width:32px;"></th>
-      </tr></thead>
-      <tbody>
-      ${manutencoes.map(m=>`<tr style="${m.status==='resolvido'?'opacity:.45;text-decoration:line-through;':''}border-bottom:1px solid var(--border);">
-        <td style="padding:4px 8px;"><input type="checkbox" class="manut-check" ${m.status==='resolvido'?'checked':''} onchange="_onManutCheck(this,'${esc(m.id)}')"></td>
-        <td style="padding:4px 8px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td>
-        <td style="padding:4px 8px;text-align:right;"><input class="input" style="width:80px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" value="${m.valor??m.custo??0}" onchange="_onManutCusto(this,'${esc(m.id)}')"></td>
-        <td style="padding:4px 4px;"><button class="btn btn-xs btn-danger" onclick="_apagarManutencao('${esc(m.id)}')"><i class="fa-solid fa-trash"></i></button></td>
-      </tr>`).join('')}
-      </tbody>
-    </table>`}
+    <div class="hint" style="margin-bottom:6px;">Feito/Pago de cada manutenção se controla na aba Gastos — dar baixa lá não muda o valor cobrado aqui.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${manutencoes.map(m=>_htmlManutencaoCompras(m)).join('')}
+    </div>`}
   </div>`;
 
   return`<div>
@@ -2329,15 +2319,84 @@ function renderAbaCompras(im){
   <button class="btn btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('wamsg-enxoval').value).then(()=>showToast('Copiado!','sage'))"><i class="fa-solid fa-copy"></i> Copiar mensagem</button>
   </div>`;
 }
-function _onManutCheck(cb,manId){
-  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
-  const m=im.manutencoes.find(x=>x.id===manId);
-  if(m){m.status=cb.checked?'resolvido':'pendente';saveAll();renderKanban();}
+// Linha de manutenção na aba Compras — é o orçamento cobrado do proprietário, então não tem
+// check de feito aqui (isso fica na aba Gastos e não pode mexer no total cobrado). Valor é
+// opcional: nas manutenções mais novas nem sempre se cobra, então vazio = sem valor.
+const _ANEXO_ICON={foto:'fa-image',video:'fa-video',pdf:'fa-file-pdf',arquivo:'fa-paperclip'};
+function _htmlManutencaoCompras(m){
+  const id=esc(m.id);
+  const valor=+(m.valor??m.custo??0)||0;
+  const anexos=m.anexos||[];
+  const feito=m.status==='resolvido';
+  return`<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:160px;font-size:13px;font-weight:600;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}
+        ${m.origem==='vistoria'?'<span class="tag tag-sky" style="font-size:10px;margin-left:4px;">vistoria</span>':''}
+        ${feito?'<span class="tag tag-sage" style="font-size:10px;margin-left:4px;">feita</span>':''}
+      </div>
+      <label style="font-size:11px;color:var(--text-muted);">Valor (R$)</label>
+      <input class="input" style="width:96px;padding:3px 6px;text-align:right;" type="number" min="0" step="10" placeholder="—" value="${valor||''}" onchange="_onManutCusto(this,'${id}')">
+      <label class="btn btn-xs btn-outline" style="cursor:pointer;margin:0;" title="Anexar fotos, vídeos ou PDFs"><i class="fa-solid fa-paperclip"></i> Anexar
+        <input type="file" accept="image/*,video/*,application/pdf" multiple style="display:none;" onchange="_onManutAnexoUpload(this,'${id}')">
+      </label>
+      <button class="btn btn-xs btn-danger" onclick="_apagarManutencao('${id}')"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <textarea class="input" rows="1" style="margin-top:8px;font-size:12.5px;" placeholder="Observação (opcional)" onchange="_onManutObs(this,'${id}')">${esc(m.obs||'')}</textarea>
+    <div id="manut-anexos-status-${id}" style="font-size:12px;color:var(--text-muted);"></div>
+    ${anexos.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+      ${anexos.map(a=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:999px;padding:3px 10px;font-size:12px;">
+        <a href="${esc(a.driveLink||'#')}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;"><i class="fa-solid ${_ANEXO_ICON[a.tipo]||_ANEXO_ICON.arquivo}"></i> ${esc(a.nome||'anexo')}</a>
+        <button type="button" onclick="_removerManutAnexo('${id}','${esc(a.id)}')" title="Remover anexo" style="border:0;background:none;cursor:pointer;color:var(--text-muted);padding:0;"><i class="fa-solid fa-xmark"></i></button>
+      </span>`).join('')}
+    </div>`:''}
+  </div>`;
 }
 function _onManutCusto(inp,manId){
   const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
   const m=im.manutencoes.find(x=>x.id===manId);
-  if(m){m.valor=+inp.value||0;saveAll();}
+  if(m){m.valor=inp.value===''?null:(+inp.value||0);if(m.valor==null)m.custo=0;saveAll();}
+}
+function _onManutObs(inp,manId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);
+  if(m){m.obs=inp.value.trim();saveAll();}
+}
+// Anexos vão pro Drive do imóvel (subpasta "Manutenções") pelo POST /foto — no estado fica só
+// o link. Limite de ~28MB por arquivo por causa do client_max_body_size (30M) do nginx.
+const _ANEXO_MAX_BYTES=28*1024*1024;
+async function _onManutAnexoUpload(input,manId){
+  const files=[...(input.files||[])];input.value='';
+  if(!files.length)return;
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const s=window.WC_SYNC||{};
+  if(!s.url){showToast('Servidor não configurado.','peach');return;}
+  if(!im.captacaoLink){showToast('Configure o link da pasta do Drive na aba Captação antes de anexar.','peach');return;}
+  const status=document.getElementById('manut-anexos-status-'+manId);
+  let ok=0;
+  for(const file of files){
+    if(file.size>_ANEXO_MAX_BYTES){showToast(`"${file.name}" passa de 28MB — suba direto na pasta do Drive do imóvel.`,'peach');continue;}
+    if(status)status.textContent=`Enviando ${file.name}…`;
+    try{
+      const fd=new FormData();fd.append('id',im.id);fd.append('file',file);
+      const r=await fetch(`${s.url}/foto?token=${s.token}`,{method:'POST',body:fd});
+      const j=await r.json();
+      if(!j.ok)throw new Error(j.error||'erro');
+      const imAtual=getImovel(im.id);const m=(imAtual?.manutencoes||[]).find(x=>x.id===manId);if(!m)continue;
+      if(!m.anexos)m.anexos=[];
+      m.anexos.push(j.anexo);ok++;
+      saveAll();
+    }catch(e){showToast(`Falha ao anexar ${file.name}: ${e.message}`,'peach');}
+  }
+  if(status)status.textContent='';
+  if(_abaAtiva==='compras')renderAba('compras');
+  if(ok)showToast(ok+' anexo(s) enviado(s)!','sage');
+}
+function _removerManutAnexo(manId,anexoId){
+  const im=getImovel(_imovelAtivoId);if(!im||!im.manutencoes)return;
+  const m=im.manutencoes.find(x=>x.id===manId);if(!m)return;
+  if(!confirm('Remover este anexo da manutenção? (o arquivo continua na pasta do Drive)'))return;
+  m.anexos=(m.anexos||[]).filter(a=>a.id!==anexoId);
+  saveAll();renderAba('compras');
 }
 function _onCompraPrecoinput(inp,subKey){
   // salva imediatamente enquanto digita (para PDF capturar valor atual)
@@ -2448,25 +2507,23 @@ function toggleFormManut(){
   if(!visible){
     const ni=document.getElementById('manut-nome-input');
     const vi=document.getElementById('manut-valor-input');
+    const oi=document.getElementById('manut-obs-input');
     if(ni){ni.value='';ni.focus();}
-    if(vi)vi.value='0';
+    if(vi)vi.value='';
+    if(oi)oi.value='';
   }
 }
 function confirmarManutencao(){
   const nome=(document.getElementById('manut-nome-input')||{}).value||'';
-  const valor=+(document.getElementById('manut-valor-input')||{}).value||0;
+  const valorRaw=(document.getElementById('manut-valor-input')||{}).value||'';
+  const valor=valorRaw===''?null:(+valorRaw||0);
+  const obs=((document.getElementById('manut-obs-input')||{}).value||'').trim();
   if(!nome.trim()){showToast('Informe o nome da manutenção.','peach');return;}
   const im=getImovel(_imovelAtivoId);if(!im)return;
   if(!im.manutencoes)im.manutencoes=[];
-  const novaManut={id:uid(),nome:nome.trim(),valor,status:'pendente'};
-  im.manutencoes.push(novaManut);
+  // Não cria mais card na Claire (pedido de 2026-09-28) — manutenção de onboarding fica só aqui.
+  im.manutencoes.push({id:uid(),nome:nome.trim(),valor,obs,anexos:[],status:'pendente',criadoEm:new Date().toISOString()});
   saveAll();renderAba('compras');showToast('Manutenção adicionada!','sage');
-  // Cria card no módulo de manutenção da Claire
-  fetch('https://claire.wecarehosting.com.br/api/manutencoes?token=f634ad1d7fe480e9b53fa2009a7e650e',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({imovelNome:im.nome||'Onboarding',nome:novaManut.nome,valor:novaManut.valor,dataSolicitacao:new Date().toISOString().split('T')[0]})
-  }).catch(()=>{});
 }
 function adicionarManutencao(){toggleFormManut();}
 function _apagarManutencao(manId){
@@ -2664,7 +2721,7 @@ function _totalPropCompras(im){
   const totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
   const frete=im.freteTotal||0;
   const manutencoes=im.manutencoes||[];
-  const totalManutencao=manutencoes.filter(m=>m.status!=='resolvido').reduce((s,m)=>s+(m.valor??m.custo??0),0);
+  const totalManutencao=manutencoes.reduce((s,m)=>s+(+(m.valor??m.custo??0)||0),0);
   const totalServicosOpcionais=_totalServicosOpcionaisCompras(im);
   const totalGeral=totalEstimado+totalExtras+frete+totalManutencao+totalServicosOpcionais;
   const margem=im.margemWecare??15;
@@ -2696,8 +2753,8 @@ function _calcResumoFinanceiro(im){
   // Recebido só conta se o proprietário já pagou de fato (checkbox ao lado do valor) — senão
   // o número fica "irreal" mostrando receita de contrato que nem foi assinado/cobrado ainda.
   const setupRecebidoPrevisto=+im.valorSetupCobrado||0;
-  const setupRecebido=im.valorSetupCobradoRecebido?setupRecebidoPrevisto:0;
-  const setup={recebidoPrevisto:setupRecebidoPrevisto,recebido:setupRecebido,gastoPago:setupPago,gastoPendente:setupPendente,margem:setupRecebido-setupPago};
+  const setupRecebido=_valorRecebidoProprietario(im,'setup',setupRecebidoPrevisto);
+  const setup=_montarResumo(setupRecebidoPrevisto,setupRecebido,setupPago,setupPendente);
 
   let outrosPago=0,outrosPendente=0;
   const lotes=im.comprasLotes||[];
@@ -2725,17 +2782,33 @@ function _calcResumoFinanceiro(im){
   });
 
   const outrosRecebidoPrevisto=_totalPropCompras(im);
-  const outrosRecebido=im.totalPropRecebido?outrosRecebidoPrevisto:0;
-  const outros={recebidoPrevisto:outrosRecebidoPrevisto,recebido:outrosRecebido,gastoPago:outrosPago,gastoPendente:outrosPendente,margem:outrosRecebido-outrosPago};
+  const outrosRecebido=_valorRecebidoProprietario(im,'outros',outrosRecebidoPrevisto);
+  const outros=_montarResumo(outrosRecebidoPrevisto,outrosRecebido,outrosPago,outrosPendente);
 
   return{
     setup,outros,
-    recebidoPrevisto:setup.recebidoPrevisto+outros.recebidoPrevisto,
-    recebido:setup.recebido+outros.recebido,
-    gastoPago:setup.gastoPago+outros.gastoPago,
-    gastoPendente:setup.gastoPendente+outros.gastoPendente,
-    margem:(setup.recebido+outros.recebido)-(setup.gastoPago+outros.gastoPago),
+    ..._montarResumo(setup.recebidoPrevisto+outros.recebidoPrevisto,setup.recebido+outros.recebido,setup.gastoPago+outros.gastoPago,setup.gastoPendente+outros.gastoPendente),
   };
+}
+// Margem = total cobrado do proprietário − tudo que foi E ainda vai ser gasto (pago + pendente)
+// — é o que de fato sobra pra WeCare depois de comprar tudo (pedido de 2026-09-28; antes era
+// recebido − pago, que mostrava um número inflado enquanto ainda faltava comprar coisa).
+// saldo = o que está em caixa hoje (recebido − pago), só informativo.
+function _montarResumo(recebidoPrevisto,recebido,gastoPago,gastoPendente){
+  return{
+    recebidoPrevisto,recebido,gastoPago,gastoPendente,
+    faltaReceber:Math.max(0,recebidoPrevisto-recebido),
+    gastoTotal:gastoPago+gastoPendente,
+    margem:recebidoPrevisto-(gastoPago+gastoPendente),
+    saldo:recebido-gastoPago,
+  };
+}
+// Recebido do proprietário: 'baixa' total (flag antiga, marca 100%) ou valor parcial digitado
+// na aba Gastos — o proprietário às vezes paga em partes.
+function _valorRecebidoProprietario(im,grupo,previsto){
+  const pagouTudo=grupo==='setup'?im.valorSetupCobradoRecebido:im.totalPropRecebido;
+  if(pagouTudo)return previsto;
+  return +(grupo==='setup'?im.valorSetupRecebidoParcial:im.totalPropRecebidoParcial)||0;
 }
 
 function renderAbaGastos(im){
@@ -2776,10 +2849,7 @@ function renderAbaGastos(im){
       </tr>`).join('')}
       </tbody>
     </table>
-    <div style="margin-top:8px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span>Valor cobrado do Setup ao proprietário: <strong>${fmtMoeda(+im.valorSetupCobrado||0)}</strong></span>
-      <button class="btn btn-sm ${im.valorSetupCobradoRecebido?'btn-sage':'btn-outline'}" onclick="_toggleSetupRecebido()"><i class="fa-solid ${im.valorSetupCobradoRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.valorSetupCobradoRecebido?'Proprietário pagou':'Marcar como pago'}</button>
-    </div>
+    ${_htmlRecebidoProprietario(im,'setup',r.setup,'Valor cobrado do Setup ao proprietário')}
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">Segunda vistoria tem card próprio na aba Produção. Outros gastos de setup são adicionados ali em "Outros Eventos", marcando "Gasto de Setup". Fase que não se aplica a este imóvel também se marca na aba Produção, dentro do card de Fotos/Limpeza/Vistoria.</div>
   </div>`;
 
@@ -2954,21 +3024,21 @@ function renderAbaGastos(im){
         <div class="form-group" style="flex:1;min-width:220px;"><label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px;">Observação</label><textarea id="lancfin-obs-input" class="input" rows="3" placeholder="Ex: dividido com WC-00123"></textarea></div>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px;">
-        <button class="btn btn-sm btn-sage" onclick="confirmarLancamentoFinanceiro()"><i class="fa-solid fa-check"></i> Salvar</button>
+        <button class="btn btn-sm btn-sage" onclick="confirmarLancamentoFinanceiro()"><i class="fa-solid fa-check"></i> ${_lancFinEditId?'Salvar alterações':'Salvar'}</button>
         <button class="btn btn-sm btn-outline" onclick="toggleFormLancamentoFinanceiro()"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
     ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:32px;"></th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:64px;"></th></tr></thead>
       <tbody>
-      ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);">
+      ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);${l.id===_lancFinEditId?'background:var(--amber-bg);':''}">
         <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
         <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
         <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
         <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
         <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.obs||'-')}</td>
-        <td style="vertical-align:top;"><button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
+        <td style="vertical-align:top;white-space:nowrap;"><button class="btn btn-xs btn-outline" title="Editar" onclick="_editarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-pen"></i></button> <button class="btn btn-xs btn-danger" onclick="_apagarLancamentoFinanceiro('${esc(l.id)}')"><i class="fa-solid fa-trash"></i></button></td>
       </tr>`).join('')}
       </tbody>
       <tfoot><tr><td colspan="3" style="padding:6px 8px;font-weight:700;text-align:right;">Total</td><td style="text-align:right;padding:6px 8px;font-weight:700;">${fmtMoeda(lancamentosFinanceiro.reduce((s,l)=>s+(+l.valorTotal||0),0))}</td><td colspan="2"></td></tr></tfoot>
@@ -2978,19 +3048,17 @@ function renderAbaGastos(im){
   const _cardResumo=(titulo,r2,extra)=>`<div style="background:var(--surface-2);border-radius:12px;padding:16px;margin-bottom:12px;">
     <div class="form-section-title" style="margin-bottom:0;"><i class="fa-solid fa-scale-balanced"></i> ${titulo}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:12px 0;">
-      <div><div style="font-size:11px;color:var(--text-muted);">Recebido (previsto: ${fmtMoeda(r2.recebidoPrevisto)})</div><div style="font-size:18px;font-weight:700;color:var(--green);">${fmtMoeda(r2.recebido)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Gasto (pago)</div><div style="font-size:18px;font-weight:700;color:var(--rose);">${fmtMoeda(r2.gastoPago)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Pendente</div><div style="font-size:18px;font-weight:700;color:var(--amber);">${fmtMoeda(r2.gastoPendente)}</div></div>
-      <div><div style="font-size:11px;color:var(--text-muted);">Margem (real)</div><div style="font-size:18px;font-weight:700;color:${r2.margem>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(r2.margem)}</div></div>
+      ${_kpiResumo('Cobrado do proprietário',r2.recebidoPrevisto,'var(--text)',r2.faltaReceber>0?`recebido ${fmtMoeda(r2.recebido)} · falta ${fmtMoeda(r2.faltaReceber)}`:(r2.recebidoPrevisto>0?'recebido 100%':''))}
+      ${_kpiResumo('Gasto (pago)',r2.gastoPago,'var(--rose)')}
+      ${_kpiResumo('A gastar (pendente)',r2.gastoPendente,'var(--amber)')}
+      ${_kpiResumo('Margem prevista',r2.margem,r2.margem>=0?'var(--sage)':'var(--rose)','cobrado − (pago + a gastar)')}
     </div>
     ${extra||''}
   </div>`;
   const resumoHtml=
     _cardResumo('Setup',r.setup,'<div style="font-size:11.5px;color:var(--text-muted);">Já sincroniza sozinho com a Claire pelo KPI de Setup (aba Captação) — não entra no envio abaixo. Clique em "Marcar como pago" ali em cima quando confirmar o recebimento.</div>')+
     _cardResumo('Outros Gastos (Compras, Manutenções, Avulsos)',r.outros,`<div style="display:flex;flex-direction:column;gap:10px;">
-      <div>
-        <button class="btn btn-sm ${im.totalPropRecebido?'btn-sage':'btn-outline'}" onclick="_toggleOutrosRecebido()"><i class="fa-solid ${im.totalPropRecebido?'fa-circle-check':'fa-circle'}"></i> ${im.totalPropRecebido?'Proprietário pagou o Total de Compras/Extras':'Marcar Total de Compras/Extras como pago'}</button>
-      </div>
+      ${_htmlRecebidoProprietario(im,'outros',r.outros,'Total de Compras/Extras cobrado do proprietário')}
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-primary" onclick="enviarResumoClaire()"><i class="fa-solid fa-paper-plane"></i> Enviar / Atualizar na Claire</button>
         ${im.extraClaireEnviadoEm?`<span style="font-size:12px;color:var(--text-muted);">Último envio: ${new Date(im.extraClaireEnviadoEm).toLocaleString('pt-BR')}</span>`:''}
@@ -3068,9 +3136,11 @@ async function gerarPDFGastos(){
     </tr>`).join('');
     return`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">${titulo}</div>
     <div style="display:flex;gap:20px;margin-bottom:10px;">
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Cobrado</span><br><strong>${fmtMoeda(r2.recebidoPrevisto)}</strong></div>
       <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Recebido</span><br><strong>${fmtMoeda(r2.recebido)}</strong></div>
       <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Gasto</span><br><strong>${fmtMoeda(r2.gastoPago)}</strong></div>
-      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Margem</span><br><strong>${fmtMoeda(r2.margem)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">A gastar</span><br><strong>${fmtMoeda(r2.gastoPendente)}</strong></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase;">Margem prevista</span><br><strong>${fmtMoeda(r2.margem)}</strong></div>
     </div>
     <table>
       <thead><tr><th>Categoria</th><th>Item</th><th style="text-align:right;">Previsto</th><th style="text-align:right;">Pago</th></tr></thead>
@@ -3095,9 +3165,10 @@ async function gerarPDFGastos(){
   ${tabela('Setup',linhas.filter(l=>l.grupo==='setup'),r.setup)}
   ${tabela('Itens (Compras, Manutenções, Avulsos)',linhas.filter(l=>l.grupo==='outros'),r.outros)}
   <div class="summary">
-    <div><div class="lbl">Total Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
-    <div><div class="lbl">Total Gasto</div><div class="val">${fmtMoeda(r.gastoPago)}</div></div>
-    <div><div class="lbl">Margem Total</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
+    <div><div class="lbl">Total Cobrado</div><div class="val">${fmtMoeda(r.recebidoPrevisto)}</div></div>
+    <div><div class="lbl">Recebido</div><div class="val">${fmtMoeda(r.recebido)}</div></div>
+    <div><div class="lbl">Gasto + A gastar</div><div class="val">${fmtMoeda(r.gastoTotal)}</div></div>
+    <div><div class="lbl">Margem Prevista</div><div class="val" style="color:#C49A5E;">${fmtMoeda(r.margem)}</div></div>
   </div>
   ${lancFin.length?`<div style="font-size:13px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px;padding-bottom:6px;border-bottom:2px solid #C49A5E;">Lançamentos para o Financeiro</div>
   <table>
@@ -3126,8 +3197,10 @@ function exportarGastosCSV(){
     ['Categoria','Item','Previsto (R$)','Pago (R$)'].map(csvEsc).join(';'),
     ...lista.map(l=>[l.categoria,l.item,fmtNum(l.previsto),fmtNum(l.pago)].map(csvEsc).join(';')),
     [csvEsc('Subtotal '+titulo),'','',csvEsc(fmtNum(r2.gastoPago))].join(';'),
+    [csvEsc('A gastar '+titulo),'','',csvEsc(fmtNum(r2.gastoPendente))].join(';'),
+    [csvEsc('Cobrado '+titulo),'','',csvEsc(fmtNum(r2.recebidoPrevisto))].join(';'),
     [csvEsc('Recebido '+titulo),'','',csvEsc(fmtNum(r2.recebido))].join(';'),
-    [csvEsc('Margem '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
+    [csvEsc('Margem prevista '+titulo),'','',csvEsc(fmtNum(r2.margem))].join(';'),
     '',
   ];
   const blocoLancFin=lancFin.length?[
@@ -3142,9 +3215,11 @@ function exportarGastosCSV(){
     ...bloco('Itens',linhas.filter(l=>l.grupo==='outros'),r.outros),
     ...blocoLancFin,
     [csvEsc('TOTAL GERAL'),'','',''].join(';'),
+    [csvEsc('Cobrado'),'','',csvEsc(fmtNum(r.recebidoPrevisto))].join(';'),
     [csvEsc('Recebido'),'','',csvEsc(fmtNum(r.recebido))].join(';'),
     [csvEsc('Gasto'),'','',csvEsc(fmtNum(r.gastoPago))].join(';'),
-    [csvEsc('Margem'),'','',csvEsc(fmtNum(r.margem))].join(';'),
+    [csvEsc('A gastar'),'','',csvEsc(fmtNum(r.gastoPendente))].join(';'),
+    [csvEsc('Margem prevista'),'','',csvEsc(fmtNum(r.margem))].join(';'),
   ];
   // BOM no início — sem isso o Excel abre acentuação (ç, ã, é) quebrada num CSV UTF-8.
   const blob=new Blob(['﻿'+linhasCsv.join('\r\n')],{type:'text/csv;charset=utf-8;'});
@@ -3166,6 +3241,32 @@ function _onGastoSetupPago(cb,key){
 function _toggleSetupRecebido(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.valorSetupCobradoRecebido=!im.valorSetupCobradoRecebido;
+  saveAll();renderAba('gastos');
+}
+function _kpiResumo(lbl,val,cor,sub){
+  return`<div><div style="font-size:11px;color:var(--text-muted);">${lbl}</div><div style="font-size:18px;font-weight:700;color:${cor};">${fmtMoeda(val)}</div>${sub?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${sub}</div>`:''}</div>`;
+}
+// Bloco "quanto o proprietário já pagou": valor parcial editável + falta receber + botão de
+// baixa total. grupo 'setup' usa valorSetupCobradoRecebido/valorSetupRecebidoParcial, 'outros'
+// usa totalPropRecebido/totalPropRecebidoParcial.
+function _htmlRecebidoProprietario(im,grupo,r2,titulo){
+  const pagouTudo=grupo==='setup'?!!im.valorSetupCobradoRecebido:!!im.totalPropRecebido;
+  const toggle=grupo==='setup'?'_toggleSetupRecebido()':'_toggleOutrosRecebido()';
+  return`<div style="margin-top:10px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+    <span>${titulo}: <strong>${fmtMoeda(r2.recebidoPrevisto)}</strong></span>
+    ${pagouTudo?`<span class="tag tag-sage"><i class="fa-solid fa-circle-check"></i> Pago 100%</span>
+      <button class="btn btn-xs btn-outline" onclick="${toggle}">Desfazer baixa</button>`:`
+      <label style="display:flex;align-items:center;gap:6px;">Já pagou (R$)
+        <input type="number" class="input" style="width:110px;padding:3px 6px;text-align:right;" min="0" step="10" value="${r2.recebido||''}" placeholder="0" onchange="_onRecebidoParcial('${grupo}',this.value)">
+      </label>
+      <span style="color:${r2.faltaReceber>0?'var(--amber)':'var(--sage)'};font-weight:600;">Falta: ${fmtMoeda(r2.faltaReceber)}</span>
+      <button class="btn btn-sm btn-outline" onclick="${toggle}"><i class="fa-solid fa-circle-check"></i> Dar baixa (pagou tudo)</button>`}
+  </div>`;
+}
+function _onRecebidoParcial(grupo,valor){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const v=Math.max(0,+valor||0);
+  if(grupo==='setup')im.valorSetupRecebidoParcial=v;else im.totalPropRecebidoParcial=v;
   saveAll();renderAba('gastos');
 }
 function _toggleOutrosRecebido(){
@@ -3341,9 +3442,27 @@ function _apagarGastoAvulso(id){
   im.gastosAvulsos=(im.gastosAvulsos||[]).filter(x=>x.id!==id);
   saveAll();renderAba('gastos');
 }
+// id do lançamento sendo editado (null = formulário está criando um novo)
+let _lancFinEditId=null;
+function _editarLancamentoFinanceiro(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const l=(im.lancamentosFinanceiro||[]).find(x=>x.id===id);if(!l)return;
+  _lancFinEditId=id;
+  renderAba('gastos');
+  const el=document.getElementById('form-add-lancamento-fin');if(!el)return;
+  el.style.display='block';
+  const set=(k,v)=>{const i=document.getElementById(k);if(i)i.value=v;};
+  set('lancfin-data-input',l.data||hoje());
+  set('lancfin-fornecedor-input',l.fornecedor||'');
+  set('lancfin-valor-input',+l.valorTotal||0);
+  set('lancfin-itens-input',l.itens||'');
+  set('lancfin-obs-input',l.obs||'');
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+}
 function toggleFormLancamentoFinanceiro(){
   const el=document.getElementById('form-add-lancamento-fin');if(!el)return;
   const visible=el.style.display!=='none';
+  if(_lancFinEditId){_lancFinEditId=null;renderAba('gastos');return;} // cancelar edição
   el.style.display=visible?'none':'block';
   if(!visible){
     const d=document.getElementById('lancfin-data-input');
@@ -3368,8 +3487,11 @@ function confirmarLancamentoFinanceiro(){
   if(!fornecedor){showToast('Informe o fornecedor.','peach');return;}
   if(!valorTotal){showToast('Informe o valor total.','peach');return;}
   if(!im.lancamentosFinanceiro)im.lancamentosFinanceiro=[];
-  im.lancamentosFinanceiro.push({id:uid(),data,fornecedor,valorTotal,itens,obs});
-  saveAll();renderAba('gastos');showToast('Lançamento adicionado!','sage');
+  const existente=_lancFinEditId&&im.lancamentosFinanceiro.find(x=>x.id===_lancFinEditId);
+  if(existente)Object.assign(existente,{data,fornecedor,valorTotal,itens,obs,editadoEm:new Date().toISOString()});
+  else im.lancamentosFinanceiro.push({id:uid(),data,fornecedor,valorTotal,itens,obs});
+  _lancFinEditId=null;
+  saveAll();renderAba('gastos');showToast(existente?'Lançamento atualizado!':'Lançamento adicionado!','sage');
 }
 function _apagarLancamentoFinanceiro(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
@@ -3432,9 +3554,10 @@ function renderFinanceiro(){
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
       ${_statTileFinanceiro('Recebido',totRecebido,'var(--green)')}
+      ${_statTileFinanceiro('A receber',tot('faltaReceber'),'var(--sky)')}
       ${_statTileFinanceiro('Gasto',totGasto,'var(--rose)')}
-      ${_statTileFinanceiro('Pendente',totPendente,'var(--amber)')}
-      ${_statTileFinanceiro('Margem',totMargem,totMargem>=0?'var(--sage)':'var(--rose)')}
+      ${_statTileFinanceiro('A gastar',totPendente,'var(--amber)')}
+      ${_statTileFinanceiro('Margem prevista',totMargem,totMargem>=0?'var(--sage)':'var(--rose)')}
     </div>
     ${!linhas.length?'<div style="padding:32px;text-align:center;color:var(--text-muted);">Nenhum imóvel neste filtro.</div>':`
     <div style="overflow-x:auto;">
@@ -3444,8 +3567,8 @@ function renderFinanceiro(){
         <th style="text-align:left;padding:8px 10px;">Fase</th>
         <th style="text-align:right;padding:8px 10px;">Recebido</th>
         <th style="text-align:right;padding:8px 10px;">Gasto</th>
-        <th style="text-align:right;padding:8px 10px;">Pendente</th>
-        <th style="text-align:right;padding:8px 10px;">Margem</th>
+        <th style="text-align:right;padding:8px 10px;">A gastar</th>
+        <th style="text-align:right;padding:8px 10px;">Margem prevista</th>
       </tr></thead>
       <tbody>${linhas.map(({im,r})=>{
         const faseLabel=im.status==='ativo'?'Ativo':(FASE_LABEL[im.status]||im.status);
@@ -3493,8 +3616,8 @@ async function gerarPDFCompras(){
   const rows=_rowsComprasFalta(im);
   const frete=im.freteTotal||0;
   const totalItens=rows.reduce((s,r)=>s+r.total,0);
-  const manutencoes=(im.manutencoes||[]).filter(m=>m.status!=='resolvido');
-  const totalManut=manutencoes.reduce((s,m)=>s+(m.valor??m.custo??0),0);
+  const manutencoes=im.manutencoes||[];
+  const totalManut=manutencoes.reduce((s,m)=>s+(+(m.valor??m.custo??0)||0),0);
   const itensExtras=im.itensExtras||[];
   const totalExtras=itensExtras.reduce((s,x)=>s+(+x.precoUn||0)*(+x.qtd||1),0);
   const servicosOpcionaisSelCompras=im.servicosOpcionaisCompras||{};
@@ -3517,7 +3640,7 @@ async function gerarPDFCompras(){
     <table>
       <thead><tr><th>Descrição</th><th style="text-align:right;">Valor estimado</th></tr></thead>
       <tbody>`+
-      manutencoes.map(m=>`<tr><td style="padding:7px 10px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${fmtMoeda(m.valor??m.custo??0)}</td></tr>`).join('')+
+      manutencoes.map(m=>`<tr><td style="padding:7px 10px;">${esc(m.nome||(m.comodo?m.comodo+(m.descricao?': '+m.descricao:''):m.descricao||''))}</td><td style="text-align:right;padding:7px 10px;font-weight:600;">${+(m.valor??m.custo??0)?fmtMoeda(+(m.valor??m.custo)):'—'}</td></tr>`).join('')+
       `<tr class="total-row"><td style="padding:10px;text-align:right;">Subtotal manutenções</td><td style="text-align:right;padding:10px;">${fmtMoeda(totalManut)}</td></tr>
       </tbody>
     </table>
@@ -3745,7 +3868,11 @@ function renderAbaOperacional(im){
   </div>
 
   <div style="border:2px solid var(--sage);border-radius:12px;padding:16px;margin-bottom:16px;">
-    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:10px;"><i class="fa-solid fa-magnifying-glass"></i> Segunda Vistoria</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div style="font-weight:700;font-size:14px;color:var(--sage);"><i class="fa-solid fa-magnifying-glass"></i> Segunda Vistoria</div>
+      <label class="checkbox-label" style="font-size:12px;font-weight:400;"><input type="checkbox" ${ops.vistoria2?.naoAplica?'checked':''} onchange="_onGastoSetupNaoAplica('vistoria2',this.checked)"> Não se aplica a este imóvel</label>
+    </div>
+    <div style="${ops.vistoria2?.naoAplica?'opacity:.45;pointer-events:none;':''}">
     <div class="form-row">
       <div class="form-group"><label>Data</label><input id="op-vistoria2-data" type="date" class="input" value="${ops.vistoria2?.data||''}"></div>
       <div class="form-group"><label>Hora</label><input id="op-vistoria2-hora" type="time" class="input" value="${ops.vistoria2?.hora||''}"></div>
@@ -3764,6 +3891,7 @@ function renderAbaOperacional(im){
     <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="pedirCotacaoJarvis('vistoria')">
       <i class="fa-solid fa-robot"></i> Pedir cotação ao Jarvis
     </button>
+    </div>
   </div>
 
   <div class="form-section-title" style="margin-top:8px;"><i class="fa-solid fa-calendar-plus"></i> Outros Eventos</div>
@@ -4195,6 +4323,7 @@ async function gerarPDFOutrasInformacoes(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       ${campo('Serviços contratados',defs.length?defs.join(', '):'Nenhum')}
       ${campo('Modalidade enxoval',im.defEnxoval?.tipo==='aluguel'?('Aluguel mensal — '+(im.defEnxoval?.fornecedor||'')):'Comprado')}
+      ${im.defEnxoval?.tipo==='aluguel'?campo('Locação do enxoval — cobrado do proprietário',(+im.defEnxoval.valorAluguelMensal?fmtMoeda(+im.defEnxoval.valorAluguelMensal)+'/mês':'Não informado')+(+im.defEnxoval.valorSetupAluguel?' + setup '+fmtMoeda(+im.defEnxoval.valorSetupAluguel):''),true):''}
       ${campo('Equipe de limpeza',im.defLimpeza?.responsavel)}
     </div>
   `)}
@@ -4266,62 +4395,109 @@ function pedirCotacaoJarvis(modo){
   document.getElementById('modal-generico').classList.add('open');
 }
 // ═══════════════════ DASHBOARD ═══════════════════
+// Cores próprias do painel por fase (as de FASE_COLOR repetem tons — rose e gold são o mesmo
+// dourado, lav é quase branco — e no dashboard cada fase precisa ser distinguível de relance).
+const DASH_FASE_COR={contrato:'#0EA5E9',setup:'#6366F1',vistoria_compras:'#F59E0B',preparacao:'#F97316',formulario:'#C49A5E',anuncio:'#22C55E'};
+// Data em que o imóvel entrou na fase atual: último registro de mudança de fase em
+// Atualizações; sem registro, cai na data de criação.
+function _dataEntradaFase(im){
+  const ult=(im.atualizacoes||[]).filter(a=>a.tipo==='fase').map(a=>a.data).sort().pop();
+  return (ult||im.dataCriacao||'').slice(0,10)||null;
+}
+function _dashDiasClasse(d){return d==null?'':d>30?'alto':d>14?'medio':'';}
 function renderDashboard(){
-  const total=imoveis.length;
-  const ativos=imoveis.filter(i=>i.status==='ativo').length;
-  const emAndamento=imoveis.filter(i=>i.status!=='ativo'&&i.status!=='perdido').length;
+  const emAndamentoLista=imoveis.filter(i=>i.status!=='ativo'&&i.status!=='perdido');
+  const ativosLista=imoveis.filter(i=>i.status==='ativo');
+  const mesAtual=hoje().slice(0,7);
+  const ativadosMes=ativosLista.filter(i=>(i.dataAtivacao||'').slice(0,7)===mesAtual).length;
+  const comTempo=ativosLista.filter(i=>i.dataContratoAssinado&&i.dataAtivacao);
+  const tempoMedio=comTempo.length?Math.round(comTempo.reduce((s,i)=>s+diasEntre(i.dataContratoAssinado,i.dataAtivacao),0)/comTempo.length):null;
+  const assinados=emAndamentoLista.filter(i=>i.contratoAssinado&&i.dataContratoAssinado)
+    .sort((a,b)=>a.dataContratoAssinado.localeCompare(b.dataContratoAssinado));
   const perdidos=imoveis.filter(i=>i.status==='perdido').length;
-  const ativados=imoveis.filter(i=>i.status==='ativo'&&i.dataCriacao&&i.dataAtivacao);
-  const tempoMedio=ativados.length
-    ?Math.round(ativados.reduce((s,i)=>s+diasEntre(i.dataCriacao,i.dataAtivacao),0)/ativados.length):null;
-  const porFase=FASES.map(f=>({fase:f,qtd:imoveis.filter(i=>i.status===f).length}));
-  const maxFase=Math.max(1,...porFase.map(f=>f.qtd));
 
+  const kpi=(val,lbl,icon,cor,bg,sub)=>`<div class="dash-kpi">
+    <div class="dash-kpi-icon" style="background:${bg};color:${cor};"><i class="fa-solid fa-${icon}"></i></div>
+    <div><div class="dash-kpi-val">${val}</div><div class="dash-kpi-lbl">${lbl}</div>${sub?`<div class="dash-kpi-sub">${sub}</div>`:''}</div>
+  </div>`;
   const stats=document.getElementById('dash-stats');
   if(stats)stats.innerHTML=
-    _kpiCard('Total',total,'house','lav')+
-    _kpiCard('Ativos',ativos,'circle-check','sage')+
-    _kpiCard('Em Andamento',emAndamento,'spinner','gold')+
-    _kpiCard('Perdidos',perdidos,'circle-xmark','peach')+
-    _kpiCard('Tempo Médio',tempoMedio!=null?tempoMedio+' dias':'—','clock','lavender');
+    kpi(emAndamentoLista.length,'Em onboarding','person-digging','#B45309','var(--amber-bg)',`${assinados.length} com contrato assinado`)+
+    kpi(ativadosMes,'Ativados este mês','circle-check','var(--green-text)','var(--green-bg)',`${ativosLista.length} ativos no total`)+
+    kpi(tempoMedio!=null?tempoMedio+'d':'—','Tempo médio até ativar','clock','var(--sky)','var(--sky-bg)','contrato assinado → ativo')+
+    kpi(perdidos,'Perdidos','circle-xmark','var(--red)','var(--red-bg)','');
 
+  // Pipeline: uma coluna por fase, com os imóveis e há quantos dias estão nela
   const fases=document.getElementById('dash-fases');
-  if(fases)fases.innerHTML=porFase.every(f=>!f.qtd)
-    ?`<div class="empty-state" style="padding:12px;">Nenhum imóvel em andamento.</div>`
-    :porFase.map(({fase,qtd})=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <div style="width:160px;flex-shrink:0;font-size:12.5px;color:var(--text-muted);">${FASE_LABEL[fase]}</div>
-        <div style="flex:1;background:var(--bg3,#f5f0e8);border-radius:6px;height:20px;overflow:hidden;">
-          <div style="width:${qtd/maxFase*100}%;min-width:${qtd?'4px':'0'};height:100%;border-radius:6px;background:var(--${FASE_COLOR[fase]});"></div>
-        </div>
-        <div style="width:22px;text-align:right;font-weight:700;font-size:13px;">${qtd}</div>
-      </div>`).join('');
+  if(fases)fases.innerHTML=FASES.map(f=>{
+    const lista=emAndamentoLista.filter(i=>i.status===f)
+      .map(im=>({im,dias:diasEntre(_dataEntradaFase(im),hoje())}))
+      .sort((a,b)=>(b.dias??0)-(a.dias??0));
+    return`<div class="dash-fase" style="--fase-cor:${DASH_FASE_COR[f]||'var(--brand-gold)'};">
+      <div class="dash-fase-head"><span class="dash-fase-nome">${esc(FASE_LABEL[f])}</span><span class="dash-fase-qtd">${lista.length}</span></div>
+      ${lista.length?lista.map(({im,dias})=>`<div class="dash-chip" onclick="abrirDetalhe('${im.id}')" title="${esc(im.nome)}">
+        <span>${esc(im.nome||'(sem nome)')}</span>${dias!=null?`<span class="dash-dias ${_dashDiasClasse(dias)}">${dias}d</span>`:''}
+      </div>`).join(''):'<div style="font-size:12px;color:var(--text-muted);">—</div>'}
+    </div>`;
+  }).join('');
+
+  // Precisa de atenção: parados há muito tempo, manutenção pendente, proprietário devendo
+  const alertas=[];
+  emAndamentoLista.forEach(im=>{
+    const dias=diasEntre(_dataEntradaFase(im),hoje());
+    if(dias!=null&&dias>30)alertas.push({im,peso:3,icon:'hourglass-half',cor:'var(--red)',txt:`<strong>${esc(im.nome)}</strong> está há ${dias} dias em "${esc(FASE_LABEL[im.status]||im.status)}"`});
+    const manPend=(im.manutencoes||[]).filter(m=>m.status!=='resolvido').length;
+    if(manPend)alertas.push({im,peso:2,icon:'wrench',cor:'var(--amber)',txt:`<strong>${esc(im.nome)}</strong> tem ${manPend} manutenç${manPend>1?'ões':'ão'} pendente${manPend>1?'s':''}`});
+    if(_faseAtingiuCompras(im.status)){
+      const r=_calcResumoFinanceiro(im);
+      if(r.faltaReceber>0.5)alertas.push({im,peso:1,icon:'hand-holding-dollar',cor:'var(--sky)',txt:`<strong>${esc(im.nome)}</strong>: falta receber ${fmtMoeda(r.faltaReceber)} do proprietário`});
+    }
+  });
+  alertas.sort((a,b)=>b.peso-a.peso);
+  const atEl=document.getElementById('dash-atencao');
+  if(atEl)atEl.innerHTML=alertas.length?alertas.slice(0,10).map(a=>`<div class="dash-alerta" onclick="abrirDetalhe('${a.im.id}')"><i class="fa-solid fa-${a.icon}" style="color:${a.cor};"></i><span>${a.txt}</span></div>`).join('')
+    +(alertas.length>10?`<div style="font-size:12px;color:var(--text-muted);padding-top:8px;">+ ${alertas.length-10} outros</div>`:'')
+    :'<div style="font-size:13px;color:var(--text-muted);"><i class="fa-solid fa-circle-check" style="color:var(--sage);"></i> Nada travado no momento.</div>';
+
+  // Financeiro consolidado dos imóveis em andamento que já chegaram em Compras
+  const finEl=document.getElementById('dash-financeiro');
+  if(finEl){
+    const lista=emAndamentoLista.filter(i=>_faseAtingiuCompras(i.status)).map(_calcResumoFinanceiro);
+    const t=k=>lista.reduce((s,r)=>s+(r[k]||0),0);
+    const cobrado=t('recebidoPrevisto'),recebido=t('recebido'),gastoPago=t('gastoPago'),pendente=t('gastoPendente'),margem=t('margem');
+    const pct=cobrado>0?Math.min(100,Math.round(recebido/cobrado*100)):0;
+    finEl.innerHTML=!lista.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum imóvel em andamento chegou na fase de compras ainda.</div>':`
+      <div style="font-size:12px;color:var(--text-muted);">Recebido dos proprietários: ${pct}% de ${fmtMoeda(cobrado)}</div>
+      <div class="dash-bar"><div style="width:${pct}%;"></div></div>
+      <div class="dash-fin-row"><span>Cobrado dos proprietários</span><strong>${fmtMoeda(cobrado)}</strong></div>
+      <div class="dash-fin-row"><span>Falta receber</span><strong style="color:var(--sky);">${fmtMoeda(Math.max(0,cobrado-recebido))}</strong></div>
+      <div class="dash-fin-row"><span>Já gasto</span><strong style="color:var(--rose);">${fmtMoeda(gastoPago)}</strong></div>
+      <div class="dash-fin-row"><span>Ainda a gastar</span><strong style="color:var(--amber);">${fmtMoeda(pendente)}</strong></div>
+      <div class="dash-fin-row"><span>Margem prevista WeCare</span><strong style="color:${margem>=0?'var(--sage)':'var(--red)'};">${fmtMoeda(margem)}</strong></div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">${lista.length} imóve${lista.length>1?'is':'l'} · detalhes no menu Financeiro</div>`;
+  }
 
   const assinadosBody=document.getElementById('dash-assinados-body');
-  const assinados=imoveis
-    .filter(i=>i.contratoAssinado&&i.dataContratoAssinado&&i.status!=='ativo'&&i.status!=='perdido')
-    .sort((a,b)=>a.dataContratoAssinado.localeCompare(b.dataContratoAssinado));
-  if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>`<tr>
-      <td style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')" class="link">${esc(im.nome)}</td>
+  if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>{
+    const d=diasEntre(im.dataContratoAssinado,hoje());
+    return`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
+      <td class="link">${esc(im.nome)}</td>
+      <td><span class="tag" style="background:${DASH_FASE_COR[im.status]||'#999999'}22;color:${DASH_FASE_COR[im.status]||'inherit'};font-size:10.5px;">${esc(FASE_LABEL[im.status]||im.status)}</span></td>
       <td>${fmtDate(im.dataContratoAssinado)}</td>
-      <td>${diasEntre(im.dataContratoAssinado,hoje())}d</td>
-    </tr>`).join(''):`<tr><td colspan="3" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
+      <td style="text-align:right;"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
+    </tr>`;}).join(''):`<tr><td colspan="4" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
 
   const tbody=document.getElementById('dash-ativos-body');
-  const recentes=[...imoveis]
-    .filter(i=>i.status==='ativo')
-    .sort((a,b)=>b.dataAtivacao?.localeCompare(a.dataAtivacao||'')||0)
-    .slice(0,10);
-  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>`<tr>
-      <td style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')" class="link">${esc(im.nome)}</td>
-      <td>${im.dataContratoAssinado?fmtDate(im.dataContratoAssinado):'—'}</td>
+  const recentes=[...ativosLista].sort((a,b)=>(b.dataAtivacao||'').localeCompare(a.dataAtivacao||'')).slice(0,8);
+  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
+      <td class="link">${esc(im.nome)}</td>
       <td>${fmtDate(im.dataAtivacao)}</td>
-      <td>${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+'d':'—'}</td>
-    </tr>`).join(''):`<tr><td colspan="4" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+      <td style="text-align:right;">${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+' dias':'—'}</td>
+    </tr>`).join(''):`<tr><td colspan="3" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
 
   const chartEl=document.getElementById('dash-chart-ativacao');
   if(chartEl){
-    const dadosChart=imoveis
-      .filter(i=>i.status==='ativo'&&i.dataContratoAssinado&&i.dataAtivacao)
+    const dadosChart=[...comTempo]
       .sort((a,b)=>a.dataAtivacao.localeCompare(b.dataAtivacao))
       .map(i=>({nome:i.nome,dias:diasEntre(i.dataContratoAssinado,i.dataAtivacao)}));
     chartEl.innerHTML=_chartAtivacaoSvg(dadosChart);
@@ -4353,12 +4529,6 @@ function _chartAtivacaoSvg(dados){
     <line x1="${leftPad}" y1="${topPad+plotH}" x2="${leftPad+dados.length*(bw+gap)}" y2="${topPad+plotH}" style="stroke:var(--border);stroke-width:1;"/>
     ${bars}
   </svg>`;
-}
-function _kpiCard(label,val,icon,cor){
-  return`<div style="background:var(--card-bg);border-radius:12px;padding:18px 20px;border-left:4px solid var(--${cor},var(--rose));">
-    <div style="font-size:28px;font-weight:700;">${val}</div>
-    <div style="font-size:13px;color:var(--text-muted);margin-top:4px;"><i class="fa-solid fa-${icon}"></i> ${label}</div>
-  </div>`;
 }
 
 // ═══════════════════ INTEL DE MERCADO ═══════════════════

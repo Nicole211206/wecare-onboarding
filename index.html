@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="css/styles.css?v=6">
+  <link rel="stylesheet" href="css/styles.css?v=7">
   <script>
     window.WC_SYNC = {
       url:   'https://onboarding.wecarehosting.com.br',
@@ -137,36 +137,47 @@
 
     <!-- ── DASHBOARD ── -->
     <div class="panel" id="panel-dashboard">
-      <div class="stats-grid" id="dash-stats"></div>
+      <div class="dash-kpis" id="dash-stats"></div>
 
-      <div class="card" style="margin-top:16px;">
-        <div class="card-header"><span class="card-title"><i class="fa-solid fa-layer-group" style="color:var(--rose)"></i> Imóveis por Fase</span></div>
-        <div class="card-body" id="dash-fases"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title"><i class="fa-solid fa-route" style="color:var(--brand-gold)"></i> Onde está cada imóvel</span><span class="dash-hint">clique num imóvel pra abrir · dias = tempo na fase atual</span></div>
+        <div class="card-body"><div class="dash-pipeline" id="dash-fases"></div></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div class="dash-cols">
         <div class="card">
-          <div class="card-header"><span class="card-title"><i class="fa-solid fa-file-signature" style="color:var(--gold)"></i> Contratos Assinados — Aguardando Ativação</span></div>
-          <div class="card-body">
-            <table class="data-table" style="font-size:12px;">
-              <thead><tr><th>Imóvel</th><th>Assinatura</th><th>Dias aguardando</th></tr></thead>
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--amber)"></i> Precisa de atenção</span></div>
+          <div class="card-body" id="dash-atencao"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-sack-dollar" style="color:var(--sage)"></i> Financeiro do onboarding (em andamento)</span></div>
+          <div class="card-body" id="dash-financeiro"></div>
+        </div>
+      </div>
+
+      <div class="dash-cols">
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-file-signature" style="color:var(--gold)"></i> Contratos assinados aguardando ativação</span></div>
+          <div class="card-body" style="padding:0;">
+            <table class="data-table" style="font-size:12.5px;">
+              <thead><tr><th>Imóvel</th><th>Fase</th><th>Assinado em</th><th style="text-align:right;">Aguardando</th></tr></thead>
               <tbody id="dash-assinados-body"></tbody>
             </table>
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><span class="card-title"><i class="fa-solid fa-house-circle-check" style="color:var(--sage)"></i> Ativações Recentes</span></div>
-          <div class="card-body">
-            <table class="data-table" style="font-size:12px;">
-              <thead><tr><th>Imóvel</th><th>Contrato</th><th>Ativação</th><th>Dias</th></tr></thead>
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-house-circle-check" style="color:var(--sage)"></i> Ativações recentes</span></div>
+          <div class="card-body" style="padding:0;">
+            <table class="data-table" style="font-size:12.5px;">
+              <thead><tr><th>Imóvel</th><th>Ativado em</th><th style="text-align:right;">Contrato → ativação</th></tr></thead>
               <tbody id="dash-ativos-body"></tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <div class="card" style="margin-top:16px;">
-        <div class="card-header"><span class="card-title"><i class="fa-solid fa-chart-column" style="color:var(--sage)"></i> Tempo de Ativação por Imóvel (dias entre contrato e ativação)</span></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title"><i class="fa-solid fa-chart-column" style="color:var(--sage)"></i> Tempo de ativação por imóvel</span><span class="dash-hint">dias entre contrato assinado e ativação</span></div>
         <div class="card-body" style="overflow-x:auto;" id="dash-chart-ativacao"></div>
       </div>
     </div>
@@ -390,10 +401,10 @@
       <button class="tab-btn"          onclick="showTab('dados',this)">Dados</button>
       <button class="tab-btn"          onclick="showTab('contrato',this)">Contrato</button>
       <button class="tab-btn"          onclick="showTab('definicoes',this)">Definições</button>
-      <button class="tab-btn"          onclick="showTab('formulario',this)">Formulário</button>
       <button class="tab-btn"          onclick="showTab('compras',this)">Compras</button>
       <button class="tab-btn"          onclick="showTab('gastos',this)">💰 Gastos</button>
       <button class="tab-btn"          onclick="showTab('operacional',this)">Produção</button>
+      <button class="tab-btn"          onclick="showTab('formulario',this)">Formulário</button>
       <button class="tab-btn"          onclick="showTab('final',this)">Final</button>
     </div>
     <div class="modal-body" id="detalhe-body"></div>
@@ -685,6 +696,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 <script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=107"></script>
+<script src="js/app.js?v=108"></script>
 </body>
 </html>
