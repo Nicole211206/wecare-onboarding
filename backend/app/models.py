@@ -143,6 +143,8 @@ class DefOperacional(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     nome: Mapped[str | None] = mapped_column(String)
+    # etapas que entram no checklist do imóvel quando esse serviço é marcado
+    etapas: Mapped[list | None] = mapped_column(JSON)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
 
 

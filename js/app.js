@@ -4,6 +4,8 @@ let _editProprietarioIdx=null, _novoProprietarioParaImovelId=null;
 let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
+// Anotações em post-its: [{id,html,cor,criadoEm,autor,editadoEm}] (wc_anotacoes_notas)
+let anotacoesNotas=[];
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
 let orcamentos=[], estoqueItens=[];
 let _editOrcamentoId=null, _orcItensSoltosTemp=[];
@@ -550,7 +552,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval','wc_kpi_base_onboarding','wc_anotacoes_notas'];
 // Controle de sync por coleção (incidente 2026-09-24 — ver REV_KEYS em backend/app/merge.py).
 // Antes, cada push mandava TODAS as coleções do localStorage, e a decisão de puxar do servidor
 // comparava o lastSaved do relógio de cada máquina: um navegador desatualizado que fizesse
@@ -699,6 +701,7 @@ function saveAll(){
   localStorage.setItem('wc_templates_msg',JSON.stringify(templatesMsg));
   localStorage.setItem('wc_processo_texto',JSON.stringify(processoTexto));
   localStorage.setItem('wc_anotacoes_texto',JSON.stringify(anotacoesTexto));
+  localStorage.setItem('wc_anotacoes_notas',JSON.stringify(anotacoesNotas));
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
@@ -706,6 +709,7 @@ function saveAll(){
   localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
   localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
   localStorage.setItem('wc_modalidades_enxoval',JSON.stringify(MODALIDADES_ENXOVAL));
+  localStorage.setItem('wc_kpi_base_onboarding',JSON.stringify(KPI_BASE_ONBOARDING));
   _kvPushDebounced();
   _publicarStats();
 }
@@ -728,6 +732,8 @@ function loadAll(){
   v=g('wc_templates_msg');if(Array.isArray(v))templatesMsg=v;
   v=g('wc_processo_texto');if(typeof v==='string')processoTexto=v;
   v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
+  v=g('wc_anotacoes_notas');if(Array.isArray(v))anotacoesNotas=v;
+  if(_migrarAnotacoesParaNotas())saveAll();
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
@@ -735,10 +741,14 @@ function loadAll(){
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
   v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
   v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
+  // A base agora é por imóvel (check de liberação na aba Contrato); a chave global
+  // wc_kpi_base_onboarding segue no sync só por compatibilidade e é ignorada.
+  KPI_BASE_ONBOARDING='liberacao';
   // Seed só quando a coleção nunca foi salva neste navegador (g()===null). Antes semeava
   // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
   _seedModelosNegocio(g('wc_modelos_negocio')===null);
   _seedModalidadesEnxoval(g('wc_modalidades_enxoval')===null);
+  if(_seedEtapasDefOperacionais())saveAll();
   _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
@@ -889,7 +899,11 @@ async function _publicarStats(){
   try{
     const stats=imoveis.map(im=>({
       id:im.id,nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status,
-      diasOnboarding:im.dataCriacao&&im.dataAtivacao?diasEntre(im.dataCriacao,im.dataAtivacao):null
+      // segue a base configurada; reativação não conta como onboarding (fica null)
+      diasOnboarding:_ehReativacao(im)?null:_tempoOnboarding(im).dias,
+      baseCalculo:_tempoOnboarding(im).base,
+      diasEsperaProprietario:_diasEsperaProprietario(im),
+      tipoOnboarding:_ehReativacao(im)?'Reativação':'Novo'
     }));
     await fetch(s.url.replace(/\/$/,'')+'/stats?token='+encodeURIComponent(s.token||''),
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stats,prestadores})});
@@ -954,7 +968,15 @@ function renderKanban(){
 }
 function renderCard(im){
   const atrasado=_verificarAtrasado(im);
-  const dias=im.dataCriacao?diasEntre(im.dataCriacao,hoje())+'d':'';
+  // Tempo no card: desde a liberação (quando é diferente da assinatura); senão desde o contrato.
+  // Liberação diferente marcada mas sem data = selo "Aguardando proprietário".
+  const fimCard=im.status==='ativo'&&im.dataAtivacao?im.dataAtivacao:hoje();
+  const emAndamento=im.status!=='ativo'&&im.status!=='perdido';
+  let tempoCard='';
+  if(_liberacaoDiferente(im)&&im.dataLiberacao)tempoCard=`<span>${diasEntre(im.dataLiberacao,fimCard)}d desde liberação</span>`;
+  else if(_aguardandoProprietario(im)&&im.dataContratoAssinado&&emAndamento)
+    tempoCard=`<span class="tag tag-amber" style="align-self:flex-start;" title="Contrato assinado, imóvel ainda não liberado para vistoria">⏸️ Aguardando proprietário · ${diasEntre(im.dataContratoAssinado,hoje())}d</span>`;
+  else if(im.dataContratoAssinado)tempoCard=`<span>${diasEntre(im.dataContratoAssinado,fimCard)}d desde contrato</span>`;
   const cor=FASE_COLOR[im.status]||'neutral';
   return`<div class="kanban-card fase-${im.status}${atrasado?' atrasado':''}" onclick="abrirDetalhe('${im.id}')">
     ${atrasado?'<div class="badge-atrasado"><i class="fa-solid fa-triangle-exclamation"></i> ATRASADO</div>':''}
@@ -962,11 +984,12 @@ function renderCard(im){
     <div class="kanban-card-meta">
       ${im.proprietarioNome?`<span>${esc(im.proprietarioNome)}</span>`:''}
       ${im.endereco?`<span style="font-size:10.5px;">${esc(im.endereco)}</span>`:''}
-      <span>${dias} desde contrato</span>
+      ${tempoCard}
     </div>
     <div class="kanban-card-tags">
       ${im.quartos?`<span class="tag tag-neutral"><i class="fa-solid fa-bed"></i> ${im.quartos}q</span>`:''}
       ${im.status==='ativo'?`<span class="tag tag-sage">Ativo</span>`:`<span class="tag tag-${cor}">${FASE_LABEL[im.status]||im.status}</span>`}
+      ${_ehReativacao(im)?'<span class="tag tag-lav" title="Reativação — fora das médias de onboarding"><i class="fa-solid fa-rotate"></i> Reativação</span>':''}
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formEnviadoEm?'<span class="tag tag-sage" title="Formulário enviado pelo proprietário"><i class="fa-solid fa-clipboard-check"></i></span>'
         :(im.formPreenchidoEm?'<span class="tag tag-lav" title="Proprietário está preenchendo, ainda não enviou"><i class="fa-solid fa-clipboard"></i></span>':'')}
@@ -1305,8 +1328,9 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='contrato'){
     im.contratoLink=g('ct-link');
-    im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
-    im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
+    // dataLiberacao/liberacaoDiferente são salvos no onchange (registram em Atualizações)
+    if(document.getElementById('ct-tipo-onboarding'))
+      im.tipoOnboarding=g('ct-tipo-onboarding')==='reativacao'?'reativacao':'novo';
     im.taxaLimpeza=gn('ct-taxa-limpeza');
     im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
@@ -1323,6 +1347,7 @@ function _coletarDadosAba(aba,im){
   if(aba==='definicoes'){
     if(!im.defOperacionais)im.defOperacionais={};
     DEF_OPERACIONAIS.forEach(s=>{im.defOperacionais[s.id]=!!document.getElementById('def-op-'+s.id)?.checked;});
+    _sincronizarEtapasDefOperacionais(im);
     // compat legado
     im.seguroEasyCover=im.defOperacionais['seguroEasyCover']||false;
     im.kitAmenities=im.defOperacionais['kitAmenities']||false;
@@ -1351,16 +1376,22 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='final'){
     im.responsavelCriacao=g('fn-resp-criacao'); im.dataEnvioParaCriacao=g('fn-data-envio');
-    im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
+    if(document.getElementById('fn-hostaway-login')){
+      im.hostawayLogin=g('fn-hostaway-login').trim();
+      im.hostawaySenha=g('fn-hostaway-senha');
+    }
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
-    im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
-    im.anuncioConjuntoValorMinNoite=gn('fn-ac-min-noite');
-    im.anuncioConjuntoValorBaseNoite=gn('fn-ac-base-noite');
-    im.anuncioConjuntoTaxaHospedeExtra=gn('fn-ac-taxa-extra');
-    im.anuncioConjuntoTaxaHospedeExtraAcimaDe=gn('fn-ac-extra-acima');
-    im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
-    im.anuncioConjuntoTaxaLimpeza=gn('fn-ac-taxa-limpeza');
+    // imóveis de fora do onboarding são salvos pela janela própria (_acSalvarExterno)
+    if(document.getElementById('fn-ac-caucao'))im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
+    // limpeza do anúncio = soma automática do cobrado/custo de cada imóvel
+    if(im.anuncioConjunto){const t=_acTotais(_acUnidades(im));im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;}
+    if(document.getElementById('fn-ac-despesas')){
+      im.anuncioConjuntoDespesasHostaway=g('fn-ac-despesas');
+      im.anuncioConjuntoLimpeza=g('fn-ac-limpeza');
+      im.anuncioConjuntoObs=g('fn-ac-obs');
+    }
+    if(im.anuncioConjunto)_propagarAnuncioConjunto(im);
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -1551,7 +1582,7 @@ function _renderChecklistImovel(im){
   <div style="margin-bottom:8px;">
     ${etapas.map((e,ei)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;padding:6px 8px;border-radius:8px;${e.concluida?'background:var(--surface-2);':''}">
       <input type="checkbox" style="margin-top:3px;flex-shrink:0;"${e.concluida?' checked':''} onchange="_toggleEtapaChecklist('${im.id}','${e.id}')">
-      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}</span>
+      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}${e.origemDef?` <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;" title="Etapa do serviço marcado na aba Definições">${esc((DEF_OPERACIONAIS.find(d=>d.id===e.origemDef)||{}).nome||'Definições')}</span>`:''}</span>
       <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
       <button class="btn btn-xs btn-outline"${ei===etapas.length-1?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
       <button class="btn btn-xs btn-danger" onclick="_removerEtapaChecklist('${im.id}','${e.id}')" title="Remover"><i class="fa-solid fa-xmark"></i></button>
@@ -1573,6 +1604,7 @@ function _aplicarModeloChecklist(imId,modeloId){
   }
   im.modeloNegocioId=modeloId;
   im.checklistEtapas=(modelo.etapas||[]).map(e=>({id:'etp_'+uid()+uid(),texto:e.texto,concluida:false}));
+  _sincronizarEtapasDefOperacionais(im);
   saveAll();renderAba('captacao');
   showToast('Checklist aplicado!','sage');
 }
@@ -1645,6 +1677,9 @@ function renderAbaCaptacao(im){
         <input type="checkbox" id="cap-kpi-claire" ${im.incluirKpiClaire?'checked':''}> Colocar na Claire? <span class="text-muted" style="font-weight:400;">(Tempo de Onboarding)</span>
       </label>
       ${!im.dataAtivacao?`<div class="hint" style="color:var(--brand-red,#c0392b);margin:2px 0 6px;"><i class="fa-solid fa-triangle-exclamation"></i> Esse imóvel ainda não tem data de ativação (não está "Ativo") — só entra na média de Tempo de Onboarding quando tiver.</div>`:''}
+      ${(()=>{const t=_tempoOnboarding(im);
+        if(_ehReativacao(im))return`<div class="hint" style="margin:2px 0 6px;"><i class="fa-solid fa-rotate"></i> Imóvel marcado como Reativação — não entra na média de Tempo de Onboarding da Claire.</div>`;
+        return t.dias!=null?`<div class="hint" style="margin:2px 0 6px;">Vai pra Claire: <strong>${t.dias} dias</strong> (${t.base==='liberacao'?'liberação → ativo':'contrato → ativo'})${t.semLiberacao?' · ⚠️ sem data de liberação, usando a data do contrato':''}</div>`:'';})()}
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-top:8px;">
         <input type="checkbox" id="cap-kpi-setup" ${im.incluirSetupClaire?'checked':''}> Colocar o Setup na Claire? <span class="text-muted" style="font-weight:400;">(Redução de Custos)</span>
       </label>
@@ -1828,12 +1863,12 @@ function renderAbaContrato(im){
     </div>
   </div>
   ${im.contratoAssinado?`<div class="alert-success" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <span><i class="fa-solid fa-check-circle"></i> Contrato assinado em</span>
+    <span><i class="fa-solid fa-check-circle"></i> Data da assinatura</span>
     <input type="date" class="input" style="width:160px;" value="${im.dataContratoAssinado||hoje()}" onchange="_onDataContratoAssinadoChange(this)">
-  </div>`:''}
-  <div class="form-group" style="margin-top:8px;">
+  </div>`:`<div class="form-group" style="margin-top:8px;">
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
-  </div>
+  </div>`}
+  ${_renderLiberacaoContrato(im)}
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wrench"></i> Setup</div>
   <div class="form-row">
@@ -1872,14 +1907,6 @@ function renderAbaContrato(im){
   </div>
 
   <div class="form-section-title"><i class="fa-solid fa-chart-line"></i> Precificação Inicial</div>
-  <div class="form-row">
-    <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'ct-min-noite',value:im.valorMinNoite||0,min:0,step:10})}</div>
-    <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'ct-base-noite',value:im.valorBaseNoite||0,min:0,step:10})}</div>
-  </div>
-  <div class="form-row">
-    <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'ct-taxa-extra',value:im.taxaHospedeExtra||0,min:0,step:10})}</div>
-    <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'ct-extra-acima',value:im.taxaHospedeExtraAcimaDe||0,min:0})}</div>
-  </div>
   <div class="form-row">
     <div class="form-group"><label>Taxa de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">cobrada do hóspede (Hostaway)</span></label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
     <div class="form-group"><label>Custo de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">pago ao prestador por diária</span></label>${numInput({id:'ct-custo-limpeza',value:im.custoLimpezaRecorrente||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
@@ -1944,6 +1971,29 @@ function desmarcarGastoSetup(id){
   ev.gastoSetup=false;
   saveAll();renderAba('contrato');
 }
+// Liberação para vistoria: por padrão é a data da assinatura; o check abre uma data própria.
+function _renderLiberacaoContrato(im){
+  const dif=_liberacaoDiferente(im);
+  const sugLib=dif&&!im.dataLiberacao?_sugestaoDataLiberacao(im):null;
+  const espera=dif&&im.dataLiberacao?_diasEsperaProprietario(im):null;
+  return`<div style="margin-top:12px;">
+    <label class="checkbox-label"><input type="checkbox" id="ct-liberacao-diferente"${dif?' checked':''} onchange="_onLiberacaoDiferenteChange(this)"> Data de liberação diferente da assinatura?</label>
+    <div class="hint" style="margin:2px 0 8px;">${dif?'O tempo de onboarding conta a partir da data em que o proprietário liberou o imóvel para vistoria.':'O tempo de onboarding conta a partir da data da assinatura.'}</div>
+    ${dif?`<div class="form-group" style="max-width:260px;"><label>Liberado para vistoria em</label>
+      <input id="ct-data-liberacao" type="date" class="input" value="${esc(im.dataLiberacao||'')}" onchange="_onDataLiberacaoChange(this.value)">
+    </div>
+    ${sugLib?`<div class="hint" style="margin:-4px 0 8px;"><i class="fa-solid fa-lightbulb"></i> Sugestão: ${fmtDate(sugLib)} (data em que entrou em "${esc(FASE_LABEL.vistoria_compras)}"). <a style="cursor:pointer;color:var(--rose);" onclick="_onDataLiberacaoChange('${sugLib}')">Usar esta data</a></div>`:''}
+    ${_aguardandoProprietario(im)?`<div class="hint" style="margin:-4px 0 8px;color:#B45309;">⏸️ Aguardando proprietário liberar o imóvel${im.dataContratoAssinado?` · ${diasEntre(im.dataContratoAssinado,hoje())}d desde a assinatura`:''}</div>`:''}
+    ${espera!=null?`<div class="hint" style="margin:-4px 0 8px;">Espera do proprietário: <strong>${espera} dias</strong> (assinatura → liberação)</div>`:''}`:''}
+    <div class="form-group" style="max-width:260px;margin-top:4px;"><label>Tipo de onboarding</label>
+      <select id="ct-tipo-onboarding" class="input">
+        <option value="novo"${_ehReativacao(im)?'':' selected'}>Novo</option>
+        <option value="reativacao"${_ehReativacao(im)?' selected':''}>Reativação</option>
+      </select>
+      <div class="hint" style="margin-top:4px;">Reativação = imóvel que já operou com a gente, saiu e voltou. Fica fora das médias de onboarding.</div>
+    </div>
+  </div>`;
+}
 function marcarContratoAssinadoManual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.contratoAssinado=true;im.dataContratoAssinado=hoje();
@@ -1966,6 +2016,7 @@ function renderAbaDefinicoes(im){
     ${DEF_OPERACIONAIS.map(s=>`<label class="checkbox-label"><input type="checkbox" id="def-op-${esc(s.id)}"${(im.defOperacionais||{})[s.id]?' checked':''}> ${esc(s.nome)}</label>`).join('')}
     ${!DEF_OPERACIONAIS.length?`<span style="font-size:12px;color:var(--text-muted);">Nenhum serviço configurado. Adicione em Configurações.</span>`:''}
   </div>
+  ${DEF_OPERACIONAIS.some(s=>(s.etapas||[]).length)?`<div class="hint" style="margin-top:6px;"><i class="fa-solid fa-list-check"></i> Ao marcar um serviço, as etapas dele entram no checklist do imóvel (aba Captação). As etapas de cada serviço ficam em Configurações.</div>`:''}
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-broom"></i> Equipe de Limpeza</div>
   <div class="form-group">
@@ -2137,7 +2188,7 @@ function renderAbaFormulario(im){
         :(status==='editado'?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
       let campo;
       if(p.tipo==='radio'||p.tipo==='checkbox'){
-        const selecionadas=val?val.split(',').map(x=>x.trim()).filter(Boolean):[];
+        const selecionadas=window.splitOpcoesMulti(val,p.opcoes);
         const pills=(p.opcoes||[]).map(op=>
           `<button type="button" class="rascunho-pill${selecionadas.includes(op)?' selected':''}" data-op="${esc(op)}" data-tipo="${p.tipo}" onclick="_toggleRascunhoPill(this)">${esc(op)}</button>`
         ).join('');
@@ -2257,7 +2308,7 @@ function _toggleRascunhoPill(btn){
     hidden.value=op;
   } else {
     btn.classList.toggle('selected');
-    const cur=hidden.value?hidden.value.split(',').map(x=>x.trim()).filter(Boolean):[];
+    const cur=window.splitOpcoesMulti(hidden.value,[...grid.querySelectorAll('.rascunho-pill')].map(b=>b.dataset.op));
     const i=cur.indexOf(op);
     if(btn.classList.contains('selected')){ if(i===-1)cur.push(op); }
     else if(i>-1){ cur.splice(i,1); }
@@ -2353,7 +2404,8 @@ function renderAbaCompras(im){
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 4px;"><input class="input compra-preco-input" data-subkey="${subKey}" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
-          <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
+          <td style="padding:0 8px;white-space:nowrap;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:''}
+            <button type="button" class="btn btn-xs btn-outline" title="${item.link?'Editar link de compra':'Adicionar link de compra'}" onclick="editarLinkItemCompra(${ITENS_COMPRAS.indexOf(item)})"><i class="fa-solid fa-pen"></i></button></td>
         </tr>`;}).join('')}
         </tbody>
       </table>
@@ -3196,11 +3248,11 @@ function renderAbaGastos(im){
     </div>
     ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:120px;">Tipo</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:64px;"></th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;padding:6px 8px;">Data</th><th style="text-align:left;width:180px;padding:6px 8px;">Tipo</th><th style="text-align:left;width:130px;padding:6px 8px;">Fornecedor</th><th style="text-align:left;padding:6px 8px;">Itens</th><th style="text-align:right;width:110px;padding:6px 8px;">Valor Total</th><th style="text-align:left;padding:6px 8px;">Obs</th><th style="width:64px;"></th></tr></thead>
       <tbody>
       ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);${l.id===_lancFinEditId?'background:var(--amber-bg);':''}">
         <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
-        <td style="padding:6px 8px;vertical-align:top;"><span class="tag ${l.tipo==='prestador'?'tag-sky':'tag-gold'}" style="font-size:10.5px;">${esc(LANCFIN_TIPOS[l.tipo||'compra']||'')}</span></td>
+        <td style="padding:6px 8px;vertical-align:top;"><span class="tag ${l.tipo==='prestador'?'tag-sky':'tag-gold'}" style="font-size:10.5px;white-space:normal;line-height:1.25;border-radius:8px;max-width:100%;">${esc(LANCFIN_TIPOS[l.tipo||'compra']||'')}</span></td>
         <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
         <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
         <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
@@ -4283,29 +4335,54 @@ function renderAbaFinal(im){
     </div>
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
-  <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
+
+  <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-key"></i> Acesso Hostaway</div>
+  <div class="form-row">
+    <div class="form-group"><label>Login</label><input id="fn-hostaway-login" class="input" autocomplete="off" value="${esc(im.hostawayLogin||'')}" placeholder="e-mail ou usuário"></div>
+    <div class="form-group"><label>Senha</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input id="fn-hostaway-senha" type="password" class="input" autocomplete="new-password" value="${esc(im.hostawaySenha||'')}">
+        <button type="button" class="btn btn-xs btn-outline" title="Mostrar/ocultar" onclick="const i=document.getElementById('fn-hostaway-senha');i.type=i.type==='password'?'text':'password';"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+  </div>
 
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
-  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
-    <div class="form-row">
-      <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
-      <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="font-weight:700;font-size:14px;flex:1;"><i class="fa-solid fa-link" style="color:var(--brand-gold);"></i> Anúncio em conjunto</div>
+      <button type="button" class="btn btn-sm btn-outline" onclick="gerarPDFAnuncioConjunto()"><i class="fa-solid fa-file-pdf"></i> PDF compilado pro anúncio</button>
     </div>
-    <div class="hint" style="margin:6px 0;">Preços do anúncio em conjunto — podem ser diferentes dos preços do imóvel sozinho (aba Contrato).</div>
-    <div class="form-row">
-      <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
-      <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
+    <div class="form-group" style="max-width:300px;"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+
+    <div class="form-section-title" style="margin-top:6px;font-size:12px;"><i class="fa-solid fa-house"></i> Imóveis do anúncio</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <select id="fn-ac-add-imovel" class="input" style="flex:1;min-width:200px;max-width:340px;">
+        <option value="">— imóvel do onboarding —</option>
+        ${imoveis.filter(o=>o.id!==im.id&&o.status!=='perdido'&&!(im.anuncioConjuntoImoveis||[]).includes(o.id)).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).map(o=>`<option value="${esc(o.id)}">${esc(o.nome||'(sem nome)')}</option>`).join('')}
+      </select>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarImovel()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      <span style="color:var(--text-muted);font-size:12px;">ou</span>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_acAbrirExterno()"><i class="fa-solid fa-plus"></i> Imóvel fora do onboarding</button>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'fn-ac-taxa-extra',value:im.anuncioConjuntoTaxaHospedeExtra||0,min:0,step:10})}</div>
-      <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'fn-ac-extra-acima',value:im.anuncioConjuntoTaxaHospedeExtraAcimaDe||0,min:0})}</div>
+    <div class="hint" style="margin-bottom:8px;">Imóvel do onboarding: os dados são puxados dele e somados abaixo, e este card aparece igual nele também. Imóvel que já está ativo fora do onboarding: clique no botão, preencha os dados e salve — ele entra na lista.</div>
+    ${_resumoAnuncioConjuntoHtml(im)}
+
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <div class="form-section-title" style="font-size:12px;margin:0;flex:1;"><i class="fa-solid fa-dollar-sign"></i> Valores do anúncio em conjunto</div>
+      ${_acUnidades(im).length>1?`<button type="button" class="btn btn-xs btn-outline" onclick="_acUsarTotais()" title="Preenche a caução com a soma dos imóveis"><i class="fa-solid fa-calculator"></i> Caução = soma</button>`:''}
     </div>
-    <div class="form-row">
+    ${(()=>{const t=_acTotais(_acUnidades(im));return`<div class="form-row">
       <div class="form-group"><label>Caução (R$)</label>${numInput({id:'fn-ac-caucao',value:im.anuncioConjuntoCaucao||0,min:0,step:50})}</div>
-      <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'fn-ac-taxa-limpeza',value:im.anuncioConjuntoTaxaLimpeza||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Limpeza — cobrado (R$) <span style="font-weight:400;color:var(--text-muted);">soma automática</span></label><input class="input" readonly value="${fmtMoeda(t.taxaLimpeza)}" style="background:var(--surface);font-weight:600;"></div>
+      <div class="form-group"><label>Limpeza — custo (R$) <span style="font-weight:400;color:var(--text-muted);">soma automática</span></label><input class="input" readonly value="${fmtMoeda(t.custoLimpeza)}" style="background:var(--surface);font-weight:600;"></div>
     </div>
+    <div class="hint" style="margin:-6px 0 10px;">Margem da limpeza: <strong style="color:${t.taxaLimpeza-t.custoLimpeza>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(t.taxaLimpeza-t.custoLimpeza)}</strong> · vem do cobrado/custo de limpeza de cada imóvel (aba Contrato, ou o cadastro do imóvel de fora).</div>`;})()}
+    <div class="form-group"><label>Despesas para automatizar no Hostaway</label><textarea id="fn-ac-despesas" class="input" rows="2" placeholder="Ex: taxa de limpeza por reserva, enxoval por reserva, kit amenities...">${esc(im.anuncioConjuntoDespesasHostaway||'')}</textarea></div>
+    <div class="form-group"><label>Limpeza</label><textarea id="fn-ac-limpeza" class="input" rows="2" placeholder="Quem faz a limpeza do anúncio em conjunto, como divide entre os imóveis...">${esc(im.anuncioConjuntoLimpeza||'')}</textarea></div>
+    <div class="form-group"><label>Observações</label><textarea id="fn-ac-obs" class="input" rows="2">${esc(im.anuncioConjuntoObs||'')}</textarea></div>
   </div>
 
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
@@ -4325,6 +4402,230 @@ function _onDataAtivacaoChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.dataAtivacao=inp.value||hoje();
   saveAll();renderKanban();
+}
+// ── Anúncio em conjunto ──
+// im.anuncioConjuntoImoveis = ids dos outros imóveis do onboarding no mesmo anúncio. O vínculo é
+// nos dois sentidos e os campos do card (AC_CAMPOS) são copiados pra todos do grupo ao salvar,
+// então abrir qualquer um dos imóveis mostra o mesmo card.
+// Imóveis fora do onboarding (anúncio já ativo) ficam em im.anuncioConjuntoExternos, preenchidos à mão.
+const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoExternos','anuncioConjuntoCaucao','anuncioConjuntoTaxaLimpeza',
+  'anuncioConjuntoCustoLimpeza','anuncioConjuntoDespesasHostaway','anuncioConjuntoLimpeza','anuncioConjuntoObs'];
+const AC_EXT_CAMPOS=[
+  ['nome','Nome / WC do imóvel','text'],['linkAnuncio','Link do anúncio atual','text'],
+  ['proprietario','Proprietário','text'],['tel','Telefone','text'],
+  ['endereco','Endereço','text'],['camas','Camas (ex: 1 casal, 2 solteiro)','text'],
+  ['quartos','Quartos','number'],['banheiros','Banheiros','number'],
+  ['hospedes','Máx. hóspedes','number'],['caucao','Caução (R$)','number'],
+  ['taxaLimpeza','Limpeza — cobrado (R$)','number'],['custoLimpeza','Limpeza — custo (R$)','number'],
+  ['limpezaResp','Quem faz a limpeza','text'],
+];
+// O antigo campo de texto "Outros imóveis" aparece como um imóvel externo só com o nome
+function _acExternos(im){
+  if(Array.isArray(im.anuncioConjuntoExternos))return im.anuncioConjuntoExternos;
+  return im.anuncioConjuntoWcOutro?[{id:'ext_legado',nome:im.anuncioConjuntoWcOutro}]:[];
+}
+// Janela própria pra cadastrar/editar um imóvel de fora do onboarding; ao salvar ele entra na lista
+function _acAbrirExterno(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const x=(id&&_acExternos(im).find(e=>e.id===id))||{};
+  document.getElementById('generico-titulo').textContent=id?'Editar imóvel fora do onboarding':'Imóvel fora do onboarding';
+  document.getElementById('generico-body').innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Dados do imóvel que já está ativo e vai entrar no anúncio em conjunto. Ao salvar, ele entra na lista e soma nos totais.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px 12px;">
+      ${AC_EXT_CAMPOS.map(([k,lbl,tipo])=>`<div class="form-group" style="margin:0;"><label>${lbl}</label><input class="input" id="ac-ext-${k}" type="${tipo}"${tipo==='number'?' min="0"':''} value="${esc(x[k]??'')}"></div>`).join('')}
+    </div>
+    <div class="form-group" style="margin-top:8px;"><label>Outras informações pro anúncio (comodidades, regras, acesso, check-in...)</label><textarea class="input" id="ac-ext-info" rows="4">${esc(x.info||'')}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button class="btn btn-sm btn-outline" onclick="closeModal('modal-generico')">Cancelar</button>
+      <button class="btn btn-sm btn-sage" onclick="_acSalvarExterno('${esc(id||'')}')"><i class="fa-solid fa-check"></i> Salvar</button>
+    </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+  setTimeout(()=>document.getElementById('ac-ext-nome')?.focus(),50);
+}
+function _acSalvarExterno(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const x={id:(id&&id!=='ext_legado')?id:'ext_'+uid()+uid()};
+  AC_EXT_CAMPOS.forEach(([k,,tipo])=>{const v=document.getElementById('ac-ext-'+k)?.value??'';x[k]=tipo==='number'?(v===''?'':+v):v.trim();});
+  x.info=document.getElementById('ac-ext-info')?.value||'';
+  if(!x.nome){showToast('Informe o nome ou WC do imóvel.','peach');return;}
+  const atuais=_acExternos(im), pos=atuais.findIndex(e=>e.id===id);
+  const lista=atuais.filter(e=>e.id!==id);
+  if(pos>=0)lista.splice(pos,0,x);else lista.push(x);
+  im.anuncioConjunto=true;im.anuncioConjuntoExternos=lista;
+  const t=_acTotais(_acUnidades(im));
+  if(!im.anuncioConjuntoCaucao)im.anuncioConjuntoCaucao=t.caucao;
+  im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;
+  _propagarAnuncioConjunto(im);
+  saveAll();closeModal('modal-generico');renderAba('final');
+  showToast(id?'Imóvel atualizado.':'Imóvel adicionado ao anúncio.','sage');
+}
+function _acRemoverExterno(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  if(!confirm('Tirar este imóvel do anúncio em conjunto?'))return;
+  im.anuncioConjuntoExternos=_acExternos(im).filter(x=>x.id!==id);
+  _coletarDadosAba('final',im); // recalcula a limpeza sem ele
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+}
+// Cada imóvel do anúncio (onboarding ou externo) no mesmo formato, pra somar e pro PDF
+function _acUnidades(im){
+  const doOnb=_grupoAnuncioConjunto(im).map(getImovel).map(o=>({
+    id:o.id,externo:false,nome:o.nome||'',proprietario:o.proprietarioNome||'',tel:o.proprietarioTel||'',endereco:o.endereco||'',
+    quartos:+o.quartos||0,banheiros:((+o.banheirosCompletos||0)+(+o.banheirosLavabo||0))||(+o.banheiros||0),hospedes:+o.maxHospedes||0,
+    camas:(o.camas||[]).map(c=>`${c.qtd}x ${c.tipo}`).join(', '),caucao:+o.valorCaucao||0,
+    taxaLimpeza:+o.taxaLimpeza||0,custoLimpeza:+o.custoLimpezaRecorrente||0,limpezaResp:o.defLimpeza?.responsavel||'',im:o}));
+  const ext=_acExternos(im).map(x=>({...x,externo:true,quartos:+x.quartos||0,banheiros:+x.banheiros||0,hospedes:+x.hospedes||0,
+    caucao:+x.caucao||0,taxaLimpeza:+x.taxaLimpeza||0,custoLimpeza:+x.custoLimpeza||0}));
+  return[...doOnb,...ext];
+}
+const AC_SOMAVEIS=['quartos','banheiros','hospedes','caucao','taxaLimpeza','custoLimpeza'];
+function _acTotais(unidades){
+  const t={};AC_SOMAVEIS.forEach(k=>t[k]=unidades.reduce((s,u)=>s+(+u[k]||0),0));
+  t.camas=unidades.map(u=>u.camas).filter(Boolean).join(' + ');
+  return t;
+}
+function _acUsarTotais(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const t=_acTotais(_acUnidades(im));
+  im.anuncioConjuntoCaucao=t.caucao;
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+  showToast('Caução preenchida com a soma dos imóveis.','sage');
+}
+function _grupoAnuncioConjunto(im){return[im.id,...(im.anuncioConjuntoImoveis||[])].filter((id,i,a)=>a.indexOf(id)===i&&getImovel(id));}
+function _propagarAnuncioConjunto(im){
+  const grupo=_grupoAnuncioConjunto(im);
+  grupo.forEach(id=>{
+    if(id===im.id)return;
+    const o=getImovel(id);
+    o.anuncioConjunto=true;
+    o.anuncioConjuntoImoveis=grupo.filter(x=>x!==id);
+    AC_CAMPOS.forEach(k=>{o[k]=im[k];});
+  });
+}
+function _acAdicionarImovel(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const id=document.getElementById('fn-ac-add-imovel')?.value;if(!id)return;
+  _coletarDadosAba('final',im);
+  const outro=getImovel(id);if(!outro)return;
+  // card ainda vazio aqui e o outro imóvel já tem anúncio em conjunto preenchido: puxa os dados dele
+  if(AC_CAMPOS.every(k=>!im[k])&&outro.anuncioConjunto)AC_CAMPOS.forEach(k=>{im[k]=outro[k];});
+  // junta também quem já estava no grupo do outro imóvel
+  im.anuncioConjuntoImoveis=[...new Set([...(im.anuncioConjuntoImoveis||[]),id,...(outro.anuncioConjuntoImoveis||[])])].filter(x=>x!==im.id);
+  im.anuncioConjunto=true;
+  // valores ainda zerados: já começa com a soma dos imóveis
+  const t=_acTotais(_acUnidades(im));
+  if(!im.anuncioConjuntoCaucao)im.anuncioConjuntoCaucao=t.caucao;
+  im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+}
+function _acRemoverImovel(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const grupo=_grupoAnuncioConjunto(im);
+  grupo.forEach(gid=>{const o=getImovel(gid);o.anuncioConjuntoImoveis=(o.anuncioConjuntoImoveis||[]).filter(x=>x!==id);});
+  const saiu=getImovel(id);
+  if(saiu){saiu.anuncioConjuntoImoveis=[];saiu.anuncioConjunto=false;}
+  saveAll();renderAba('final');
+}
+// Tabela com os dados de cada imóvel do anúncio + linha de total somado
+function _resumoAnuncioConjuntoHtml(im){
+  const un=_acUnidades(im);
+  if(un.length<2)return`<div class="hint" style="margin-bottom:6px;">Só este imóvel por enquanto — adicione os outros do anúncio.</div>`;
+  const t=_acTotais(un);
+  const statusForm=u=>u.externo?'<span class="tag tag-neutral" style="font-size:10.5px;">fora do onboarding</span>'
+    :u.im.formEnviadoEm?'<span class="tag tag-sage" style="font-size:10.5px;">enviado</span>'
+    :u.im.formPreenchidoEm?'<span class="tag tag-lav" style="font-size:10.5px;">preenchendo</span>'
+    :'<span class="tag tag-neutral" style="font-size:10.5px;">não enviado</span>';
+  const td='padding:6px 8px;vertical-align:top;';
+  return`<div style="overflow-x:auto;margin-top:4px;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);border-radius:8px;">
+    <thead><tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;${td}">Imóvel</th><th style="text-align:left;${td}">Proprietário</th>
+      <th style="text-align:center;${td}">Quartos</th><th style="text-align:center;${td}">Banh.</th><th style="text-align:center;${td}">Hósp.</th>
+      <th style="text-align:left;${td}">Camas</th><th style="text-align:right;${td}">Caução</th><th style="text-align:left;${td}">Limpeza</th>
+      <th style="text-align:left;${td}">Formulário</th><th></th>
+    </tr></thead>
+    <tbody>${un.map(u=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="${td}font-weight:600;">${esc(u.nome||'(sem nome)')}${u.id===im.id?' <span style="color:var(--text-muted);font-weight:400;">(este)</span>':''}</td>
+      <td style="${td}">${esc(u.proprietario||'—')}${u.tel?`<br><span style="color:var(--text-muted);">${esc(u.tel)}</span>`:''}</td>
+      <td style="${td}text-align:center;">${u.quartos||'—'}</td><td style="${td}text-align:center;">${u.banheiros||'—'}</td><td style="${td}text-align:center;">${u.hospedes||'—'}</td>
+      <td style="${td}">${esc(u.camas||'—')}</td>
+      <td style="${td}text-align:right;">${u.caucao?fmtMoeda(u.caucao):'—'}</td>
+      <td style="${td}">${esc(u.limpezaResp||'—')}${u.taxaLimpeza?`<br><span style="color:var(--text-muted);">cobrado ${fmtMoeda(u.taxaLimpeza)}${u.custoLimpeza?` · custo ${fmtMoeda(u.custoLimpeza)}`:''}</span>`:''}</td>
+      <td style="${td}">${statusForm(u)}</td>
+      <td style="${td}text-align:right;white-space:nowrap;">${u.externo
+        ?`<button type="button" class="btn btn-xs btn-outline" onclick="_acAbrirExterno('${esc(u.id)}')" title="Ver / editar dados"><i class="fa-solid fa-pen"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverExterno('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`
+        :u.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(u.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverImovel('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`:''}</td>
+    </tr>`).join('')}
+    <tr style="background:var(--surface-2);font-weight:700;">
+      <td style="${td}" colspan="2">Total do anúncio</td>
+      <td style="${td}text-align:center;">${t.quartos}</td><td style="${td}text-align:center;">${t.banheiros}</td><td style="${td}text-align:center;">${t.hospedes}</td>
+      <td style="${td}font-weight:400;">${esc(t.camas||'—')}</td>
+      <td style="${td}text-align:right;">${fmtMoeda(t.caucao)}</td>
+      <td style="${td}font-weight:400;">cobrado ${fmtMoeda(t.taxaLimpeza)} · custo ${fmtMoeda(t.custoLimpeza)}</td>
+      <td colspan="2"></td>
+    </tr></tbody>
+  </table></div>`;
+}
+// PDF pra criação do anúncio: imóveis + totais, valores, e os formulários dos imóveis do
+// onboarding compilados pergunta por pergunta (resposta igual nos dois aparece uma vez só).
+async function gerarPDFAnuncioConjunto(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const win=window.open('','_blank'); // antes do await (bloqueador de pop-up)
+  _coletarDadosAba('final',im);_propagarAnuncioConjunto(im);saveAll();
+  const un=_acUnidades(im),t=_acTotais(un);
+  const campo=_pdfCampoHtml,sec=_pdfSecaoHtml;
+  const linhaUn=u=>`<tr><td style="padding:6px;border-bottom:1px solid #EFE7D6;font-weight:600;">${esc(u.nome||'')}${u.externo?' <span style="color:#999;font-weight:400;">(fora do onboarding)</span>':''}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;">${esc(u.proprietario||'—')} ${esc(u.tel||'')}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.quartos||'—'}</td><td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.banheiros||'—'}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.hospedes||'—'}</td><td style="padding:6px;border-bottom:1px solid #EFE7D6;">${esc(u.camas||'—')}</td></tr>`;
+  const tabela=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;">
+    <tr style="color:#132030;font-size:10px;text-transform:uppercase;"><th style="text-align:left;padding:6px;">Imóvel</th><th style="text-align:left;padding:6px;">Proprietário</th><th style="padding:6px;">Quartos</th><th style="padding:6px;">Banh.</th><th style="padding:6px;">Hósp.</th><th style="text-align:left;padding:6px;">Camas</th></tr>
+    ${un.map(linhaUn).join('')}
+    <tr style="font-weight:700;background:#F7F2E8;"><td style="padding:6px;" colspan="2">Total</td><td style="padding:6px;text-align:center;">${t.quartos}</td><td style="padding:6px;text-align:center;">${t.banheiros}</td><td style="padding:6px;text-align:center;">${t.hospedes}</td><td style="padding:6px;font-weight:400;">${esc(t.camas||'—')}</td></tr>
+  </table>`;
+  const valores=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+    ${campo('Caução',im.anuncioConjuntoCaucao?fmtMoeda(im.anuncioConjuntoCaucao):'',true)}
+    <div></div>
+    ${campo('Limpeza — cobrado (soma)',fmtMoeda(t.taxaLimpeza),true)}
+    ${campo('Limpeza — custo (soma)',fmtMoeda(t.custoLimpeza),true)}
+  </div>
+  ${campo('Despesas para automatizar no Hostaway',im.anuncioConjuntoDespesasHostaway)}
+  ${campo('Limpeza',im.anuncioConjuntoLimpeza)}
+  ${campo('Observações',im.anuncioConjuntoObs)}`;
+  const doOnb=un.filter(u=>!u.externo);
+  const respDe=u=>({...(u.im.formRespostas||{}),...(u.im.formRascunho||{})});
+  const resps=doOnb.map(u=>({nome:u.nome,r:respDe(u)}));
+  const formHtml=(window.FORM_SECOES||[]).map(s=>{
+    const pergs=(s.perguntas||[]).map(p=>{
+      const vals=resps.map(x=>({nome:x.nome,v:String(x.r[p.id]??'').trim()})).filter(x=>x.v);
+      if(!vals.length)return'';
+      const iguais=vals.length===resps.length&&vals.every(x=>x.v===vals[0].v);
+      const corpo=iguais?`<div style="font-size:13px;color:#333;">${esc(vals[0].v)}</div>`
+        :vals.map(x=>`<div style="font-size:13px;color:#333;margin-top:2px;"><strong style="color:#B8863C;">${esc(x.nome)}:</strong> ${esc(x.v)}</div>`).join('');
+      return`<div style="padding:7px 0;border-bottom:1px solid #EFE7D6;"><div style="font-size:10px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${esc(p.label)}</div>${corpo}</div>`;
+    }).join('');
+    return pergs?sec('📋',esc(s.secao),pergs):'';
+  }).join('');
+  const externosHtml=un.filter(u=>u.externo).map(u=>sec('🏠',esc(u.nome||'Imóvel fora do onboarding')+' (fora do onboarding)',`
+    ${campo('Link do anúncio atual',u.linkAnuncio)}${campo('Endereço',u.endereco)}
+    ${campo('Limpeza',[u.limpezaResp,u.taxaLimpeza?'cobrado '+fmtMoeda(u.taxaLimpeza):'',u.custoLimpeza?'custo '+fmtMoeda(u.custoLimpeza):''].filter(Boolean).join(' · '))}
+    ${campo('Outras informações',u.info)}`)).join('');
+  const cab={nome:'Anúncio em conjunto'+(im.anuncioConjuntoWc?' — '+im.anuncioConjuntoWc:''),proprietarioNome:[...new Set(un.map(u=>u.proprietario).filter(Boolean))].join(', ')};
+  win.document.write(`<html><head><meta charset="utf-8"><title>Anúncio em conjunto${im.anuncioConjuntoWc?' — '+esc(im.anuncioConjuntoWc):''}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:900px;margin:0 auto;}
+    @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}</style></head><body>
+  ${await _pdfHeaderHtml(cab,'Compilado para criação do anúncio em conjunto')}
+  ${sec('🏘️','Imóveis do anúncio',tabela)}
+  ${sec('💰','Valores e operação do anúncio',valores)}
+  ${externosHtml}
+  ${formHtml||sec('📋','Formulários','<div style="padding:8px 0;color:#999;">Nenhuma resposta de formulário nos imóveis do onboarding ainda.</div>')}
+  </body></html>`);
+  win.document.close();win.print();
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
@@ -4353,7 +4654,6 @@ async function criarTarefaClaire(){
 📍 Endereço: ${im.endereco||'—'}
 👤 Proprietário: ${im.proprietarioNome||'—'} | ${im.proprietarioTel||'—'}
 🛏 Camas: ${camas||'—'} | Banheiros: ${im.banheiros||'—'} | Quartos: ${im.quartos||'—'}
-💰 Valor mín/noite: R$ ${im.valorMinNoite||0}
 📱 Plataformas: ${plataformas||'—'}
 📁 Pasta captação: ${im.captacaoLink||'—'}
 📸 Fotos: ${im.ops?.fotos?.data||'—'} (${im.ops?.fotos?.responsavel||'—'})
@@ -4480,12 +4780,9 @@ async function gerarPDFOutrasInformacoes(){
 
   ${sec('💰','Preços',`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
-      ${campo('Diária mínima',im.valorMinNoite?fmtMoeda(im.valorMinNoite):'',true)}
-      ${campo('Diária base',im.valorBaseNoite?fmtMoeda(im.valorBaseNoite):'',true)}
       ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
       ${campo('Custo de limpeza',im.custoLimpezaRecorrente?fmtMoeda(im.custoLimpezaRecorrente):'',true)}
       ${campo('Margem por limpeza',(im.taxaLimpeza||im.custoLimpezaRecorrente)?fmtMoeda((+im.taxaLimpeza||0)-(+im.custoLimpezaRecorrente||0)):'',true)}
-      ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
       ${campo('Caução',im.valorCaucao?fmtMoeda(im.valorCaucao):'',true)}
       ${campo('Mínimo de noites',im.minimoNoites)}
       ${campo('Política de cancelamento',im.politicaCancelamento)}
@@ -4571,6 +4868,69 @@ function pedirCotacaoJarvis(modo){
     ${listHtml}`;
   document.getElementById('modal-generico').classList.add('open');
 }
+// ═══════════════════ TEMPO DE ONBOARDING ═══════════════════
+// Base de cálculo global (Configurações), vale pro dashboard e pro envio à Claire
+// (o backend lê a mesma chave em /onboarding-stats):
+//   'liberacao' = liberação → dataAtivacao (sem liberação, cai pro contrato e sinaliza)
+//   'contrato'  = dataContratoAssinado → dataAtivacao
+// Liberação (aba Contrato): por padrão é a própria data da assinatura; só quando o check
+// "Data de liberação diferente da assinatura?" (im.liberacaoDiferente) está marcado é que
+// vale im.dataLiberacao — e, vazia, o imóvel fica "Aguardando proprietário".
+// O backend (/onboarding-stats) espelha essa regra.
+let KPI_BASE_ONBOARDING='liberacao';
+const KPI_BASE_LABEL={liberacao:'liberação → ativo',contrato:'contrato → ativo'};
+function _ehReativacao(im){return im.tipoOnboarding==='reativacao';}
+// imóveis que ganharam dataLiberacao antes do check existir contam como "diferente"
+function _liberacaoDiferente(im){return im.liberacaoDiferente!=null?!!im.liberacaoDiferente:!!im.dataLiberacao;}
+function _dataLiberacaoEfetiva(im){
+  return (_liberacaoDiferente(im)?im.dataLiberacao:im.dataContratoAssinado)||null;
+}
+function _aguardandoProprietario(im){
+  return _liberacaoDiferente(im)&&!im.dataLiberacao&&!!im.contratoAssinado;
+}
+// {dias, base usada de fato, semLiberacao (fallback pro contrato na base "liberação")}
+function _tempoOnboarding(im,fim){
+  fim=fim||im.dataAtivacao;
+  const lib=_dataLiberacaoEfetiva(im);
+  const semLiberacao=KPI_BASE_ONBOARDING==='liberacao'&&!lib;
+  const usaLib=KPI_BASE_ONBOARDING==='liberacao'&&!!lib;
+  const ini=usaLib?lib:im.dataContratoAssinado;
+  return{dias:ini&&fim?diasEntre(ini,fim):null,base:usaLib?'liberacao':'contrato',semLiberacao};
+}
+function _diasEsperaProprietario(im){
+  const lib=_dataLiberacaoEfetiva(im);
+  return im.dataContratoAssinado&&lib?diasEntre(im.dataContratoAssinado,lib):null;
+}
+function _onLiberacaoDiferenteChange(cb){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba(_abaAtiva,im);
+  im.liberacaoDiferente=!!cb.checked;
+  saveAll();renderKanban();renderAba(_abaAtiva);
+}
+// Sugestão (nunca preenche sozinho): primeira vez que o imóvel entrou em "Vistoria e Compras",
+// tirada do histórico de Atualizações.
+function _sugestaoDataLiberacao(im){
+  const lbl=FASE_LABEL.vistoria_compras;
+  const a=(im.atualizacoes||[]).filter(a=>a.tipo==='fase'&&(a.texto||'').includes(`"${lbl}"`))
+    .map(a=>a.data).sort()[0];
+  return a?a.slice(0,10):null;
+}
+function _onDataLiberacaoChange(val){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba(_abaAtiva,im);
+  const anterior=im.dataLiberacao||'';
+  im.liberacaoDiferente=true;
+  im.dataLiberacao=val||'';
+  if(im.dataLiberacao&&im.dataLiberacao!==anterior)
+    _addAtualizacao(im,`Imóvel liberado para vistoria em ${fmtDate(im.dataLiberacao)}`,'fase');
+  saveAll();renderKanban();renderAba(_abaAtiva);
+}
+function _setKpiBaseOnboarding(v){
+  KPI_BASE_ONBOARDING=v==='contrato'?'contrato':'liberacao';
+  saveAll();renderDashboard();
+  showToast('Base do tempo de onboarding: '+(KPI_BASE_ONBOARDING==='contrato'?'Data do contrato':'Data da liberação'),'sage');
+}
+
 // ═══════════════════ DASHBOARD ═══════════════════
 // Cores próprias do painel por fase (as de FASE_COLOR repetem tons — rose e gold são o mesmo
 // dourado, lav é quase branco — e no dashboard cada fase precisa ser distinguível de relance).
@@ -4587,8 +4947,17 @@ function renderDashboard(){
   const ativosLista=imoveis.filter(i=>i.status==='ativo');
   const mesAtual=hoje().slice(0,7);
   const ativadosMes=ativosLista.filter(i=>(i.dataAtivacao||'').slice(0,7)===mesAtual).length;
-  const comTempo=ativosLista.filter(i=>i.dataContratoAssinado&&i.dataAtivacao);
-  const tempoMedio=comTempo.length?Math.round(comTempo.reduce((s,i)=>s+diasEntre(i.dataContratoAssinado,i.dataAtivacao),0)/comTempo.length):null;
+  // Médias de onboarding: só imóveis "Novo" (reativação tem card próprio); perdidos já estão fora
+  const media=arr=>arr.length?Math.round(arr.reduce((s,d)=>s+d,0)/arr.length):null;
+  const comTempo=ativosLista.filter(i=>!_ehReativacao(i)&&_tempoOnboarding(i).dias!=null);
+  const tempoMedio=media(comTempo.map(i=>_tempoOnboarding(i).dias));
+  const qtdSemLib=comTempo.filter(i=>_tempoOnboarding(i).semLiberacao).length;
+  const esperas=imoveis.filter(i=>i.status!=='perdido'&&!_ehReativacao(i)).map(_diasEsperaProprietario).filter(d=>d!=null);
+  const esperaMedia=media(esperas);
+  const reativ=ativosLista.filter(i=>_ehReativacao(i)&&_tempoOnboarding(i).dias!=null);
+  const reativMedia=media(reativ.map(i=>_tempoOnboarding(i).dias));
+  const baseLbl=KPI_BASE_LABEL[KPI_BASE_ONBOARDING];
+  const avisoSemLib='<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;" title="Sem data de liberação — calculado a partir do contrato">⚠️ sem data de liberação</span>';
   const assinados=emAndamentoLista.filter(i=>i.contratoAssinado&&i.dataContratoAssinado)
     .sort((a,b)=>a.dataContratoAssinado.localeCompare(b.dataContratoAssinado));
   const perdidos=imoveis.filter(i=>i.status==='perdido').length;
@@ -4601,7 +4970,12 @@ function renderDashboard(){
   if(stats)stats.innerHTML=
     kpi(emAndamentoLista.length,'Em onboarding','person-digging','#B45309','var(--amber-bg)',`${assinados.length} com contrato assinado`)+
     kpi(ativadosMes,'Ativados este mês','circle-check','var(--green-text)','var(--green-bg)',`${ativosLista.length} ativos no total`)+
-    kpi(tempoMedio!=null?tempoMedio+'d':'—','Tempo médio até ativar','clock','var(--sky)','var(--sky-bg)','contrato assinado → ativo')+
+    kpi(tempoMedio!=null?tempoMedio+'d':'—','Operação: liberação → ativo','clock','var(--sky)','var(--sky-bg)',
+      `base: ${baseLbl}${qtdSemLib?` · ⚠️ ${qtdSemLib} sem data de liberação`:''}`)+
+    kpi(esperaMedia!=null?esperaMedia+'d':'—','Proprietário: contrato → liberação','hourglass-half','#B45309','var(--amber-bg)',
+      `${esperas.length} imóve${esperas.length===1?'l':'is'} (liberado na assinatura = 0d)`)+
+    kpi(reativMedia!=null?reativMedia+'d':'—','Reativações: tempo médio','rotate','var(--text-muted)','var(--surface-2)',
+      `${reativ.length} reativaç${reativ.length===1?'ão':'ões'} · fora das médias`)+
     kpi(perdidos,'Perdidos','circle-xmark','var(--red)','var(--red-bg)','');
 
   // Pipeline: uma coluna por fase, com os imóveis e há quantos dias estão nela
@@ -4634,27 +5008,36 @@ function renderDashboard(){
 
   const assinadosBody=document.getElementById('dash-assinados-body');
   if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>{
-    const d=diasEntre(im.dataContratoAssinado,hoje());
+    const t=_tempoOnboarding(im,hoje());
+    const d=t.dias;
     return`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
-      <td class="link">${esc(im.nome)}</td>
+      <td class="link">${esc(im.nome)}${_ehReativacao(im)?' <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;">Reativação</span>':''}</td>
       <td><span class="tag" style="background:${DASH_FASE_COR[im.status]||'#999999'}22;color:${DASH_FASE_COR[im.status]||'inherit'};font-size:10.5px;">${esc(FASE_LABEL[im.status]||im.status)}</span></td>
       <td>${fmtDate(im.dataContratoAssinado)}</td>
-      <td style="text-align:right;"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
-    </tr>`;}).join(''):`<tr><td colspan="4" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
+      <td>${_aguardandoProprietario(im)?'<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;">⏸️ Aguardando proprietário</span>':_liberacaoDiferente(im)?fmtDate(im.dataLiberacao):'<span style="color:var(--text-muted);">na assinatura</span>'}</td>
+      <td style="text-align:right;" title="Dias desde ${t.base==='liberacao'?'a liberação':'o contrato'}"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
+    </tr>`;}).join(''):`<tr><td colspan="5" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
 
   const tbody=document.getElementById('dash-ativos-body');
   const recentes=[...ativosLista].sort((a,b)=>(b.dataAtivacao||'').localeCompare(a.dataAtivacao||'')).slice(0,8);
-  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
-      <td class="link">${esc(im.nome)}</td>
+  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>{
+    const t=_tempoOnboarding(im);const esp=_diasEsperaProprietario(im);
+    return`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
+      <td class="link">${esc(im.nome)}${_ehReativacao(im)?' <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;">Reativação</span>':''}</td>
       <td>${fmtDate(im.dataAtivacao)}</td>
-      <td style="text-align:right;">${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+' dias':'—'}</td>
-    </tr>`).join(''):`<tr><td colspan="3" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+      <td style="text-align:right;">${t.dias!=null?t.dias+' dias':'—'}${t.semLiberacao&&t.dias!=null?'<br>'+avisoSemLib:''}</td>
+      <td style="text-align:right;color:var(--text-muted);">${esp!=null?esp+' dias':'—'}</td>
+    </tr>`;}).join(''):`<tr><td colspan="4" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+  const thOp=document.getElementById('dash-ativos-th-op');
+  if(thOp)thOp.textContent=KPI_BASE_ONBOARDING==='contrato'?'Contrato → ativação':'Liberação → ativação';
+  const hintChart=document.getElementById('dash-chart-hint');
+  if(hintChart)hintChart.textContent='dias entre a liberação (ou a assinatura, se liberou junto) e a ativação · reativações fora';
 
   const chartEl=document.getElementById('dash-chart-ativacao');
   if(chartEl){
     const dadosChart=[...comTempo]
       .sort((a,b)=>a.dataAtivacao.localeCompare(b.dataAtivacao))
-      .map(i=>({nome:i.nome,dias:diasEntre(i.dataContratoAssinado,i.dataAtivacao)}));
+      .map(i=>{const t=_tempoOnboarding(i);return{nome:i.nome,dias:t.dias,semLiberacao:t.semLiberacao,espera:_diasEsperaProprietario(i)};});
     chartEl.innerHTML=_chartAtivacaoSvg(dadosChart);
   }
 }
@@ -4672,8 +5055,8 @@ function _chartAtivacaoSvg(dados){
     const barH=topPad+plotH-yTop;
     const label=d.nome.length>16?d.nome.slice(0,15)+'…':d.nome;
     return`<g>
-      <rect x="${x}" y="${yTop}" width="${bw}" height="${barH}" rx="4" style="fill:var(--sage);"><title>${esc(d.nome)}: ${d.dias} dias</title></rect>
-      <text x="${x+bw/2}" y="${yTop-6}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--text-strong,#1a1a1a);">${d.dias}d</text>
+      <rect x="${x}" y="${yTop}" width="${bw}" height="${barH}" rx="4" style="fill:${d.semLiberacao?'var(--amber)':'var(--sage)'};"><title>${esc(d.nome)}: ${d.dias} dias de operação${d.espera!=null?` · espera do proprietário: ${d.espera} dias`:''}${d.semLiberacao?' · ⚠️ sem data de liberação (calculado do contrato)':''}</title></rect>
+      <text x="${x+bw/2}" y="${yTop-6}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--text-strong,#1a1a1a);">${d.semLiberacao?'⚠':''}${d.dias}d</text>
       <text x="${x+bw/2}" y="${topPad+plotH+16}" text-anchor="end" transform="rotate(-35 ${x+bw/2} ${topPad+plotH+16})" style="font-size:10.5px;fill:var(--text-muted);">${esc(label)}</text>
     </g>`;
   }).join('');
@@ -5476,7 +5859,7 @@ function renderInfoTabContent(){
   if(!c)return;
   if(_infoTabAtiva==='mensagens')c.innerHTML=renderInfoMensagensHTML();
   else if(_infoTabAtiva==='processo')c.innerHTML=editorRicoHTML('processo',processoTexto);
-  else if(_infoTabAtiva==='anotacoes')c.innerHTML=editorRicoHTML('anotacoes',anotacoesTexto);
+  else if(_infoTabAtiva==='anotacoes')c.innerHTML=renderAnotacoesNotasHTML();
 }
 
 // ── Mensagens (templates) ──
@@ -5550,7 +5933,95 @@ function copiarTemplateMsg(idx){
   navigator.clipboard.writeText(templatesMsg[idx].texto).then(()=>showToast('Texto copiado.'));
 }
 
-// ── Editor de texto rico (Processo / Anotações) ──
+// ── Anotações em post-its ──
+// Cada "Salvar" vira um bloco. As cores são fixas (papel claro com texto escuro) nos dois temas.
+const NOTA_CORES={amarelo:'#FFF3B0',rosa:'#FFD9E2',azul:'#D6EBFF',verde:'#D8F3D4',lilas:'#E7DEFF'};
+let _notaCorNova='amarelo', _notaEditId=null, _notasBusca='';
+// O texto único antigo vira o primeiro post-it (id fixo: dois navegadores migrando não duplicam)
+function _migrarAnotacoesParaNotas(){
+  const txt=(anotacoesTexto||'').replace(/<[^>]*>|&nbsp;/g,'').trim();
+  if(!txt)return false;
+  if(!anotacoesNotas.some(n=>n.id==='nota_legado'))
+    anotacoesNotas.unshift({id:'nota_legado',html:anotacoesTexto,cor:'amarelo',criadoEm:new Date().toISOString(),autor:''});
+  anotacoesTexto='';
+  return true;
+}
+function _notaToolbarHTML(alvo){
+  const b=(cmd,val,ic,t)=>`<button type="button" class="btn btn-xs" onmousedown="event.preventDefault()" onclick="_notaExec('${alvo}','${cmd}'${val?`,'${val}'`:''})" title="${t}">${ic}</button>`;
+  return b('bold','','<i class="fa-solid fa-bold"></i>','Negrito')+b('italic','','<i class="fa-solid fa-italic"></i>','Itálico')
+    +b('formatBlock','H3','<i class="fa-solid fa-heading"></i>','Título')+b('insertUnorderedList','','<i class="fa-solid fa-list-ul"></i>','Lista')
+    +b('insertOrderedList','','<i class="fa-solid fa-list-ol"></i>','Lista numerada');
+}
+function _notaExec(alvo,cmd,val){document.getElementById(alvo)?.focus();document.execCommand(cmd,false,val||null);}
+function _notasFiltradas(){
+  const busca=_notasBusca.toLowerCase().trim();
+  return[...anotacoesNotas].sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''))
+    .filter(n=>!busca||(n.html||'').replace(/<[^>]*>/g,' ').toLowerCase().includes(busca));
+}
+function renderAnotacoesNotasHTML(){
+  const swatches=Object.entries(NOTA_CORES).map(([k,c])=>`<button type="button" title="${k}" onclick="_trocarCorNotaNova('${k}')" style="width:22px;height:22px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${_notaCorNova===k?'#132030':'rgba(0,0,0,.12)'};"></button>`).join('');
+  return`
+  <div class="card" style="margin-bottom:16px;">
+    <div class="rich-editor-toolbar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      ${_notaToolbarHTML('nota-nova')}
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${swatches}</span>
+    </div>
+    <div class="rich-editor-body" id="nota-nova" contenteditable="true" style="min-height:90px;background:${NOTA_CORES[_notaCorNova]};color:#2b2b2b;"></div>
+    <div style="display:flex;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--border);">
+      <button class="btn btn-sm btn-sage" onclick="_salvarNovaNota()"><i class="fa-solid fa-note-sticky"></i> Salvar anotação</button>
+    </div>
+  </div>
+  ${anotacoesNotas.length>3?`<input class="form-input" placeholder="Buscar nas anotações..." style="max-width:280px;margin-bottom:12px;" value="${esc(_notasBusca)}" oninput="_notasBusca=this.value;_renderNotasGrid()">`:''}
+  <div id="notas-grid">${_notasGridHTML(_notasFiltradas())}</div>`;
+}
+// troca a cor sem perder o que já foi digitado
+function _trocarCorNotaNova(k){
+  const html=document.getElementById('nota-nova')?.innerHTML||'';
+  _notaCorNova=k;renderInfoTabContent();
+  const el=document.getElementById('nota-nova');if(el)el.innerHTML=html;
+}
+function _renderNotasGrid(){
+  const el=document.getElementById('notas-grid');if(el)el.innerHTML=_notasGridHTML(_notasFiltradas());
+}
+function _notasGridHTML(lista){
+  if(!lista.length)return`<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">${_notasBusca?'Nenhuma anotação encontrada.':'Nenhuma anotação ainda.'}</div>`;
+  return`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-items:start;">
+  ${lista.map(n=>{
+    const cor=NOTA_CORES[n.cor]||NOTA_CORES.amarelo, editando=_notaEditId===n.id;
+    const quando=n.criadoEm?new Date(n.criadoEm).toLocaleDateString('pt-BR'):'';
+    return`<div style="background:${cor};color:#2b2b2b;border-radius:4px 4px 14px 4px;padding:12px 14px 10px;box-shadow:0 2px 6px rgba(0,0,0,.12);min-height:120px;display:flex;flex-direction:column;">
+      ${editando?`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${_notaToolbarHTML('nota-edit-'+n.id)}</div>`:''}
+      <div id="nota-edit-${esc(n.id)}" ${editando?'contenteditable="true" style="flex:1;font-size:13px;line-height:1.5;word-break:break-word;outline:1px dashed rgba(0,0,0,.3);padding:4px;border-radius:4px;"':'style="flex:1;font-size:13px;line-height:1.5;word-break:break-word;"'}>${n.html||''}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10.5px;color:rgba(0,0,0,.55);">
+        <span style="flex:1;">${esc(quando)}${n.autor?' · '+esc(n.autor):''}${n.editadoEm?' · editada':''}</span>
+        ${editando
+          ?`<button class="btn btn-xs btn-sage" onclick="_salvarEdicaoNota('${esc(n.id)}')" title="Salvar"><i class="fa-solid fa-check"></i></button><button class="btn btn-xs btn-outline" onclick="_notaEditId=null;_renderNotasGrid()" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>`
+          :`<button class="btn btn-xs btn-outline" style="background:rgba(255,255,255,.5);" onclick="_notaEditId='${esc(n.id)}';_renderNotasGrid()" title="Editar"><i class="fa-solid fa-pen"></i></button><button class="btn btn-xs btn-danger" onclick="_apagarNota('${esc(n.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>`}
+      </div>
+    </div>`;}).join('')}
+  </div>`;
+}
+function _htmlNotaVazio(html){return!(html||'').replace(/<[^>]*>|&nbsp;/g,'').trim();}
+function _salvarNovaNota(){
+  const el=document.getElementById('nota-nova');if(!el)return;
+  if(_htmlNotaVazio(el.innerHTML)){showToast('Escreva alguma coisa antes de salvar.','peach');return;}
+  const u=getCurrentUser();
+  anotacoesNotas.push({id:'nota_'+uid()+uid(),html:el.innerHTML,cor:_notaCorNova,criadoEm:new Date().toISOString(),autor:u?.nome||u?.email||''});
+  saveAll();renderInfoTabContent();showToast('Anotação salva.','sage');
+}
+function _salvarEdicaoNota(id){
+  const n=anotacoesNotas.find(x=>x.id===id);const el=document.getElementById('nota-edit-'+id);if(!n||!el)return;
+  if(_htmlNotaVazio(el.innerHTML)){showToast('A anotação ficou vazia — use a lixeira pra apagar.','peach');return;}
+  n.html=el.innerHTML;n.editadoEm=new Date().toISOString();
+  _notaEditId=null;saveAll();_renderNotasGrid();
+}
+function _apagarNota(id){
+  if(!confirm('Apagar esta anotação?'))return;
+  anotacoesNotas=anotacoesNotas.filter(x=>x.id!==id);
+  saveAll();_renderNotasGrid();
+}
+
+// ── Editor de texto rico (Processo) ──
 function editorRicoHTML(campo,valorHtml){
   return `
   <div class="card">
@@ -6308,7 +6779,8 @@ function renderConfig(){
       const base=item.qtdRule.slice(dash+1);
       const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;"></td>
+        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;">
+          <div style="display:flex;gap:4px;align-items:center;margin-top:3px;"><input id="ci-link-${i}" class="input" value="${esc(item.link||'')}" title="Link de compra" style="font-size:11px;padding:2px 4px;min-width:160px;color:#000;">${item.link?`<a href="${esc(item.link)}" target="_blank" title="Abrir link" style="font-size:12px;">🛒</a>`:''}</div></td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
         <td style="padding:5px 4px;">
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
@@ -6485,26 +6957,88 @@ function _renderConfigDefPagadoria(){
       <input id="def-op-novo-nome" class="input" placeholder="Nome do serviço..." style="flex:1;">
       <button class="btn btn-sm btn-sage" onclick="_addDefOperacional()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>
-    ${!DEF_OPERACIONAIS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum serviço cadastrado.</div>`:`
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--surface-2);">
-        <th style="padding:7px 10px;text-align:left;">Serviço</th>
-        <th style="padding:7px 4px;width:36px;"></th>
-      </tr></thead>
-      <tbody>
-      ${DEF_OPERACIONAIS.map((s,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:7px 10px;">${esc(s.nome)}</td>
-        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerDefOperacional(${i})"><i class="fa-solid fa-trash"></i></button></td>
-      </tr>`).join('')}
-      </tbody>
-    </table>`}`;
+    <div class="hint" style="margin-bottom:10px;">Quando um serviço é marcado na aba Definições de um imóvel, as etapas dele entram sozinhas no checklist do imóvel (aba Captação). Desmarcar tira as etapas que ainda não foram concluídas.</div>
+    ${!DEF_OPERACIONAIS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum serviço cadastrado.</div>`:
+    DEF_OPERACIONAIS.map((s,i)=>`<div class="card" style="margin-bottom:10px;background:var(--surface-2);">
+      <div class="card-body" style="padding:10px 12px;">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <input class="input" style="font-weight:700;flex:1;" value="${esc(s.nome)}" onchange="_renomearDefOperacional(${i},this.value)">
+          <button class="btn btn-xs btn-danger" onclick="_removerDefOperacional(${i})" title="Apagar serviço"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        ${(s.etapas||[]).map((e,ei)=>`<div style="display:flex;gap:6px;align-items:center;margin:0 0 6px 18px;">
+          <i class="fa-regular fa-square-check" style="color:var(--text-muted);font-size:12px;"></i>
+          <input class="input" style="flex:1;font-size:12.5px;padding:5px 8px;" value="${esc(e.texto)}" onchange="_editarEtapaDefOperacional(${i},${ei},this.value)">
+          <button class="btn btn-xs btn-danger" onclick="_removerEtapaDefOperacional(${i},${ei})" title="Remover etapa"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('')}
+        <div style="display:flex;gap:6px;margin-left:18px;">
+          <input class="input" id="def-op-nova-etapa-${i}" placeholder="Nova etapa do checklist (ex: Habilitar pagadoria)..." style="flex:1;font-size:12.5px;padding:5px 8px;" onkeydown="if(event.key==='Enter'){_adicionarEtapaDefOperacional(${i});event.preventDefault();}">
+          <button class="btn btn-xs btn-sage" onclick="_adicionarEtapaDefOperacional(${i})"><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
+    </div>`).join('')}`;
+}
+function _renomearDefOperacional(i,nome){
+  const s=DEF_OPERACIONAIS[i];if(!s)return;
+  s.nome=nome.trim()||s.nome;
+  saveAll();
+}
+function _editarEtapaDefOperacional(i,ei,texto){
+  const s=DEF_OPERACIONAIS[i];if(!s||!s.etapas?.[ei])return;
+  s.etapas[ei].texto=texto.trim()||s.etapas[ei].texto;
+  // atualiza o texto nos checklists que ainda não concluíram essa etapa
+  imoveis.forEach(im=>(im.checklistEtapas||[]).forEach(e=>{if(e.origemEtapa===s.etapas[ei].id&&!e.concluida)e.texto=s.etapas[ei].texto;}));
+  saveAll();
+}
+function _removerEtapaDefOperacional(i,ei){
+  const s=DEF_OPERACIONAIS[i];if(!s||!s.etapas?.[ei])return;
+  s.etapas.splice(ei,1);
+  saveAll();_renderConfigDefPagadoria();
+}
+function _adicionarEtapaDefOperacional(i){
+  const s=DEF_OPERACIONAIS[i];if(!s)return;
+  const inp=document.getElementById('def-op-nova-etapa-'+i);
+  const texto=(inp?.value||'').trim();if(!texto)return;
+  if(!s.etapas)s.etapas=[];
+  s.etapas.push({id:'dep_'+uid()+uid(),texto});
+  // imóveis em andamento que já têm esse serviço marcado ganham a etapa nova
+  imoveis.filter(im=>im.status!=='ativo'&&im.status!=='perdido').forEach(_sincronizarEtapasDefOperacionais);
+  saveAll();_renderConfigDefPagadoria();
+}
+// Etapas dos serviços marcados em Definições entram no checklist do imóvel (marcadas com
+// origemDef/origemEtapa); serviço desmarcado tira as etapas dele que não foram concluídas.
+function _sincronizarEtapasDefOperacionais(im){
+  const marcados=im.defOperacionais||{};
+  let lista=im.checklistEtapas||[];
+  DEF_OPERACIONAIS.forEach(s=>{
+    if(marcados[s.id]){
+      (s.etapas||[]).forEach(et=>{
+        if(!lista.some(e=>e.origemEtapa===et.id))
+          lista.push({id:'etp_'+uid()+uid(),texto:et.texto,concluida:false,origemDef:s.id,origemEtapa:et.id});
+      });
+    } else {
+      lista=lista.filter(e=>e.origemDef!==s.id||e.concluida);
+    }
+  });
+  im.checklistEtapas=lista;
+}
+// Sugestões iniciais de etapas pros serviços que já existiam (só roda em serviço que nunca
+// teve o campo etapas — depois disso é 100% editável em Configurações).
+function _seedEtapasDefOperacionais(){
+  let mudou=false;
+  const sugestoes=[[/pagadoria/i,'Habilitar pagadoria'],[/claro/i,'Contratar internet Claro'],[/easy\s*cover/i,'Adicionar imóvel na planilha da EasyCover']];
+  DEF_OPERACIONAIS.forEach(s=>{
+    if(Array.isArray(s.etapas))return;
+    s.etapas=sugestoes.filter(([re])=>re.test(s.nome||'')).map(([,texto])=>({id:'dep_'+uid()+uid(),texto}));
+    mudou=true;
+  });
+  return mudou;
 }
 function _addDefOperacional(){
   const inp=document.getElementById('def-op-novo-nome');
   const nome=(inp?.value||'').trim();
   if(!nome){showToast('Informe o nome do serviço.','peach');return;}
   const id='def_'+nome.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
-  DEF_OPERACIONAIS.push({id,nome});
+  DEF_OPERACIONAIS.push({id,nome,etapas:[]});
   saveAll();_renderConfigDefPagadoria();
   if(inp)inp.value='';
   showToast('Serviço adicionado!','sage');
@@ -6920,6 +7454,7 @@ function salvarRegra(i){
   const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
   item.qtdRule=`${n}-${base}`;
   item.modalidades=_lerModalidadesConfig(i);
+  _lerLinkItemConfig(item,i);
   saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
 }
 function salvarTodasRegras(){
@@ -6929,8 +7464,24 @@ function salvarTodasRegras(){
     const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
     item.qtdRule=`${n}-${base}`;
     item.modalidades=_lerModalidadesConfig(i);
+    _lerLinkItemConfig(item,i);
   });
   saveAll();showToast('Todas as regras salvas!','sage');
+}
+function _lerLinkItemConfig(item,i){
+  const el=document.getElementById(`ci-link-${i}`);
+  if(el)item.link=el.value.trim();
+}
+// Editar o link de compra direto da aba Compras do imóvel — o link é do catálogo
+// (Configurações → Itens de Compras), então vale pra todos os imóveis.
+function editarLinkItemCompra(idx){
+  const item=ITENS_COMPRAS[idx];if(!item)return;
+  const novo=prompt(`Link de compra de "${item.nome}" (vale pra todos os imóveis).\nDeixe vazio pra remover:`,item.link||'');
+  if(novo===null)return;
+  const im=getImovel(_imovelAtivoId);if(im)_coletarDadosAba(_abaAtiva,im);
+  item.link=novo.trim();
+  saveAll();renderAba(_abaAtiva);
+  showToast(item.link?'Link atualizado!':'Link removido.','sage');
 }
 function apagarItemConfig(i){
   const item=ITENS_COMPRAS[i];if(!item)return;
