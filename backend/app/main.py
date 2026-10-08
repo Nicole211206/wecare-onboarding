@@ -39,6 +39,7 @@ _COLUNAS_NOVAS = [
     "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_custo NUMERIC",
     "ALTER TABLE modalidades_enxoval ADD COLUMN minimo_mensal_cobrado NUMERIC",
     "ALTER TABLE itens ADD COLUMN uid VARCHAR",
+    "ALTER TABLE def_operacionais ADD COLUMN etapas JSON",
 ]
 for _sql in _COLUNAS_NOVAS:
     try:

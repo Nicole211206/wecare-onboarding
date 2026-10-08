@@ -99,7 +99,9 @@
     .stepper{display:inline-flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2);}
     .stepper-btn{width:44px;height:44px;border:none;background:transparent;font-size:1.2rem;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;transition:background .12s;flex-shrink:0;}
     .stepper-btn:hover{background:var(--border);}
-    .stepper-val{min-width:52px;text-align:center;font-size:1.05rem;font-weight:700;color:var(--text);padding:0 8px;border-left:1px solid var(--border);border-right:1px solid var(--border);}
+    .stepper .stepper-val{width:96px;height:44px;text-align:center;font-size:1.05rem;font-weight:700;color:var(--text);padding:0 8px;border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;-moz-appearance:textfield;appearance:textfield;}
+    .stepper .stepper-val::-webkit-outer-spin-button,.stepper .stepper-val::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+    .stepper .stepper-val:focus{background:var(--surface);}
 
     /* ── Voice input ── */
     .voice-wrap{position:relative;}
@@ -320,11 +322,16 @@
           const stepper=document.createElement('div');
           stepper.className='stepper';
           const btnM=document.createElement('button'); btnM.type='button'; btnM.className='stepper-btn'; btnM.textContent='−';
-          const valEl=document.createElement('span'); valEl.className='stepper-val'; valEl.textContent=v||'0';
+          // Dá pra digitar direto (ano de construção, metragem...) ou usar − / +
+          const valEl=document.createElement('input'); valEl.type='number'; valEl.inputMode='numeric'; valEl.min='0';
+          valEl.className='stepper-val'; valEl.value=v||'0';
           const btnP=document.createElement('button'); btnP.type='button'; btnP.className='stepper-btn'; btnP.textContent='+';
           _valores[p.id]=v||'0';
-          btnM.addEventListener('click',function(){_tocados[p.id]=true;const n=Math.max(0,(parseInt(valEl.textContent)||0)-1);valEl.textContent=n;_valores[p.id]=String(n);_persistirLocal();});
-          btnP.addEventListener('click',function(){_tocados[p.id]=true;const n=(parseInt(valEl.textContent)||0)+1;valEl.textContent=n;_valores[p.id]=String(n);_persistirLocal();});
+          const setNum=function(n){_tocados[p.id]=true;valEl.value=n;_valores[p.id]=String(n);_persistirLocal();};
+          btnM.addEventListener('click',function(){setNum(Math.max(0,(parseInt(valEl.value)||0)-1));});
+          btnP.addEventListener('click',function(){setNum((parseInt(valEl.value)||0)+1);});
+          valEl.addEventListener('focus',function(){valEl.select();});
+          valEl.addEventListener('input',function(){_tocados[p.id]=true;_valores[p.id]=valEl.value.replace(/[^0-9]/g,'')||'0';_persistirLocal();});
           stepper.appendChild(btnM); stepper.appendChild(valEl); stepper.appendChild(btnP);
           field.appendChild(stepper);
         }

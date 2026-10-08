@@ -741,6 +741,7 @@ function loadAll(){
   // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
   _seedModelosNegocio(g('wc_modelos_negocio')===null);
   _seedModalidadesEnxoval(g('wc_modalidades_enxoval')===null);
+  if(_seedEtapasDefOperacionais())saveAll();
   _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
@@ -960,13 +961,13 @@ function renderKanban(){
 }
 function renderCard(im){
   const atrasado=_verificarAtrasado(im);
-  // Tempo no card: desde a liberação (se houver); senão desde o contrato. Contrato assinado
-  // sem liberação = selo "Aguardando proprietário" (tempo que não depende da operação).
+  // Tempo no card: desde a liberação (quando é diferente da assinatura); senão desde o contrato.
+  // Liberação diferente marcada mas sem data = selo "Aguardando proprietário".
   const fimCard=im.status==='ativo'&&im.dataAtivacao?im.dataAtivacao:hoje();
   const emAndamento=im.status!=='ativo'&&im.status!=='perdido';
   let tempoCard='';
-  if(im.dataLiberacao)tempoCard=`<span>${diasEntre(im.dataLiberacao,fimCard)}d desde liberação</span>`;
-  else if(im.contratoAssinado&&im.dataContratoAssinado&&emAndamento)
+  if(_liberacaoDiferente(im)&&im.dataLiberacao)tempoCard=`<span>${diasEntre(im.dataLiberacao,fimCard)}d desde liberação</span>`;
+  else if(_aguardandoProprietario(im)&&im.dataContratoAssinado&&emAndamento)
     tempoCard=`<span class="tag tag-amber" style="align-self:flex-start;" title="Contrato assinado, imóvel ainda não liberado para vistoria">⏸️ Aguardando proprietário · ${diasEntre(im.dataContratoAssinado,hoje())}d</span>`;
   else if(im.dataContratoAssinado)tempoCard=`<span>${diasEntre(im.dataContratoAssinado,fimCard)}d desde contrato</span>`;
   const cor=FASE_COLOR[im.status]||'neutral';
@@ -1320,6 +1321,9 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='contrato'){
     im.contratoLink=g('ct-link');
+    // dataLiberacao/liberacaoDiferente são salvos no onchange (registram em Atualizações)
+    if(document.getElementById('ct-tipo-onboarding'))
+      im.tipoOnboarding=g('ct-tipo-onboarding')==='reativacao'?'reativacao':'novo';
     im.taxaLimpeza=gn('ct-taxa-limpeza');
     im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
@@ -1336,6 +1340,7 @@ function _coletarDadosAba(aba,im){
   if(aba==='definicoes'){
     if(!im.defOperacionais)im.defOperacionais={};
     DEF_OPERACIONAIS.forEach(s=>{im.defOperacionais[s.id]=!!document.getElementById('def-op-'+s.id)?.checked;});
+    _sincronizarEtapasDefOperacionais(im);
     // compat legado
     im.seguroEasyCover=im.defOperacionais['seguroEasyCover']||false;
     im.kitAmenities=im.defOperacionais['kitAmenities']||false;
@@ -1346,11 +1351,6 @@ function _coletarDadosAba(aba,im){
     const _enxTipo=g('def-enxoval-tipo');
     im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup'),custoAluguelMensal:gn('def-enxoval-custo')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
-    // dataLiberacao é salva no onchange (_onDataLiberacaoChange), que também registra em Atualizações
-    if(document.getElementById('def-tipo-onboarding')){
-      im.tipoOnboarding=g('def-tipo-onboarding')==='reativacao'?'reativacao':'novo';
-      im.liberacaoEvidencia=g('def-liberacao-evidencia').trim();
-    }
   }
   if(aba==='operacional'){
     ['fotos','limpeza','vistoria'].forEach(op=>{
@@ -1382,6 +1382,12 @@ function _coletarDadosAba(aba,im){
     im.anuncioConjuntoTaxaHospedeExtraAcimaDe=gn('fn-ac-extra-acima');
     im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
     im.anuncioConjuntoTaxaLimpeza=gn('fn-ac-taxa-limpeza');
+    if(document.getElementById('fn-ac-despesas')){
+      im.anuncioConjuntoDespesasHostaway=g('fn-ac-despesas');
+      im.anuncioConjuntoLimpeza=g('fn-ac-limpeza');
+      im.anuncioConjuntoObs=g('fn-ac-obs');
+    }
+    if(im.anuncioConjunto)_propagarAnuncioConjunto(im);
   }
   if(aba==='compras'){_coletarCompras(im);}
   if(aba==='formulario'){im.formRascunho=_coletarRascunho();}
@@ -1572,7 +1578,7 @@ function _renderChecklistImovel(im){
   <div style="margin-bottom:8px;">
     ${etapas.map((e,ei)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;padding:6px 8px;border-radius:8px;${e.concluida?'background:var(--surface-2);':''}">
       <input type="checkbox" style="margin-top:3px;flex-shrink:0;"${e.concluida?' checked':''} onchange="_toggleEtapaChecklist('${im.id}','${e.id}')">
-      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}</span>
+      <span style="flex:1;font-size:13px;${e.concluida?'text-decoration:line-through;color:var(--text-muted);':''}">${esc(e.texto)}${e.origemDef?` <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;" title="Etapa do serviço marcado na aba Definições">${esc((DEF_OPERACIONAIS.find(d=>d.id===e.origemDef)||{}).nome||'Definições')}</span>`:''}</span>
       <button class="btn btn-xs btn-outline"${ei===0?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',-1)" title="Subir"><i class="fa-solid fa-arrow-up"></i></button>
       <button class="btn btn-xs btn-outline"${ei===etapas.length-1?' disabled':''} onclick="_moverEtapaChecklist('${im.id}','${e.id}',1)" title="Descer"><i class="fa-solid fa-arrow-down"></i></button>
       <button class="btn btn-xs btn-danger" onclick="_removerEtapaChecklist('${im.id}','${e.id}')" title="Remover"><i class="fa-solid fa-xmark"></i></button>
@@ -1594,6 +1600,7 @@ function _aplicarModeloChecklist(imId,modeloId){
   }
   im.modeloNegocioId=modeloId;
   im.checklistEtapas=(modelo.etapas||[]).map(e=>({id:'etp_'+uid()+uid(),texto:e.texto,concluida:false}));
+  _sincronizarEtapasDefOperacionais(im);
   saveAll();renderAba('captacao');
   showToast('Checklist aplicado!','sage');
 }
@@ -1852,12 +1859,12 @@ function renderAbaContrato(im){
     </div>
   </div>
   ${im.contratoAssinado?`<div class="alert-success" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <span><i class="fa-solid fa-check-circle"></i> Contrato assinado em</span>
+    <span><i class="fa-solid fa-check-circle"></i> Data da assinatura</span>
     <input type="date" class="input" style="width:160px;" value="${im.dataContratoAssinado||hoje()}" onchange="_onDataContratoAssinadoChange(this)">
-  </div>`:''}
-  <div class="form-group" style="margin-top:8px;">
+  </div>`:`<div class="form-group" style="margin-top:8px;">
     <button class="btn btn-outline btn-sm" onclick="marcarContratoAssinadoManual()"><i class="fa-solid fa-pen"></i> Marcar como assinado manualmente</button>
-  </div>
+  </div>`}
+  ${_renderLiberacaoContrato(im)}
 
   <div class="form-section-title" style="margin-top:20px;"><i class="fa-solid fa-wrench"></i> Setup</div>
   <div class="form-row">
@@ -1960,6 +1967,29 @@ function desmarcarGastoSetup(id){
   ev.gastoSetup=false;
   saveAll();renderAba('contrato');
 }
+// Liberação para vistoria: por padrão é a data da assinatura; o check abre uma data própria.
+function _renderLiberacaoContrato(im){
+  const dif=_liberacaoDiferente(im);
+  const sugLib=dif&&!im.dataLiberacao?_sugestaoDataLiberacao(im):null;
+  const espera=dif&&im.dataLiberacao?_diasEsperaProprietario(im):null;
+  return`<div style="margin-top:12px;">
+    <label class="checkbox-label"><input type="checkbox" id="ct-liberacao-diferente"${dif?' checked':''} onchange="_onLiberacaoDiferenteChange(this)"> Data de liberação diferente da assinatura?</label>
+    <div class="hint" style="margin:2px 0 8px;">${dif?'O tempo de onboarding conta a partir da data em que o proprietário liberou o imóvel para vistoria.':'O tempo de onboarding conta a partir da data da assinatura.'}</div>
+    ${dif?`<div class="form-group" style="max-width:260px;"><label>Liberado para vistoria em</label>
+      <input id="ct-data-liberacao" type="date" class="input" value="${esc(im.dataLiberacao||'')}" onchange="_onDataLiberacaoChange(this.value)">
+    </div>
+    ${sugLib?`<div class="hint" style="margin:-4px 0 8px;"><i class="fa-solid fa-lightbulb"></i> Sugestão: ${fmtDate(sugLib)} (data em que entrou em "${esc(FASE_LABEL.vistoria_compras)}"). <a style="cursor:pointer;color:var(--rose);" onclick="_onDataLiberacaoChange('${sugLib}')">Usar esta data</a></div>`:''}
+    ${_aguardandoProprietario(im)?`<div class="hint" style="margin:-4px 0 8px;color:#B45309;">⏸️ Aguardando proprietário liberar o imóvel${im.dataContratoAssinado?` · ${diasEntre(im.dataContratoAssinado,hoje())}d desde a assinatura`:''}</div>`:''}
+    ${espera!=null?`<div class="hint" style="margin:-4px 0 8px;">Espera do proprietário: <strong>${espera} dias</strong> (assinatura → liberação)</div>`:''}`:''}
+    <div class="form-group" style="max-width:260px;margin-top:4px;"><label>Tipo de onboarding</label>
+      <select id="ct-tipo-onboarding" class="input">
+        <option value="novo"${_ehReativacao(im)?'':' selected'}>Novo</option>
+        <option value="reativacao"${_ehReativacao(im)?' selected':''}>Reativação</option>
+      </select>
+      <div class="hint" style="margin-top:4px;">Reativação = imóvel que já operou com a gente, saiu e voltou. Fica fora das médias de onboarding.</div>
+    </div>
+  </div>`;
+}
 function marcarContratoAssinadoManual(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.contratoAssinado=true;im.dataContratoAssinado=hoje();
@@ -1976,38 +2006,13 @@ function _onDataContratoAssinadoChange(inp){
 
 // ═══════════════════ ABA DEFINIÇÕES ═══════════════════
 function renderAbaDefinicoes(im){
-  const sugLib=!im.dataLiberacao?_sugestaoDataLiberacao(im):null;
-  const espera=_diasEsperaProprietario(im);
-  const evid=im.liberacaoEvidencia||'';
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-key"></i> Liberação do Imóvel</div>
-  <div class="form-row">
-    <div class="form-group"><label>Liberado para vistoria em</label>
-      <input id="def-data-liberacao" type="date" class="input" value="${esc(im.dataLiberacao||'')}" onchange="_onDataLiberacaoChange(this.value)">
-    </div>
-    <div class="form-group"><label>Tipo de onboarding</label>
-      <select id="def-tipo-onboarding" class="input">
-        <option value="novo"${_ehReativacao(im)?'':' selected'}>Novo</option>
-        <option value="reativacao"${_ehReativacao(im)?' selected':''}>Reativação</option>
-      </select>
-    </div>
-  </div>
-  ${sugLib?`<div class="hint" style="margin:-4px 0 8px;"><i class="fa-solid fa-lightbulb"></i> Sugestão: ${fmtDate(sugLib)} (data em que entrou em "${esc(FASE_LABEL.vistoria_compras)}"). <a style="cursor:pointer;color:var(--rose);" onclick="_onDataLiberacaoChange('${sugLib}')">Usar esta data</a></div>`:''}
-  ${!im.dataLiberacao&&im.contratoAssinado?`<div class="hint" style="margin:-4px 0 8px;color:#B45309;">⏸️ Aguardando proprietário liberar o imóvel${im.dataContratoAssinado?` · ${diasEntre(im.dataContratoAssinado,hoje())}d desde o contrato`:''}</div>`:''}
-  ${espera!=null?`<div class="hint" style="margin:-4px 0 8px;">Espera do proprietário: <strong>${espera} dias</strong> (contrato → liberação)</div>`:''}
-  <div class="form-group"><label>Evidência da liberação <span style="font-weight:400;color:var(--text-muted);">(opcional — link ou descrição do print/mensagem do proprietário)</span></label>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <input id="def-liberacao-evidencia" class="input" value="${esc(evid)}" placeholder="https://... ou 'WhatsApp 12/09, print na pasta'">
-      ${/^https?:\/\//i.test(evid)?`<a href="${esc(evid)}" target="_blank" class="btn btn-xs btn-outline" title="Abrir"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`:''}
-    </div>
-  </div>
-  <div class="hint" style="margin-bottom:8px;">Reativação = imóvel que já operou com a gente, saiu e voltou (só vistoria e limpeza). Fica fora das médias de onboarding.</div>
-
-  <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
+  <div class="form-section-title"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
   <div class="form-row" style="flex-wrap:wrap;gap:16px;">
     ${DEF_OPERACIONAIS.map(s=>`<label class="checkbox-label"><input type="checkbox" id="def-op-${esc(s.id)}"${(im.defOperacionais||{})[s.id]?' checked':''}> ${esc(s.nome)}</label>`).join('')}
     ${!DEF_OPERACIONAIS.length?`<span style="font-size:12px;color:var(--text-muted);">Nenhum serviço configurado. Adicione em Configurações.</span>`:''}
   </div>
+  ${DEF_OPERACIONAIS.some(s=>(s.etapas||[]).length)?`<div class="hint" style="margin-top:6px;"><i class="fa-solid fa-list-check"></i> Ao marcar um serviço, as etapas dele entram no checklist do imóvel (aba Captação). As etapas de cada serviço ficam em Configurações.</div>`:''}
 
   <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-broom"></i> Equipe de Limpeza</div>
   <div class="form-group">
@@ -2395,7 +2400,7 @@ function renderAbaCompras(im){
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 4px;"><input class="input compra-preco-input" data-subkey="${subKey}" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
-          <td style="padding:0 8px;white-space:nowrap;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}
+          <td style="padding:0 8px;white-space:nowrap;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:''}
             <button type="button" class="btn btn-xs btn-outline" title="${item.link?'Editar link de compra':'Adicionar link de compra'}" onclick="editarLinkItemCompra(${ITENS_COMPRAS.indexOf(item)})"><i class="fa-solid fa-pen"></i></button></td>
         </tr>`;}).join('')}
         </tbody>
@@ -3239,11 +3244,11 @@ function renderAbaGastos(im){
     </div>
     ${!lancamentosFinanceiro.length?'<div style="font-size:13px;color:var(--text-muted);">Nenhum lançamento registrado.</div>':`
     <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;">
-      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;">Data</th><th style="text-align:left;width:120px;">Tipo</th><th style="text-align:left;width:130px;">Fornecedor</th><th style="text-align:left;">Itens</th><th style="text-align:right;width:100px;">Valor Total</th><th style="text-align:left;">Obs</th><th style="width:64px;"></th></tr></thead>
+      <thead><tr style="background:var(--surface-2)"><th style="text-align:left;width:90px;padding:6px 8px;">Data</th><th style="text-align:left;width:180px;padding:6px 8px;">Tipo</th><th style="text-align:left;width:130px;padding:6px 8px;">Fornecedor</th><th style="text-align:left;padding:6px 8px;">Itens</th><th style="text-align:right;width:110px;padding:6px 8px;">Valor Total</th><th style="text-align:left;padding:6px 8px;">Obs</th><th style="width:64px;"></th></tr></thead>
       <tbody>
       ${lancamentosFinanceiro.map(l=>`<tr style="border-bottom:1px solid var(--border);${l.id===_lancFinEditId?'background:var(--amber-bg);':''}">
         <td style="padding:6px 8px;vertical-align:top;">${l.data?new Date(l.data+'T00:00:00').toLocaleDateString('pt-BR'):'-'}</td>
-        <td style="padding:6px 8px;vertical-align:top;"><span class="tag ${l.tipo==='prestador'?'tag-sky':'tag-gold'}" style="font-size:10.5px;">${esc(LANCFIN_TIPOS[l.tipo||'compra']||'')}</span></td>
+        <td style="padding:6px 8px;vertical-align:top;"><span class="tag ${l.tipo==='prestador'?'tag-sky':'tag-gold'}" style="font-size:10.5px;white-space:normal;line-height:1.25;border-radius:8px;max-width:100%;">${esc(LANCFIN_TIPOS[l.tipo||'compra']||'')}</span></td>
         <td style="padding:6px 8px;vertical-align:top;word-break:break-word;">${esc(l.fornecedor||'')}</td>
         <td style="padding:6px 8px;vertical-align:top;color:var(--text-muted);white-space:pre-wrap;word-break:break-word;">${esc(l.itens||'-')}</td>
         <td style="text-align:right;padding:6px 8px;vertical-align:top;font-weight:600;">${fmtMoeda(+l.valorTotal||0)}</td>
@@ -4341,12 +4346,27 @@ function renderAbaFinal(im){
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
-  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}">
+  <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-link" style="color:var(--brand-gold);"></i> Anúncio em conjunto</div>
+    <div class="form-group"><label>Imóveis do onboarding neste anúncio</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        ${(im.anuncioConjuntoImoveis||[]).map(id=>{const o=getImovel(id);return o?`<span class="tag tag-sky" style="font-size:12px;">${esc(o.nome)} <a style="cursor:pointer;margin-left:4px;" title="Tirar do anúncio" onclick="_acRemoverImovel('${esc(id)}')"><i class="fa-solid fa-xmark"></i></a></span>`:'';}).join('')||'<span style="font-size:12px;color:var(--text-muted);">Nenhum ainda.</span>'}
+      </div>
+      <div style="display:flex;gap:6px;max-width:460px;">
+        <select id="fn-ac-add-imovel" class="input" style="flex:1;">
+          <option value="">— escolher imóvel —</option>
+          ${imoveis.filter(o=>o.id!==im.id&&o.status!=='perdido'&&!(im.anuncioConjuntoImoveis||[]).includes(o.id)).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).map(o=>`<option value="${esc(o.id)}">${esc(o.nome||'(sem nome)')}</option>`).join('')}
+        </select>
+        <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarImovel()"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <div class="hint" style="margin-top:4px;">Os dados deste card ficam iguais em todos os imóveis do anúncio.</div>
+    </div>
     <div class="form-row">
-      <div class="form-group"><label>WC do outro imóvel anunciado junto</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
+      <div class="form-group"><label>Outros imóveis (fora do onboarding)</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
       <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
     </div>
-    <div class="hint" style="margin:6px 0;">Preços do anúncio em conjunto — podem ser diferentes dos preços do imóvel sozinho (aba Contrato).</div>
+    ${_resumoAnuncioConjuntoHtml(im)}
+    <div class="form-section-title" style="margin-top:14px;font-size:12px;"><i class="fa-solid fa-dollar-sign"></i> Valores do anúncio em conjunto</div>
     <div class="form-row">
       <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
       <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
@@ -4359,6 +4379,9 @@ function renderAbaFinal(im){
       <div class="form-group"><label>Caução (R$)</label>${numInput({id:'fn-ac-caucao',value:im.anuncioConjuntoCaucao||0,min:0,step:50})}</div>
       <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'fn-ac-taxa-limpeza',value:im.anuncioConjuntoTaxaLimpeza||0,min:0,step:10})}</div>
     </div>
+    <div class="form-group"><label>Despesas para automatizar no Hostaway</label><textarea id="fn-ac-despesas" class="input" rows="2" placeholder="Ex: taxa de limpeza por reserva, enxoval por reserva, kit amenities...">${esc(im.anuncioConjuntoDespesasHostaway||'')}</textarea></div>
+    <div class="form-group"><label>Limpeza</label><textarea id="fn-ac-limpeza" class="input" rows="2" placeholder="Quem faz a limpeza do anúncio em conjunto, como divide entre os imóveis...">${esc(im.anuncioConjuntoLimpeza||'')}</textarea></div>
+    <div class="form-group"><label>Observações</label><textarea id="fn-ac-obs" class="input" rows="2">${esc(im.anuncioConjuntoObs||'')}</textarea></div>
   </div>
 
   <div id="fn-claire-wrap" style="${resp?'':'display:none;'}margin-top:10px;">
@@ -4378,6 +4401,67 @@ function _onDataAtivacaoChange(inp){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   im.dataAtivacao=inp.value||hoje();
   saveAll();renderKanban();
+}
+// ── Anúncio em conjunto ──
+// im.anuncioConjuntoImoveis = ids dos outros imóveis do onboarding no mesmo anúncio. O vínculo é
+// nos dois sentidos e os campos do card (AC_CAMPOS) são copiados pra todos do grupo ao salvar,
+// então abrir qualquer um dos imóveis mostra o mesmo card.
+const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoWcOutro','anuncioConjuntoValorMinNoite','anuncioConjuntoValorBaseNoite',
+  'anuncioConjuntoTaxaHospedeExtra','anuncioConjuntoTaxaHospedeExtraAcimaDe','anuncioConjuntoCaucao','anuncioConjuntoTaxaLimpeza',
+  'anuncioConjuntoDespesasHostaway','anuncioConjuntoLimpeza','anuncioConjuntoObs'];
+function _grupoAnuncioConjunto(im){return[im.id,...(im.anuncioConjuntoImoveis||[])].filter((id,i,a)=>a.indexOf(id)===i&&getImovel(id));}
+function _propagarAnuncioConjunto(im){
+  const grupo=_grupoAnuncioConjunto(im);
+  grupo.forEach(id=>{
+    if(id===im.id)return;
+    const o=getImovel(id);
+    o.anuncioConjunto=true;
+    o.anuncioConjuntoImoveis=grupo.filter(x=>x!==id);
+    AC_CAMPOS.forEach(k=>{o[k]=im[k];});
+  });
+}
+function _acAdicionarImovel(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const id=document.getElementById('fn-ac-add-imovel')?.value;if(!id)return;
+  _coletarDadosAba('final',im);
+  const outro=getImovel(id);if(!outro)return;
+  // card ainda vazio aqui e o outro imóvel já tem anúncio em conjunto preenchido: puxa os dados dele
+  if(AC_CAMPOS.every(k=>!im[k])&&outro.anuncioConjunto)AC_CAMPOS.forEach(k=>{im[k]=outro[k];});
+  // junta também quem já estava no grupo do outro imóvel
+  im.anuncioConjuntoImoveis=[...new Set([...(im.anuncioConjuntoImoveis||[]),id,...(outro.anuncioConjuntoImoveis||[])])].filter(x=>x!==im.id);
+  im.anuncioConjunto=true;
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+}
+function _acRemoverImovel(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const grupo=_grupoAnuncioConjunto(im);
+  grupo.forEach(gid=>{const o=getImovel(gid);o.anuncioConjuntoImoveis=(o.anuncioConjuntoImoveis||[]).filter(x=>x!==id);});
+  const saiu=getImovel(id);
+  if(saiu){saiu.anuncioConjuntoImoveis=[];saiu.anuncioConjunto=false;}
+  saveAll();renderAba('final');
+}
+// Dados puxados de cada imóvel do grupo: proprietário, limpeza e formulário
+function _resumoAnuncioConjuntoHtml(im){
+  const grupo=_grupoAnuncioConjunto(im).map(getImovel);
+  if(grupo.length<2)return'';
+  const statusForm=o=>o.formEnviadoEm?'<span class="tag tag-sage" style="font-size:10.5px;">enviado</span>'
+    :o.formPreenchidoEm?'<span class="tag tag-lav" style="font-size:10.5px;">preenchendo</span>'
+    :'<span class="tag tag-neutral" style="font-size:10.5px;">não enviado</span>';
+  return`<div style="overflow-x:auto;margin-top:4px;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);border-radius:8px;">
+    <thead><tr style="border-bottom:1px solid var(--border);">
+      <th style="text-align:left;padding:6px 8px;">Imóvel</th><th style="text-align:left;padding:6px 8px;">Proprietário</th>
+      <th style="text-align:left;padding:6px 8px;">Limpeza</th><th style="text-align:left;padding:6px 8px;">Formulário</th><th></th>
+    </tr></thead>
+    <tbody>${grupo.map(o=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:6px 8px;font-weight:600;">${esc(o.nome||'')}${o.id===im.id?' <span style="color:var(--text-muted);font-weight:400;">(este)</span>':''}</td>
+      <td style="padding:6px 8px;">${esc(o.proprietarioNome||'—')}${o.proprietarioTel?`<br><span style="color:var(--text-muted);">${esc(o.proprietarioTel)}</span>`:''}</td>
+      <td style="padding:6px 8px;">${esc(o.defLimpeza?.responsavel||'—')}${o.taxaLimpeza?`<br><span style="color:var(--text-muted);">taxa ${fmtMoeda(o.taxaLimpeza)}${o.custoLimpezaRecorrente?` · custo ${fmtMoeda(o.custoLimpezaRecorrente)}`:''}</span>`:''}</td>
+      <td style="padding:6px 8px;">${statusForm(o)}</td>
+      <td style="padding:6px 8px;text-align:right;">${o.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(o.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`:''}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
@@ -4623,21 +4707,41 @@ function pedirCotacaoJarvis(modo){
 // ═══════════════════ TEMPO DE ONBOARDING ═══════════════════
 // Base de cálculo global (Configurações), vale pro dashboard e pro envio à Claire
 // (o backend lê a mesma chave em /onboarding-stats):
-//   'liberacao' = dataLiberacao → dataAtivacao (sem liberação, cai pro contrato e sinaliza)
+//   'liberacao' = liberação → dataAtivacao (sem liberação, cai pro contrato e sinaliza)
 //   'contrato'  = dataContratoAssinado → dataAtivacao
+// Liberação (aba Contrato): por padrão é a própria data da assinatura; só quando o check
+// "Data de liberação diferente da assinatura?" (im.liberacaoDiferente) está marcado é que
+// vale im.dataLiberacao — e, vazia, o imóvel fica "Aguardando proprietário".
+// O backend (/onboarding-stats) espelha essa regra.
 let KPI_BASE_ONBOARDING='liberacao';
 const KPI_BASE_LABEL={liberacao:'liberação → ativo',contrato:'contrato → ativo'};
 function _ehReativacao(im){return im.tipoOnboarding==='reativacao';}
+// imóveis que ganharam dataLiberacao antes do check existir contam como "diferente"
+function _liberacaoDiferente(im){return im.liberacaoDiferente!=null?!!im.liberacaoDiferente:!!im.dataLiberacao;}
+function _dataLiberacaoEfetiva(im){
+  return (_liberacaoDiferente(im)?im.dataLiberacao:im.dataContratoAssinado)||null;
+}
+function _aguardandoProprietario(im){
+  return _liberacaoDiferente(im)&&!im.dataLiberacao&&!!im.contratoAssinado;
+}
 // {dias, base usada de fato, semLiberacao (fallback pro contrato na base "liberação")}
 function _tempoOnboarding(im,fim){
   fim=fim||im.dataAtivacao;
-  const semLiberacao=KPI_BASE_ONBOARDING==='liberacao'&&!im.dataLiberacao;
-  const usaLib=KPI_BASE_ONBOARDING==='liberacao'&&!!im.dataLiberacao;
-  const ini=usaLib?im.dataLiberacao:im.dataContratoAssinado;
+  const lib=_dataLiberacaoEfetiva(im);
+  const semLiberacao=KPI_BASE_ONBOARDING==='liberacao'&&!lib;
+  const usaLib=KPI_BASE_ONBOARDING==='liberacao'&&!!lib;
+  const ini=usaLib?lib:im.dataContratoAssinado;
   return{dias:ini&&fim?diasEntre(ini,fim):null,base:usaLib?'liberacao':'contrato',semLiberacao};
 }
 function _diasEsperaProprietario(im){
-  return im.dataContratoAssinado&&im.dataLiberacao?diasEntre(im.dataContratoAssinado,im.dataLiberacao):null;
+  const lib=_dataLiberacaoEfetiva(im);
+  return im.dataContratoAssinado&&lib?diasEntre(im.dataContratoAssinado,lib):null;
+}
+function _onLiberacaoDiferenteChange(cb){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba(_abaAtiva,im);
+  im.liberacaoDiferente=!!cb.checked;
+  saveAll();renderKanban();renderAba(_abaAtiva);
 }
 // Sugestão (nunca preenche sozinho): primeira vez que o imóvel entrou em "Vistoria e Compras",
 // tirada do histórico de Atualizações.
@@ -4649,11 +4753,12 @@ function _sugestaoDataLiberacao(im){
 }
 function _onDataLiberacaoChange(val){
   const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba(_abaAtiva,im);
   const anterior=im.dataLiberacao||'';
+  im.liberacaoDiferente=true;
   im.dataLiberacao=val||'';
   if(im.dataLiberacao&&im.dataLiberacao!==anterior)
     _addAtualizacao(im,`Imóvel liberado para vistoria em ${fmtDate(im.dataLiberacao)}`,'fase');
-  _coletarDadosAba(_abaAtiva,im);
   saveAll();renderKanban();renderAba(_abaAtiva);
 }
 function _setKpiBaseOnboarding(v){
@@ -4704,7 +4809,7 @@ function renderDashboard(){
     kpi(tempoMedio!=null?tempoMedio+'d':'—','Operação: liberação → ativo','clock','var(--sky)','var(--sky-bg)',
       `base: ${baseLbl}${qtdSemLib?` · ⚠️ ${qtdSemLib} sem data de liberação`:''}`)+
     kpi(esperaMedia!=null?esperaMedia+'d':'—','Proprietário: contrato → liberação','hourglass-half','#B45309','var(--amber-bg)',
-      `${esperas.length} imóve${esperas.length===1?'l':'is'} com as duas datas`)+
+      `${esperas.length} imóve${esperas.length===1?'l':'is'} (liberado na assinatura = 0d)`)+
     kpi(reativMedia!=null?reativMedia+'d':'—','Reativações: tempo médio','rotate','var(--text-muted)','var(--surface-2)',
       `${reativ.length} reativaç${reativ.length===1?'ão':'ões'} · fora das médias`)+
     kpi(perdidos,'Perdidos','circle-xmark','var(--red)','var(--red-bg)','');
@@ -4745,7 +4850,7 @@ function renderDashboard(){
       <td class="link">${esc(im.nome)}${_ehReativacao(im)?' <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;">Reativação</span>':''}</td>
       <td><span class="tag" style="background:${DASH_FASE_COR[im.status]||'#999999'}22;color:${DASH_FASE_COR[im.status]||'inherit'};font-size:10.5px;">${esc(FASE_LABEL[im.status]||im.status)}</span></td>
       <td>${fmtDate(im.dataContratoAssinado)}</td>
-      <td>${im.dataLiberacao?fmtDate(im.dataLiberacao):'<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;">⏸️ Aguardando proprietário</span>'}</td>
+      <td>${_aguardandoProprietario(im)?'<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;">⏸️ Aguardando proprietário</span>':_liberacaoDiferente(im)?fmtDate(im.dataLiberacao):'<span style="color:var(--text-muted);">na assinatura</span>'}</td>
       <td style="text-align:right;" title="Dias desde ${t.base==='liberacao'?'a liberação':'o contrato'}"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
     </tr>`;}).join(''):`<tr><td colspan="5" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
 
@@ -6430,7 +6535,7 @@ function renderConfig(){
       const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;">
-          <div style="display:flex;gap:4px;align-items:center;margin-top:3px;"><input id="ci-link-${i}" class="input" value="${esc(item.link||'')}" placeholder="Link de compra (https://...)" style="font-size:11px;padding:2px 4px;min-width:160px;color:var(--text-muted);">${item.link?`<a href="${esc(item.link)}" target="_blank" title="Abrir link" style="font-size:12px;">🛒</a>`:''}</div></td>
+          <div style="display:flex;gap:4px;align-items:center;margin-top:3px;"><input id="ci-link-${i}" class="input" value="${esc(item.link||'')}" title="Link de compra" style="font-size:11px;padding:2px 4px;min-width:160px;color:#000;">${item.link?`<a href="${esc(item.link)}" target="_blank" title="Abrir link" style="font-size:12px;">🛒</a>`:''}</div></td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
         <td style="padding:5px 4px;">
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
@@ -6607,26 +6712,88 @@ function _renderConfigDefPagadoria(){
       <input id="def-op-novo-nome" class="input" placeholder="Nome do serviço..." style="flex:1;">
       <button class="btn btn-sm btn-sage" onclick="_addDefOperacional()"><i class="fa-solid fa-plus"></i> Adicionar</button>
     </div>
-    ${!DEF_OPERACIONAIS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum serviço cadastrado.</div>`:`
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--surface-2);">
-        <th style="padding:7px 10px;text-align:left;">Serviço</th>
-        <th style="padding:7px 4px;width:36px;"></th>
-      </tr></thead>
-      <tbody>
-      ${DEF_OPERACIONAIS.map((s,i)=>`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:7px 10px;">${esc(s.nome)}</td>
-        <td style="padding:4px;"><button class="btn btn-xs btn-danger" onclick="_removerDefOperacional(${i})"><i class="fa-solid fa-trash"></i></button></td>
-      </tr>`).join('')}
-      </tbody>
-    </table>`}`;
+    <div class="hint" style="margin-bottom:10px;">Quando um serviço é marcado na aba Definições de um imóvel, as etapas dele entram sozinhas no checklist do imóvel (aba Captação). Desmarcar tira as etapas que ainda não foram concluídas.</div>
+    ${!DEF_OPERACIONAIS.length?`<div style="font-size:13px;color:var(--text-muted);">Nenhum serviço cadastrado.</div>`:
+    DEF_OPERACIONAIS.map((s,i)=>`<div class="card" style="margin-bottom:10px;background:var(--surface-2);">
+      <div class="card-body" style="padding:10px 12px;">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <input class="input" style="font-weight:700;flex:1;" value="${esc(s.nome)}" onchange="_renomearDefOperacional(${i},this.value)">
+          <button class="btn btn-xs btn-danger" onclick="_removerDefOperacional(${i})" title="Apagar serviço"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        ${(s.etapas||[]).map((e,ei)=>`<div style="display:flex;gap:6px;align-items:center;margin:0 0 6px 18px;">
+          <i class="fa-regular fa-square-check" style="color:var(--text-muted);font-size:12px;"></i>
+          <input class="input" style="flex:1;font-size:12.5px;padding:5px 8px;" value="${esc(e.texto)}" onchange="_editarEtapaDefOperacional(${i},${ei},this.value)">
+          <button class="btn btn-xs btn-danger" onclick="_removerEtapaDefOperacional(${i},${ei})" title="Remover etapa"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('')}
+        <div style="display:flex;gap:6px;margin-left:18px;">
+          <input class="input" id="def-op-nova-etapa-${i}" placeholder="Nova etapa do checklist (ex: Habilitar pagadoria)..." style="flex:1;font-size:12.5px;padding:5px 8px;" onkeydown="if(event.key==='Enter'){_adicionarEtapaDefOperacional(${i});event.preventDefault();}">
+          <button class="btn btn-xs btn-sage" onclick="_adicionarEtapaDefOperacional(${i})"><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
+    </div>`).join('')}`;
+}
+function _renomearDefOperacional(i,nome){
+  const s=DEF_OPERACIONAIS[i];if(!s)return;
+  s.nome=nome.trim()||s.nome;
+  saveAll();
+}
+function _editarEtapaDefOperacional(i,ei,texto){
+  const s=DEF_OPERACIONAIS[i];if(!s||!s.etapas?.[ei])return;
+  s.etapas[ei].texto=texto.trim()||s.etapas[ei].texto;
+  // atualiza o texto nos checklists que ainda não concluíram essa etapa
+  imoveis.forEach(im=>(im.checklistEtapas||[]).forEach(e=>{if(e.origemEtapa===s.etapas[ei].id&&!e.concluida)e.texto=s.etapas[ei].texto;}));
+  saveAll();
+}
+function _removerEtapaDefOperacional(i,ei){
+  const s=DEF_OPERACIONAIS[i];if(!s||!s.etapas?.[ei])return;
+  s.etapas.splice(ei,1);
+  saveAll();_renderConfigDefPagadoria();
+}
+function _adicionarEtapaDefOperacional(i){
+  const s=DEF_OPERACIONAIS[i];if(!s)return;
+  const inp=document.getElementById('def-op-nova-etapa-'+i);
+  const texto=(inp?.value||'').trim();if(!texto)return;
+  if(!s.etapas)s.etapas=[];
+  s.etapas.push({id:'dep_'+uid()+uid(),texto});
+  // imóveis em andamento que já têm esse serviço marcado ganham a etapa nova
+  imoveis.filter(im=>im.status!=='ativo'&&im.status!=='perdido').forEach(_sincronizarEtapasDefOperacionais);
+  saveAll();_renderConfigDefPagadoria();
+}
+// Etapas dos serviços marcados em Definições entram no checklist do imóvel (marcadas com
+// origemDef/origemEtapa); serviço desmarcado tira as etapas dele que não foram concluídas.
+function _sincronizarEtapasDefOperacionais(im){
+  const marcados=im.defOperacionais||{};
+  let lista=im.checklistEtapas||[];
+  DEF_OPERACIONAIS.forEach(s=>{
+    if(marcados[s.id]){
+      (s.etapas||[]).forEach(et=>{
+        if(!lista.some(e=>e.origemEtapa===et.id))
+          lista.push({id:'etp_'+uid()+uid(),texto:et.texto,concluida:false,origemDef:s.id,origemEtapa:et.id});
+      });
+    } else {
+      lista=lista.filter(e=>e.origemDef!==s.id||e.concluida);
+    }
+  });
+  im.checklistEtapas=lista;
+}
+// Sugestões iniciais de etapas pros serviços que já existiam (só roda em serviço que nunca
+// teve o campo etapas — depois disso é 100% editável em Configurações).
+function _seedEtapasDefOperacionais(){
+  let mudou=false;
+  const sugestoes=[[/pagadoria/i,'Habilitar pagadoria'],[/claro/i,'Contratar internet Claro'],[/easy\s*cover/i,'Adicionar imóvel na planilha da EasyCover']];
+  DEF_OPERACIONAIS.forEach(s=>{
+    if(Array.isArray(s.etapas))return;
+    s.etapas=sugestoes.filter(([re])=>re.test(s.nome||'')).map(([,texto])=>({id:'dep_'+uid()+uid(),texto}));
+    mudou=true;
+  });
+  return mudou;
 }
 function _addDefOperacional(){
   const inp=document.getElementById('def-op-novo-nome');
   const nome=(inp?.value||'').trim();
   if(!nome){showToast('Informe o nome do serviço.','peach');return;}
   const id='def_'+nome.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
-  DEF_OPERACIONAIS.push({id,nome});
+  DEF_OPERACIONAIS.push({id,nome,etapas:[]});
   saveAll();_renderConfigDefPagadoria();
   if(inp)inp.value='';
   showToast('Serviço adicionado!','sage');

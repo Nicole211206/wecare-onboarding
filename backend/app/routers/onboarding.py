@@ -85,6 +85,18 @@ async def save_stats(request: Request, db: Session = Depends(get_db), token: str
     return {"ok": True}
 
 
+def _data_liberacao_efetiva(im: models.Imovel):
+    """Mesma regra de _dataLiberacaoEfetiva (app.js): a liberação é a data da assinatura,
+    a não ser que o check "Data de liberação diferente da assinatura?" esteja marcado —
+    aí vale dataLiberacao (vazia = aguardando o proprietário). Imóvel com dataLiberacao
+    de antes do check existir conta como "diferente"."""
+    extra = im.extra or {}
+    lib = extra.get("dataLiberacao") or None
+    diferente = extra.get("liberacaoDiferente")
+    diferente = bool(lib) if diferente is None else bool(diferente)
+    return lib if diferente else (im.data_contrato_assinado or None)
+
+
 @router.get("/onboarding-stats")
 def onboarding_stats(db: Session = Depends(get_db)):
     """Sem auth — a Claire lê aqui (comportamento idêntico ao worker.js)."""
@@ -95,7 +107,7 @@ def onboarding_stats(db: Session = Depends(get_db)):
     atualizado_em = data.get("atualizadoEm")
 
     # Base de cálculo do tempo de onboarding (Configurações do painel):
-    # "liberacao" = dataLiberacao → dataAtivacao (fallback pro contrato se faltar)
+    # "liberacao" = liberação efetiva → dataAtivacao (fallback pro contrato se faltar)
     # "contrato"  = dataContratoAssinado → dataAtivacao
     base_row = db.get(models.ConfigTexto, "kpi_base_onboarding")
     base_kpi = "contrato" if base_row and base_row.texto == "contrato" else "liberacao"
@@ -114,7 +126,7 @@ def onboarding_stats(db: Session = Depends(get_db)):
             "incluirSetupClaire": im.incluir_setup_claire,
             "eventosExtras": (im.extra or {}).get("eventosExtras") or [],
             "ops": (im.extra or {}).get("ops") or {},
-            "dataLiberacao": (im.extra or {}).get("dataLiberacao") or None,
+            "dataLiberacao": _data_liberacao_efetiva(im),
             "tipoOnboarding": "Reativação" if (im.extra or {}).get("tipoOnboarding") == "reativacao" else "Novo",
         }
         for im in db.scalars(select(models.Imovel))

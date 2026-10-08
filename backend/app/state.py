@@ -205,7 +205,7 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             for c in db.scalars(select(models.ConfigFotoPreco))
         },
         "wc_def_operacionais": [
-            {"id": d.id, "nome": d.nome}
+            {"id": d.id, "nome": d.nome, "etapas": d.etapas or []}
             for d in db.scalars(select(models.DefOperacional).order_by(models.DefOperacional.ordem))
         ],
         "wc_vistoria_campos": [
@@ -470,7 +470,7 @@ def put_state(db: Session, state: dict) -> None:
     if "wc_def_operacionais" in state:
         db.execute(delete(models.DefOperacional))
         for idx, d in enumerate(state["wc_def_operacionais"] or []):
-            db.add(models.DefOperacional(id=d["id"], nome=d.get("nome"), ordem=idx))
+            db.add(models.DefOperacional(id=d["id"], nome=d.get("nome"), etapas=d.get("etapas") or [], ordem=idx))
 
     if "wc_vistoria_campos" in state:
         db.execute(delete(models.VistoriaCampo))
