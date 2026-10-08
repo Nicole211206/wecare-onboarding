@@ -1382,13 +1382,10 @@ function _coletarDadosAba(aba,im){
     }
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
-    if(document.getElementById('fn-anuncio-conjunto-wrap'))im.anuncioConjuntoExternos=_acColetarExternos();
-    im.anuncioConjuntoValorMinNoite=gn('fn-ac-min-noite');
-    im.anuncioConjuntoValorBaseNoite=gn('fn-ac-base-noite');
-    im.anuncioConjuntoTaxaHospedeExtra=gn('fn-ac-taxa-extra');
-    im.anuncioConjuntoTaxaHospedeExtraAcimaDe=gn('fn-ac-extra-acima');
-    im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
-    im.anuncioConjuntoTaxaLimpeza=gn('fn-ac-taxa-limpeza');
+    // imóveis de fora do onboarding são salvos pela janela própria (_acSalvarExterno)
+    if(document.getElementById('fn-ac-caucao'))im.anuncioConjuntoCaucao=gn('fn-ac-caucao');
+    // limpeza do anúncio = soma automática do cobrado/custo de cada imóvel
+    if(im.anuncioConjunto){const t=_acTotais(_acUnidades(im));im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;}
     if(document.getElementById('fn-ac-despesas')){
       im.anuncioConjuntoDespesasHostaway=g('fn-ac-despesas');
       im.anuncioConjuntoLimpeza=g('fn-ac-limpeza');
@@ -4368,28 +4365,21 @@ function renderAbaFinal(im){
       </select>
       <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarImovel()"><i class="fa-solid fa-plus"></i> Adicionar</button>
       <span style="color:var(--text-muted);font-size:12px;">ou</span>
-      <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarExterno()"><i class="fa-solid fa-plus"></i> Imóvel fora do onboarding</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_acAbrirExterno()"><i class="fa-solid fa-plus"></i> Imóvel fora do onboarding</button>
     </div>
-    <div class="hint" style="margin-bottom:8px;">Imóvel do onboarding: os dados são puxados dele e somados abaixo, e este card aparece igual nele também. Imóvel que já está ativo fora do onboarding: preencha os dados no bloco dele.</div>
+    <div class="hint" style="margin-bottom:8px;">Imóvel do onboarding: os dados são puxados dele e somados abaixo, e este card aparece igual nele também. Imóvel que já está ativo fora do onboarding: clique no botão, preencha os dados e salve — ele entra na lista.</div>
     ${_resumoAnuncioConjuntoHtml(im)}
-    ${_acExternos(im).map(x=>_acExternoHtml(x)).join('')}
 
     <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
       <div class="form-section-title" style="font-size:12px;margin:0;flex:1;"><i class="fa-solid fa-dollar-sign"></i> Valores do anúncio em conjunto</div>
-      ${_acUnidades(im).length>1?`<button type="button" class="btn btn-xs btn-outline" onclick="_acUsarTotais()" title="Preenche caução e taxa de limpeza com a soma dos imóveis"><i class="fa-solid fa-calculator"></i> Usar os totais</button>`:''}
+      ${_acUnidades(im).length>1?`<button type="button" class="btn btn-xs btn-outline" onclick="_acUsarTotais()" title="Preenche a caução com a soma dos imóveis"><i class="fa-solid fa-calculator"></i> Caução = soma</button>`:''}
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
-      <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'fn-ac-taxa-extra',value:im.anuncioConjuntoTaxaHospedeExtra||0,min:0,step:10})}</div>
-      <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'fn-ac-extra-acima',value:im.anuncioConjuntoTaxaHospedeExtraAcimaDe||0,min:0})}</div>
-    </div>
-    <div class="form-row">
+    ${(()=>{const t=_acTotais(_acUnidades(im));return`<div class="form-row">
       <div class="form-group"><label>Caução (R$)</label>${numInput({id:'fn-ac-caucao',value:im.anuncioConjuntoCaucao||0,min:0,step:50})}</div>
-      <div class="form-group"><label>Taxa de Limpeza (R$)</label>${numInput({id:'fn-ac-taxa-limpeza',value:im.anuncioConjuntoTaxaLimpeza||0,min:0,step:10})}</div>
+      <div class="form-group"><label>Limpeza — cobrado (R$) <span style="font-weight:400;color:var(--text-muted);">soma automática</span></label><input class="input" readonly value="${fmtMoeda(t.taxaLimpeza)}" style="background:var(--surface);font-weight:600;"></div>
+      <div class="form-group"><label>Limpeza — custo (R$) <span style="font-weight:400;color:var(--text-muted);">soma automática</span></label><input class="input" readonly value="${fmtMoeda(t.custoLimpeza)}" style="background:var(--surface);font-weight:600;"></div>
     </div>
+    <div class="hint" style="margin:-6px 0 10px;">Margem da limpeza: <strong style="color:${t.taxaLimpeza-t.custoLimpeza>=0?'var(--sage)':'var(--rose)'};">${fmtMoeda(t.taxaLimpeza-t.custoLimpeza)}</strong> · vem do cobrado/custo de limpeza de cada imóvel (aba Contrato, ou o cadastro do imóvel de fora).</div>`;})()}
     <div class="form-group"><label>Despesas para automatizar no Hostaway</label><textarea id="fn-ac-despesas" class="input" rows="2" placeholder="Ex: taxa de limpeza por reserva, enxoval por reserva, kit amenities...">${esc(im.anuncioConjuntoDespesasHostaway||'')}</textarea></div>
     <div class="form-group"><label>Limpeza</label><textarea id="fn-ac-limpeza" class="input" rows="2" placeholder="Quem faz a limpeza do anúncio em conjunto, como divide entre os imóveis...">${esc(im.anuncioConjuntoLimpeza||'')}</textarea></div>
     <div class="form-group"><label>Observações</label><textarea id="fn-ac-obs" class="input" rows="2">${esc(im.anuncioConjuntoObs||'')}</textarea></div>
@@ -4418,63 +4408,63 @@ function _onDataAtivacaoChange(inp){
 // nos dois sentidos e os campos do card (AC_CAMPOS) são copiados pra todos do grupo ao salvar,
 // então abrir qualquer um dos imóveis mostra o mesmo card.
 // Imóveis fora do onboarding (anúncio já ativo) ficam em im.anuncioConjuntoExternos, preenchidos à mão.
-const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoExternos','anuncioConjuntoValorMinNoite','anuncioConjuntoValorBaseNoite',
-  'anuncioConjuntoTaxaHospedeExtra','anuncioConjuntoTaxaHospedeExtraAcimaDe','anuncioConjuntoCaucao','anuncioConjuntoTaxaLimpeza',
-  'anuncioConjuntoDespesasHostaway','anuncioConjuntoLimpeza','anuncioConjuntoObs'];
+const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoExternos','anuncioConjuntoCaucao','anuncioConjuntoTaxaLimpeza',
+  'anuncioConjuntoCustoLimpeza','anuncioConjuntoDespesasHostaway','anuncioConjuntoLimpeza','anuncioConjuntoObs'];
 const AC_EXT_CAMPOS=[
   ['nome','Nome / WC do imóvel','text'],['linkAnuncio','Link do anúncio atual','text'],
   ['proprietario','Proprietário','text'],['tel','Telefone','text'],
   ['endereco','Endereço','text'],['camas','Camas (ex: 1 casal, 2 solteiro)','text'],
   ['quartos','Quartos','number'],['banheiros','Banheiros','number'],
   ['hospedes','Máx. hóspedes','number'],['caucao','Caução (R$)','number'],
-  ['taxaLimpeza','Taxa de limpeza (R$)','number'],['custoLimpeza','Custo de limpeza (R$)','number'],
+  ['taxaLimpeza','Limpeza — cobrado (R$)','number'],['custoLimpeza','Limpeza — custo (R$)','number'],
   ['limpezaResp','Quem faz a limpeza','text'],
 ];
-// O antigo campo de texto "Outros imóveis" vira um bloco de imóvel externo (só o nome preenchido)
+// O antigo campo de texto "Outros imóveis" aparece como um imóvel externo só com o nome
 function _acExternos(im){
   if(Array.isArray(im.anuncioConjuntoExternos))return im.anuncioConjuntoExternos;
   return im.anuncioConjuntoWcOutro?[{id:'ext_legado',nome:im.anuncioConjuntoWcOutro}]:[];
 }
-function _acExternoHtml(x){
-  return`<div class="ac-ext-card" data-ext-id="${esc(x.id)}" style="background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:10px 12px;margin-top:8px;">
-    <div style="display:flex;align-items:center;margin-bottom:6px;">
-      <span class="tag tag-neutral" style="font-size:10.5px;">fora do onboarding</span>
-      <button type="button" class="btn btn-xs btn-danger" style="margin-left:auto;" onclick="_acRemoverExterno('${esc(x.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 10px;">
-      ${AC_EXT_CAMPOS.map(([k,lbl,tipo])=>`<div class="form-group" style="margin:0;"><label style="font-size:11px;">${lbl}</label><input class="input ac-ext-in" data-k="${k}" type="${tipo}"${tipo==='number'?' min="0"':''} value="${esc(x[k]??'')}" onchange="_acAtualizarCard()" style="padding:5px 8px;font-size:12.5px;"></div>`).join('')}
-    </div>
-    <div class="form-group" style="margin:6px 0 0;"><label style="font-size:11px;">Outras informações pro anúncio (comodidades, regras, acesso, check-in...)</label><textarea class="input ac-ext-in" data-k="info" rows="3" style="font-size:12.5px;">${esc(x.info||'')}</textarea></div>
-  </div>`;
-}
-function _acColetarExternos(){
-  return[...document.querySelectorAll('#fn-anuncio-conjunto-wrap .ac-ext-card')].map(card=>{
-    const x={id:card.dataset.extId==='ext_legado'?'ext_'+uid():card.dataset.extId};
-    card.querySelectorAll('.ac-ext-in').forEach(el=>{
-      const tipo=(AC_EXT_CAMPOS.find(c=>c[0]===el.dataset.k)||[])[2];
-      x[el.dataset.k]=tipo==='number'?(el.value===''?'':+el.value):el.value;
-    });
-    return x;
-  });
-}
-function _acAtualizarCard(){
-  const im=getImovel(_imovelAtivoId);if(!im)return;
-  _coletarDadosAba('final',im);saveAll();
-  const y=document.getElementById('detalhe-body')?.scrollTop;renderAba('final');
-  const body=document.getElementById('detalhe-body');if(body&&y!=null)body.scrollTop=y;
-}
-function _acAdicionarExterno(){
+// Janela própria pra cadastrar/editar um imóvel de fora do onboarding; ao salvar ele entra na lista
+function _acAbrirExterno(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   _coletarDadosAba('final',im);
-  im.anuncioConjunto=true;
-  im.anuncioConjuntoExternos=[..._acExternos(im),{id:'ext_'+uid()}];
+  const x=(id&&_acExternos(im).find(e=>e.id===id))||{};
+  document.getElementById('generico-titulo').textContent=id?'Editar imóvel fora do onboarding':'Imóvel fora do onboarding';
+  document.getElementById('generico-body').innerHTML=`
+    <div class="hint" style="margin-bottom:10px;">Dados do imóvel que já está ativo e vai entrar no anúncio em conjunto. Ao salvar, ele entra na lista e soma nos totais.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px 12px;">
+      ${AC_EXT_CAMPOS.map(([k,lbl,tipo])=>`<div class="form-group" style="margin:0;"><label>${lbl}</label><input class="input" id="ac-ext-${k}" type="${tipo}"${tipo==='number'?' min="0"':''} value="${esc(x[k]??'')}"></div>`).join('')}
+    </div>
+    <div class="form-group" style="margin-top:8px;"><label>Outras informações pro anúncio (comodidades, regras, acesso, check-in...)</label><textarea class="input" id="ac-ext-info" rows="4">${esc(x.info||'')}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button class="btn btn-sm btn-outline" onclick="closeModal('modal-generico')">Cancelar</button>
+      <button class="btn btn-sm btn-sage" onclick="_acSalvarExterno('${esc(id||'')}')"><i class="fa-solid fa-check"></i> Salvar</button>
+    </div>`;
+  document.getElementById('modal-generico').classList.add('open');
+  setTimeout(()=>document.getElementById('ac-ext-nome')?.focus(),50);
+}
+function _acSalvarExterno(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const x={id:(id&&id!=='ext_legado')?id:'ext_'+uid()+uid()};
+  AC_EXT_CAMPOS.forEach(([k,,tipo])=>{const v=document.getElementById('ac-ext-'+k)?.value??'';x[k]=tipo==='number'?(v===''?'':+v):v.trim();});
+  x.info=document.getElementById('ac-ext-info')?.value||'';
+  if(!x.nome){showToast('Informe o nome ou WC do imóvel.','peach');return;}
+  const atuais=_acExternos(im), pos=atuais.findIndex(e=>e.id===id);
+  const lista=atuais.filter(e=>e.id!==id);
+  if(pos>=0)lista.splice(pos,0,x);else lista.push(x);
+  im.anuncioConjunto=true;im.anuncioConjuntoExternos=lista;
+  const t=_acTotais(_acUnidades(im));
+  if(!im.anuncioConjuntoCaucao)im.anuncioConjuntoCaucao=t.caucao;
+  im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;
   _propagarAnuncioConjunto(im);
-  saveAll();renderAba('final');
+  saveAll();closeModal('modal-generico');renderAba('final');
+  showToast(id?'Imóvel atualizado.':'Imóvel adicionado ao anúncio.','sage');
 }
 function _acRemoverExterno(id){
   const im=getImovel(_imovelAtivoId);if(!im)return;
-  _coletarDadosAba('final',im);
+  if(!confirm('Tirar este imóvel do anúncio em conjunto?'))return;
   im.anuncioConjuntoExternos=_acExternos(im).filter(x=>x.id!==id);
+  _coletarDadosAba('final',im); // recalcula a limpeza sem ele
   _propagarAnuncioConjunto(im);
   saveAll();renderAba('final');
 }
@@ -4499,10 +4489,10 @@ function _acUsarTotais(){
   const im=getImovel(_imovelAtivoId);if(!im)return;
   _coletarDadosAba('final',im);
   const t=_acTotais(_acUnidades(im));
-  im.anuncioConjuntoCaucao=t.caucao;im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;
+  im.anuncioConjuntoCaucao=t.caucao;
   _propagarAnuncioConjunto(im);
   saveAll();renderAba('final');
-  showToast('Caução e taxa de limpeza preenchidas com a soma dos imóveis.','sage');
+  showToast('Caução preenchida com a soma dos imóveis.','sage');
 }
 function _grupoAnuncioConjunto(im){return[im.id,...(im.anuncioConjuntoImoveis||[])].filter((id,i,a)=>a.indexOf(id)===i&&getImovel(id));}
 function _propagarAnuncioConjunto(im){
@@ -4528,7 +4518,7 @@ function _acAdicionarImovel(){
   // valores ainda zerados: já começa com a soma dos imóveis
   const t=_acTotais(_acUnidades(im));
   if(!im.anuncioConjuntoCaucao)im.anuncioConjuntoCaucao=t.caucao;
-  if(!im.anuncioConjuntoTaxaLimpeza)im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;
+  im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;im.anuncioConjuntoCustoLimpeza=t.custoLimpeza;
   _propagarAnuncioConjunto(im);
   saveAll();renderAba('final');
 }
@@ -4564,16 +4554,18 @@ function _resumoAnuncioConjuntoHtml(im){
       <td style="${td}text-align:center;">${u.quartos||'—'}</td><td style="${td}text-align:center;">${u.banheiros||'—'}</td><td style="${td}text-align:center;">${u.hospedes||'—'}</td>
       <td style="${td}">${esc(u.camas||'—')}</td>
       <td style="${td}text-align:right;">${u.caucao?fmtMoeda(u.caucao):'—'}</td>
-      <td style="${td}">${esc(u.limpezaResp||'—')}${u.taxaLimpeza?`<br><span style="color:var(--text-muted);">taxa ${fmtMoeda(u.taxaLimpeza)}${u.custoLimpeza?` · custo ${fmtMoeda(u.custoLimpeza)}`:''}</span>`:''}</td>
+      <td style="${td}">${esc(u.limpezaResp||'—')}${u.taxaLimpeza?`<br><span style="color:var(--text-muted);">cobrado ${fmtMoeda(u.taxaLimpeza)}${u.custoLimpeza?` · custo ${fmtMoeda(u.custoLimpeza)}`:''}</span>`:''}</td>
       <td style="${td}">${statusForm(u)}</td>
-      <td style="${td}text-align:right;white-space:nowrap;">${!u.externo&&u.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(u.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverImovel('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`:''}</td>
+      <td style="${td}text-align:right;white-space:nowrap;">${u.externo
+        ?`<button type="button" class="btn btn-xs btn-outline" onclick="_acAbrirExterno('${esc(u.id)}')" title="Ver / editar dados"><i class="fa-solid fa-pen"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverExterno('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`
+        :u.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(u.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverImovel('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`:''}</td>
     </tr>`).join('')}
     <tr style="background:var(--surface-2);font-weight:700;">
       <td style="${td}" colspan="2">Total do anúncio</td>
       <td style="${td}text-align:center;">${t.quartos}</td><td style="${td}text-align:center;">${t.banheiros}</td><td style="${td}text-align:center;">${t.hospedes}</td>
       <td style="${td}font-weight:400;">${esc(t.camas||'—')}</td>
       <td style="${td}text-align:right;">${fmtMoeda(t.caucao)}</td>
-      <td style="${td}font-weight:400;">taxa ${fmtMoeda(t.taxaLimpeza)}${t.custoLimpeza?` · custo ${fmtMoeda(t.custoLimpeza)}`:''}</td>
+      <td style="${td}font-weight:400;">cobrado ${fmtMoeda(t.taxaLimpeza)} · custo ${fmtMoeda(t.custoLimpeza)}</td>
       <td colspan="2"></td>
     </tr></tbody>
   </table></div>`;
@@ -4596,11 +4588,10 @@ async function gerarPDFAnuncioConjunto(){
     <tr style="font-weight:700;background:#F7F2E8;"><td style="padding:6px;" colspan="2">Total</td><td style="padding:6px;text-align:center;">${t.quartos}</td><td style="padding:6px;text-align:center;">${t.banheiros}</td><td style="padding:6px;text-align:center;">${t.hospedes}</td><td style="padding:6px;font-weight:400;">${esc(t.camas||'—')}</td></tr>
   </table>`;
   const valores=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
-    ${campo('Diária mínima',im.anuncioConjuntoValorMinNoite?fmtMoeda(im.anuncioConjuntoValorMinNoite):'',true)}
-    ${campo('Diária base',im.anuncioConjuntoValorBaseNoite?fmtMoeda(im.anuncioConjuntoValorBaseNoite):'',true)}
-    ${campo('Taxa hóspede extra'+(im.anuncioConjuntoTaxaHospedeExtraAcimaDe?` (acima de ${im.anuncioConjuntoTaxaHospedeExtraAcimaDe})`:''),im.anuncioConjuntoTaxaHospedeExtra?fmtMoeda(im.anuncioConjuntoTaxaHospedeExtra):'',true)}
     ${campo('Caução',im.anuncioConjuntoCaucao?fmtMoeda(im.anuncioConjuntoCaucao):'',true)}
-    ${campo('Taxa de limpeza',im.anuncioConjuntoTaxaLimpeza?fmtMoeda(im.anuncioConjuntoTaxaLimpeza):'',true)}
+    <div></div>
+    ${campo('Limpeza — cobrado (soma)',fmtMoeda(t.taxaLimpeza),true)}
+    ${campo('Limpeza — custo (soma)',fmtMoeda(t.custoLimpeza),true)}
   </div>
   ${campo('Despesas para automatizar no Hostaway',im.anuncioConjuntoDespesasHostaway)}
   ${campo('Limpeza',im.anuncioConjuntoLimpeza)}
@@ -4621,7 +4612,7 @@ async function gerarPDFAnuncioConjunto(){
   }).join('');
   const externosHtml=un.filter(u=>u.externo).map(u=>sec('🏠',esc(u.nome||'Imóvel fora do onboarding')+' (fora do onboarding)',`
     ${campo('Link do anúncio atual',u.linkAnuncio)}${campo('Endereço',u.endereco)}
-    ${campo('Limpeza',[u.limpezaResp,u.taxaLimpeza?'taxa '+fmtMoeda(u.taxaLimpeza):''].filter(Boolean).join(' · '))}
+    ${campo('Limpeza',[u.limpezaResp,u.taxaLimpeza?'cobrado '+fmtMoeda(u.taxaLimpeza):'',u.custoLimpeza?'custo '+fmtMoeda(u.custoLimpeza):''].filter(Boolean).join(' · '))}
     ${campo('Outras informações',u.info)}`)).join('');
   const cab={nome:'Anúncio em conjunto'+(im.anuncioConjuntoWc?' — '+im.anuncioConjuntoWc:''),proprietarioNome:[...new Set(un.map(u=>u.proprietario).filter(Boolean))].join(', ')};
   win.document.write(`<html><head><meta charset="utf-8"><title>Anúncio em conjunto${im.anuncioConjuntoWc?' — '+esc(im.anuncioConjuntoWc):''}</title>
