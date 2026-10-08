@@ -4,6 +4,8 @@ let _editProprietarioIdx=null, _novoProprietarioParaImovelId=null;
 let _imovelAtivoId=null, _abaAtiva='dados';
 let _editMembroIdx=null, _editUsuarioEmail=null, _editPrestadorIdx=null;
 let templatesMsg=[], processoTexto='', anotacoesTexto='', manualFornecedores='';
+// Anotações em post-its: [{id,html,cor,criadoEm,autor,editadoEm}] (wc_anotacoes_notas)
+let anotacoesNotas=[];
 let _infoTabAtiva='mensagens', _editTemplateMsgIdx=null;
 let orcamentos=[], estoqueItens=[];
 let _editOrcamentoId=null, _orcItensSoltosTemp=[];
@@ -550,7 +552,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval','wc_kpi_base_onboarding'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval','wc_kpi_base_onboarding','wc_anotacoes_notas'];
 // Controle de sync por coleção (incidente 2026-09-24 — ver REV_KEYS em backend/app/merge.py).
 // Antes, cada push mandava TODAS as coleções do localStorage, e a decisão de puxar do servidor
 // comparava o lastSaved do relógio de cada máquina: um navegador desatualizado que fizesse
@@ -699,6 +701,7 @@ function saveAll(){
   localStorage.setItem('wc_templates_msg',JSON.stringify(templatesMsg));
   localStorage.setItem('wc_processo_texto',JSON.stringify(processoTexto));
   localStorage.setItem('wc_anotacoes_texto',JSON.stringify(anotacoesTexto));
+  localStorage.setItem('wc_anotacoes_notas',JSON.stringify(anotacoesNotas));
   localStorage.setItem('wc_manual_fornecedores',JSON.stringify(manualFornecedores));
   localStorage.setItem('wc_orcamentos',JSON.stringify(orcamentos));
   localStorage.setItem('wc_estoque_itens',JSON.stringify(estoqueItens));
@@ -729,6 +732,8 @@ function loadAll(){
   v=g('wc_templates_msg');if(Array.isArray(v))templatesMsg=v;
   v=g('wc_processo_texto');if(typeof v==='string')processoTexto=v;
   v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
+  v=g('wc_anotacoes_notas');if(Array.isArray(v))anotacoesNotas=v;
+  if(_migrarAnotacoesParaNotas())saveAll();
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
@@ -5863,7 +5868,7 @@ function renderInfoTabContent(){
   if(!c)return;
   if(_infoTabAtiva==='mensagens')c.innerHTML=renderInfoMensagensHTML();
   else if(_infoTabAtiva==='processo')c.innerHTML=editorRicoHTML('processo',processoTexto);
-  else if(_infoTabAtiva==='anotacoes')c.innerHTML=editorRicoHTML('anotacoes',anotacoesTexto);
+  else if(_infoTabAtiva==='anotacoes')c.innerHTML=renderAnotacoesNotasHTML();
 }
 
 // ── Mensagens (templates) ──
@@ -5937,7 +5942,95 @@ function copiarTemplateMsg(idx){
   navigator.clipboard.writeText(templatesMsg[idx].texto).then(()=>showToast('Texto copiado.'));
 }
 
-// ── Editor de texto rico (Processo / Anotações) ──
+// ── Anotações em post-its ──
+// Cada "Salvar" vira um bloco. As cores são fixas (papel claro com texto escuro) nos dois temas.
+const NOTA_CORES={amarelo:'#FFF3B0',rosa:'#FFD9E2',azul:'#D6EBFF',verde:'#D8F3D4',lilas:'#E7DEFF'};
+let _notaCorNova='amarelo', _notaEditId=null, _notasBusca='';
+// O texto único antigo vira o primeiro post-it (id fixo: dois navegadores migrando não duplicam)
+function _migrarAnotacoesParaNotas(){
+  const txt=(anotacoesTexto||'').replace(/<[^>]*>|&nbsp;/g,'').trim();
+  if(!txt)return false;
+  if(!anotacoesNotas.some(n=>n.id==='nota_legado'))
+    anotacoesNotas.unshift({id:'nota_legado',html:anotacoesTexto,cor:'amarelo',criadoEm:new Date().toISOString(),autor:''});
+  anotacoesTexto='';
+  return true;
+}
+function _notaToolbarHTML(alvo){
+  const b=(cmd,val,ic,t)=>`<button type="button" class="btn btn-xs" onmousedown="event.preventDefault()" onclick="_notaExec('${alvo}','${cmd}'${val?`,'${val}'`:''})" title="${t}">${ic}</button>`;
+  return b('bold','','<i class="fa-solid fa-bold"></i>','Negrito')+b('italic','','<i class="fa-solid fa-italic"></i>','Itálico')
+    +b('formatBlock','H3','<i class="fa-solid fa-heading"></i>','Título')+b('insertUnorderedList','','<i class="fa-solid fa-list-ul"></i>','Lista')
+    +b('insertOrderedList','','<i class="fa-solid fa-list-ol"></i>','Lista numerada');
+}
+function _notaExec(alvo,cmd,val){document.getElementById(alvo)?.focus();document.execCommand(cmd,false,val||null);}
+function _notasFiltradas(){
+  const busca=_notasBusca.toLowerCase().trim();
+  return[...anotacoesNotas].sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''))
+    .filter(n=>!busca||(n.html||'').replace(/<[^>]*>/g,' ').toLowerCase().includes(busca));
+}
+function renderAnotacoesNotasHTML(){
+  const swatches=Object.entries(NOTA_CORES).map(([k,c])=>`<button type="button" title="${k}" onclick="_trocarCorNotaNova('${k}')" style="width:22px;height:22px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${_notaCorNova===k?'#132030':'rgba(0,0,0,.12)'};"></button>`).join('');
+  return`
+  <div class="card" style="margin-bottom:16px;">
+    <div class="rich-editor-toolbar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+      ${_notaToolbarHTML('nota-nova')}
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${swatches}</span>
+    </div>
+    <div class="rich-editor-body" id="nota-nova" contenteditable="true" style="min-height:90px;background:${NOTA_CORES[_notaCorNova]};color:#2b2b2b;"></div>
+    <div style="display:flex;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--border);">
+      <button class="btn btn-sm btn-sage" onclick="_salvarNovaNota()"><i class="fa-solid fa-note-sticky"></i> Salvar anotação</button>
+    </div>
+  </div>
+  ${anotacoesNotas.length>3?`<input class="form-input" placeholder="Buscar nas anotações..." style="max-width:280px;margin-bottom:12px;" value="${esc(_notasBusca)}" oninput="_notasBusca=this.value;_renderNotasGrid()">`:''}
+  <div id="notas-grid">${_notasGridHTML(_notasFiltradas())}</div>`;
+}
+// troca a cor sem perder o que já foi digitado
+function _trocarCorNotaNova(k){
+  const html=document.getElementById('nota-nova')?.innerHTML||'';
+  _notaCorNova=k;renderInfoTabContent();
+  const el=document.getElementById('nota-nova');if(el)el.innerHTML=html;
+}
+function _renderNotasGrid(){
+  const el=document.getElementById('notas-grid');if(el)el.innerHTML=_notasGridHTML(_notasFiltradas());
+}
+function _notasGridHTML(lista){
+  if(!lista.length)return`<div class="empty-state" style="padding:24px;text-align:center;font-size:13px;color:var(--text-muted);">${_notasBusca?'Nenhuma anotação encontrada.':'Nenhuma anotação ainda.'}</div>`;
+  return`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-items:start;">
+  ${lista.map(n=>{
+    const cor=NOTA_CORES[n.cor]||NOTA_CORES.amarelo, editando=_notaEditId===n.id;
+    const quando=n.criadoEm?new Date(n.criadoEm).toLocaleDateString('pt-BR'):'';
+    return`<div style="background:${cor};color:#2b2b2b;border-radius:4px 4px 14px 4px;padding:12px 14px 10px;box-shadow:0 2px 6px rgba(0,0,0,.12);min-height:120px;display:flex;flex-direction:column;">
+      ${editando?`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;">${_notaToolbarHTML('nota-edit-'+n.id)}</div>`:''}
+      <div id="nota-edit-${esc(n.id)}" ${editando?'contenteditable="true" style="flex:1;font-size:13px;line-height:1.5;word-break:break-word;outline:1px dashed rgba(0,0,0,.3);padding:4px;border-radius:4px;"':'style="flex:1;font-size:13px;line-height:1.5;word-break:break-word;"'}>${n.html||''}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10.5px;color:rgba(0,0,0,.55);">
+        <span style="flex:1;">${esc(quando)}${n.autor?' · '+esc(n.autor):''}${n.editadoEm?' · editada':''}</span>
+        ${editando
+          ?`<button class="btn btn-xs btn-sage" onclick="_salvarEdicaoNota('${esc(n.id)}')" title="Salvar"><i class="fa-solid fa-check"></i></button><button class="btn btn-xs btn-outline" onclick="_notaEditId=null;_renderNotasGrid()" title="Cancelar"><i class="fa-solid fa-xmark"></i></button>`
+          :`<button class="btn btn-xs btn-outline" style="background:rgba(255,255,255,.5);" onclick="_notaEditId='${esc(n.id)}';_renderNotasGrid()" title="Editar"><i class="fa-solid fa-pen"></i></button><button class="btn btn-xs btn-danger" onclick="_apagarNota('${esc(n.id)}')" title="Apagar"><i class="fa-solid fa-trash"></i></button>`}
+      </div>
+    </div>`;}).join('')}
+  </div>`;
+}
+function _htmlNotaVazio(html){return!(html||'').replace(/<[^>]*>|&nbsp;/g,'').trim();}
+function _salvarNovaNota(){
+  const el=document.getElementById('nota-nova');if(!el)return;
+  if(_htmlNotaVazio(el.innerHTML)){showToast('Escreva alguma coisa antes de salvar.','peach');return;}
+  const u=getCurrentUser();
+  anotacoesNotas.push({id:'nota_'+uid()+uid(),html:el.innerHTML,cor:_notaCorNova,criadoEm:new Date().toISOString(),autor:u?.nome||u?.email||''});
+  saveAll();renderInfoTabContent();showToast('Anotação salva.','sage');
+}
+function _salvarEdicaoNota(id){
+  const n=anotacoesNotas.find(x=>x.id===id);const el=document.getElementById('nota-edit-'+id);if(!n||!el)return;
+  if(_htmlNotaVazio(el.innerHTML)){showToast('A anotação ficou vazia — use a lixeira pra apagar.','peach');return;}
+  n.html=el.innerHTML;n.editadoEm=new Date().toISOString();
+  _notaEditId=null;saveAll();_renderNotasGrid();
+}
+function _apagarNota(id){
+  if(!confirm('Apagar esta anotação?'))return;
+  anotacoesNotas=anotacoesNotas.filter(x=>x.id!==id);
+  saveAll();_renderNotasGrid();
+}
+
+// ── Editor de texto rico (Processo) ──
 function editorRicoHTML(campo,valorHtml){
   return `
   <div class="card">

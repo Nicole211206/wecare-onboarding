@@ -277,6 +277,7 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
             for e in db.scalars(select(models.EstoqueItem).order_by(models.EstoqueItem.data_entrada))
         ],
         "wc_anotacoes_texto": _texto(db, "anotacoes_texto"),
+        "wc_anotacoes_notas": _json_lista(_texto(db, "anotacoes_notas")),
         "wc_manual_fornecedores": _texto(db, "manual_fornecedores"),
         "wc_processo_texto": _texto(db, "processo_texto"),
         "wc_kpi_base_onboarding": _texto(db, "kpi_base_onboarding") or "liberacao",
@@ -307,6 +308,15 @@ def _enxoval_precos_to_dict(db: Session) -> dict:
     for e in db.scalars(select(models.EnxovalPreco)):
         out.setdefault(e.item, {})[e.tipo_cama] = e.preco
     return out
+
+
+def _json_lista(texto) -> list:
+    """Lista guardada como JSON numa linha de config_textos (ex: post-its de Anotações)."""
+    try:
+        v = json.loads(texto or "[]")
+    except ValueError:
+        return []
+    return v if isinstance(v, list) else []
 
 
 def _texto(db: Session, chave: str):
@@ -584,6 +594,9 @@ def put_state(db: Session, state: dict) -> None:
     ):
         if key_estado in state:
             _set_texto(db, chave, state[key_estado] or "")
+
+    if "wc_anotacoes_notas" in state:
+        _set_texto(db, "anotacoes_notas", json.dumps(state["wc_anotacoes_notas"] or [], ensure_ascii=False))
 
     if "lastSaved" in state:
         _set_texto(db, "_lastSaved", str(state["lastSaved"]))
