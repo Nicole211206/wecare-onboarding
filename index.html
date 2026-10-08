@@ -154,7 +154,7 @@
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-file-signature" style="color:var(--gold)"></i> Contratos assinados aguardando ativação</span></div>
           <div class="card-body" style="padding:0;">
             <table class="data-table" style="font-size:12.5px;">
-              <thead><tr><th>Imóvel</th><th>Fase</th><th>Assinado em</th><th style="text-align:right;">Aguardando</th></tr></thead>
+              <thead><tr><th>Imóvel</th><th>Fase</th><th>Assinado em</th><th>Liberado em</th><th style="text-align:right;">Aguardando</th></tr></thead>
               <tbody id="dash-assinados-body"></tbody>
             </table>
           </div>
@@ -163,7 +163,7 @@
           <div class="card-header"><span class="card-title"><i class="fa-solid fa-house-circle-check" style="color:var(--sage)"></i> Ativações recentes</span></div>
           <div class="card-body" style="padding:0;">
             <table class="data-table" style="font-size:12.5px;">
-              <thead><tr><th>Imóvel</th><th>Ativado em</th><th style="text-align:right;">Contrato → ativação</th></tr></thead>
+              <thead><tr><th>Imóvel</th><th>Ativado em</th><th style="text-align:right;" id="dash-ativos-th-op">Liberação → ativação</th><th style="text-align:right;">Espera proprietário</th></tr></thead>
               <tbody id="dash-ativos-body"></tbody>
             </table>
           </div>
@@ -171,7 +171,7 @@
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title"><i class="fa-solid fa-chart-column" style="color:var(--sage)"></i> Tempo de ativação por imóvel</span><span class="dash-hint">dias entre contrato assinado e ativação</span></div>
+        <div class="card-header"><span class="card-title"><i class="fa-solid fa-chart-column" style="color:var(--sage)"></i> Tempo de ativação por imóvel</span><span class="dash-hint" id="dash-chart-hint">dias entre liberação para vistoria e ativação</span></div>
         <div class="card-body" style="overflow-x:auto;" id="dash-chart-ativacao"></div>
       </div>
     </div>
@@ -250,6 +250,10 @@
     <div class="panel" id="panel-config">
       <div class="section-title">Configurações</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card" style="grid-column:1/-1;">
+          <div class="card-header"><span class="card-title"><i class="fa-solid fa-stopwatch" style="color:var(--sky)"></i> Base de cálculo do tempo de onboarding</span></div>
+          <div class="card-body" id="config-kpi-base"></div>
+        </div>
         <div class="card">
           <div class="card-header">
             <span class="card-title"><i class="fa-solid fa-list-check" style="color:var(--sage)"></i> Itens de Compras</span>
@@ -689,7 +693,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
-<script src="js/perguntas.js?v=6"></script>
-<script src="js/app.js?v=113"></script>
+<script src="js/perguntas.js?v=7"></script>
+<script src="js/app.js?v=114"></script>
 </body>
 </html>

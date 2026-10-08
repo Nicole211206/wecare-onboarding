@@ -161,7 +161,7 @@
   </div>
 </div>
 
-<script src="js/perguntas.js?v=6"></script>
+<script src="js/perguntas.js?v=7"></script>
 <script>
 (function(){
   function qs(s){return document.querySelector(s);}
@@ -272,7 +272,7 @@
           field.dataset.dependeDe=p.dependeDe;
           field.dataset.dependeContem=p.dependeContem||'';
           const curDep=_valores[p.dependeDe]||'';
-          const satisfaz=curDep.split(',').map(function(x){return x.trim();}).includes(p.dependeContem||'');
+          const satisfaz=window.contemOpcaoMulti(curDep,p.dependeContem||'');
           field.style.display=satisfaz?'':'none';
         }
 
@@ -283,7 +283,7 @@
 
         // ── Radio / Checkbox pills ──────────────────────────────────────
         if(p.tipo==='radio'||p.tipo==='checkbox'){
-          const selected=v?v.split(',').map(function(x){return x.trim();}).filter(Boolean):[];
+          const selected=window.splitOpcoesMulti(v,p.opcoes);
           const grid=document.createElement('div');
           grid.className='option-grid';
           (p.opcoes||[]).forEach(function(op){
@@ -301,7 +301,7 @@
                 _valores[p.id]=op;
               } else {
                 pill.classList.toggle('selected',inp.checked);
-                const cur=_valores[p.id]?_valores[p.id].split(',').map(function(x){return x.trim();}).filter(Boolean):[];
+                const cur=window.splitOpcoesMulti(_valores[p.id],p.opcoes);
                 if(inp.checked){if(!cur.includes(op))cur.push(op);}
                 else{const i=cur.indexOf(op);if(i>-1)cur.splice(i,1);}
                 _valores[p.id]=cur.join(', ');
@@ -422,7 +422,7 @@
       const depDe=field.dataset.dependeDe;
       const depContem=field.dataset.dependeContem||'';
       const curVal=_valores[depDe]||'';
-      const satisfaz=curVal.split(',').map(function(x){return x.trim();}).includes(depContem);
+      const satisfaz=window.contemOpcaoMulti(curVal,depContem);
       field.style.display=satisfaz?'':'none';
     });
   }

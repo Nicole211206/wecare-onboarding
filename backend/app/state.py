@@ -279,6 +279,7 @@ def get_state(db: Session, base_url: str, token: str) -> dict:
         "wc_anotacoes_texto": _texto(db, "anotacoes_texto"),
         "wc_manual_fornecedores": _texto(db, "manual_fornecedores"),
         "wc_processo_texto": _texto(db, "processo_texto"),
+        "wc_kpi_base_onboarding": _texto(db, "kpi_base_onboarding") or "liberacao",
         "lastSaved": _texto(db, "_lastSaved") or 0,
     }
     return state
@@ -579,6 +580,7 @@ def put_state(db: Session, state: dict) -> None:
         ("anotacoes_texto", "wc_anotacoes_texto"),
         ("manual_fornecedores", "wc_manual_fornecedores"),
         ("processo_texto", "wc_processo_texto"),
+        ("kpi_base_onboarding", "wc_kpi_base_onboarding"),
     ):
         if key_estado in state:
             _set_texto(db, chave, state[key_estado] or "")

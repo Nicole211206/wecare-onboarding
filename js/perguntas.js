@@ -3,6 +3,29 @@
 // Usado por index.html (equipe pré-preenche) e form.html (proprietário confirma)
 // tipo: 'text' | 'number' | 'textarea' | 'radio' | 'checkbox'
 // ═══════════════════════════════════════════════════════════════
+
+// Respostas de checkbox são salvas como texto "Opção A, Opção B". Algumas opções têm
+// vírgula no próprio nome ("Básico (roupas de cama e banho): toalhas, lençóis, ..."),
+// então separar só pela vírgula quebrava essas opções e elas "sumiam" ao recarregar.
+// Aqui as opções conhecidas são reconhecidas inteiras primeiro; o que sobrar é separado
+// pela vírgula normalmente.
+window.splitOpcoesMulti = function (val, opcoes) {
+  if (val == null || val === '') return [];
+  var resto = ', ' + String(val) + ', ';
+  var achadas = [];
+  (opcoes || []).slice().sort(function (a, b) { return b.length - a.length; }).forEach(function (op) {
+    var k = ', ' + op + ', ';
+    var i = resto.indexOf(k);
+    if (i > -1) { achadas.push({ op: op, pos: i }); resto = resto.slice(0, i) + ', ' + '\u0000'.repeat(op.length) + resto.slice(i + k.length - 2); }
+  });
+  resto.split(',').map(function (x) { return x.replace(/\u0000/g, '').trim(); }).filter(Boolean)
+    .forEach(function (x) { if (!achadas.some(function (a) { return a.op === x; })) achadas.push({ op: x, pos: Infinity }); });
+  return achadas.sort(function (a, b) { return a.pos - b.pos; }).map(function (a) { return a.op; });
+};
+window.contemOpcaoMulti = function (val, op) {
+  return (', ' + String(val || '') + ', ').indexOf(', ' + op + ', ') > -1;
+};
+
 window.FORM_SECOES = [
   {
     secao: 'O Espaço',

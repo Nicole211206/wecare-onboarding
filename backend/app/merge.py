@@ -200,7 +200,7 @@ REV_KEYS = [
     "wc_prestadores", "wc_users", "wc_def_operacionais", "wc_vistoria_campos", "wc_templates_msg",
     "wc_processo_texto", "wc_anotacoes_texto", "wc_manual_fornecedores", "wc_orcamentos",
     "wc_estoque_itens", "wc_camas_custom", "wc_modelos_negocio", "wc_proprietarios",
-    "wc_modalidades_enxoval",
+    "wc_modalidades_enxoval", "wc_kpi_base_onboarding",
 ]
 # Versionada (o cliente usa a revisão pra saber quando puxar), mas sem recusa por conflito.
 REV_KEYS_SEM_CONFLITO = ["wc_imoveis"]

@@ -550,7 +550,7 @@ async function sincronizarUsuariosNuvem(){
 }
 
 // ═══════════════════ PERSISTÊNCIA / KV ═══════════════════
-const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval'];
+const SYNC_KEYS=['wc_imoveis','wc_membros','wc_itens','wc_enxoval','wc_limpeza','wc_limpeza_checkout','wc_fotos','wc_prestadores','wc_users','wc_def_operacionais','wc_vistoria_campos','wc_templates_msg','wc_processo_texto','wc_anotacoes_texto','wc_manual_fornecedores','wc_orcamentos','wc_estoque_itens','wc_camas_custom','wc_modelos_negocio','wc_proprietarios','wc_modalidades_enxoval','wc_kpi_base_onboarding'];
 // Controle de sync por coleção (incidente 2026-09-24 — ver REV_KEYS em backend/app/merge.py).
 // Antes, cada push mandava TODAS as coleções do localStorage, e a decisão de puxar do servidor
 // comparava o lastSaved do relógio de cada máquina: um navegador desatualizado que fizesse
@@ -706,6 +706,7 @@ function saveAll(){
   localStorage.setItem('wc_modelos_negocio',JSON.stringify(MODELOS_NEGOCIO));
   localStorage.setItem('wc_proprietarios',JSON.stringify(proprietarios));
   localStorage.setItem('wc_modalidades_enxoval',JSON.stringify(MODALIDADES_ENXOVAL));
+  localStorage.setItem('wc_kpi_base_onboarding',JSON.stringify(KPI_BASE_ONBOARDING));
   _kvPushDebounced();
   _publicarStats();
 }
@@ -735,6 +736,7 @@ function loadAll(){
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
   v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
   v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
+  v=g('wc_kpi_base_onboarding');KPI_BASE_ONBOARDING=v==='contrato'?'contrato':'liberacao';
   // Seed só quando a coleção nunca foi salva neste navegador (g()===null). Antes semeava
   // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
   _seedModelosNegocio(g('wc_modelos_negocio')===null);
@@ -889,7 +891,11 @@ async function _publicarStats(){
   try{
     const stats=imoveis.map(im=>({
       id:im.id,nome:im.nome,dataCriacao:im.dataCriacao,dataAtivacao:im.dataAtivacao,status:im.status,
-      diasOnboarding:im.dataCriacao&&im.dataAtivacao?diasEntre(im.dataCriacao,im.dataAtivacao):null
+      // segue a base configurada; reativação não conta como onboarding (fica null)
+      diasOnboarding:_ehReativacao(im)?null:_tempoOnboarding(im).dias,
+      baseCalculo:_tempoOnboarding(im).base,
+      diasEsperaProprietario:_diasEsperaProprietario(im),
+      tipoOnboarding:_ehReativacao(im)?'Reativação':'Novo'
     }));
     await fetch(s.url.replace(/\/$/,'')+'/stats?token='+encodeURIComponent(s.token||''),
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stats,prestadores})});
@@ -954,7 +960,15 @@ function renderKanban(){
 }
 function renderCard(im){
   const atrasado=_verificarAtrasado(im);
-  const dias=im.dataCriacao?diasEntre(im.dataCriacao,hoje())+'d':'';
+  // Tempo no card: desde a liberação (se houver); senão desde o contrato. Contrato assinado
+  // sem liberação = selo "Aguardando proprietário" (tempo que não depende da operação).
+  const fimCard=im.status==='ativo'&&im.dataAtivacao?im.dataAtivacao:hoje();
+  const emAndamento=im.status!=='ativo'&&im.status!=='perdido';
+  let tempoCard='';
+  if(im.dataLiberacao)tempoCard=`<span>${diasEntre(im.dataLiberacao,fimCard)}d desde liberação</span>`;
+  else if(im.contratoAssinado&&im.dataContratoAssinado&&emAndamento)
+    tempoCard=`<span class="tag tag-amber" style="align-self:flex-start;" title="Contrato assinado, imóvel ainda não liberado para vistoria">⏸️ Aguardando proprietário · ${diasEntre(im.dataContratoAssinado,hoje())}d</span>`;
+  else if(im.dataContratoAssinado)tempoCard=`<span>${diasEntre(im.dataContratoAssinado,fimCard)}d desde contrato</span>`;
   const cor=FASE_COLOR[im.status]||'neutral';
   return`<div class="kanban-card fase-${im.status}${atrasado?' atrasado':''}" onclick="abrirDetalhe('${im.id}')">
     ${atrasado?'<div class="badge-atrasado"><i class="fa-solid fa-triangle-exclamation"></i> ATRASADO</div>':''}
@@ -962,11 +976,12 @@ function renderCard(im){
     <div class="kanban-card-meta">
       ${im.proprietarioNome?`<span>${esc(im.proprietarioNome)}</span>`:''}
       ${im.endereco?`<span style="font-size:10.5px;">${esc(im.endereco)}</span>`:''}
-      <span>${dias} desde contrato</span>
+      ${tempoCard}
     </div>
     <div class="kanban-card-tags">
       ${im.quartos?`<span class="tag tag-neutral"><i class="fa-solid fa-bed"></i> ${im.quartos}q</span>`:''}
       ${im.status==='ativo'?`<span class="tag tag-sage">Ativo</span>`:`<span class="tag tag-${cor}">${FASE_LABEL[im.status]||im.status}</span>`}
+      ${_ehReativacao(im)?'<span class="tag tag-lav" title="Reativação — fora das médias de onboarding"><i class="fa-solid fa-rotate"></i> Reativação</span>':''}
       ${im.contratoAssinado?'<span class="tag tag-sage" title="Contrato assinado"><i class="fa-solid fa-file-signature"></i></span>':''}
       ${im.formEnviadoEm?'<span class="tag tag-sage" title="Formulário enviado pelo proprietário"><i class="fa-solid fa-clipboard-check"></i></span>'
         :(im.formPreenchidoEm?'<span class="tag tag-lav" title="Proprietário está preenchendo, ainda não enviou"><i class="fa-solid fa-clipboard"></i></span>':'')}
@@ -1305,8 +1320,6 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='contrato'){
     im.contratoLink=g('ct-link');
-    im.valorMinNoite=gn('ct-min-noite'); im.valorBaseNoite=gn('ct-base-noite');
-    im.taxaHospedeExtra=gn('ct-taxa-extra'); im.taxaHospedeExtraAcimaDe=gn('ct-extra-acima');
     im.taxaLimpeza=gn('ct-taxa-limpeza');
     im.custoLimpezaRecorrente=gn('ct-custo-limpeza');
     im.valorCaucao=gn('ct-caucao'); im.politicaCancelamento=g('ct-politica-cancelamento');
@@ -1333,6 +1346,11 @@ function _coletarDadosAba(aba,im){
     const _enxTipo=g('def-enxoval-tipo');
     im.defEnxoval={tipo:_enxTipo,fornecedor:_enxTipo==='aluguel'?g('def-enxoval-forn-select'):g('def-enxoval-forn-texto'),valorAluguelMensal:gn('def-enxoval-mensal'),valorSetupAluguel:gn('def-enxoval-setup'),custoAluguelMensal:gn('def-enxoval-custo')};
     im.prazoAtivacaoHoras=gn('def-prazo-ativacao');
+    // dataLiberacao é salva no onchange (_onDataLiberacaoChange), que também registra em Atualizações
+    if(document.getElementById('def-tipo-onboarding')){
+      im.tipoOnboarding=g('def-tipo-onboarding')==='reativacao'?'reativacao':'novo';
+      im.liberacaoEvidencia=g('def-liberacao-evidencia').trim();
+    }
   }
   if(aba==='operacional'){
     ['fotos','limpeza','vistoria'].forEach(op=>{
@@ -1351,7 +1369,10 @@ function _coletarDadosAba(aba,im){
   }
   if(aba==='final'){
     im.responsavelCriacao=g('fn-resp-criacao'); im.dataEnvioParaCriacao=g('fn-data-envio');
-    im.valorMinNoite=gn('fn-min-noite')||im.valorMinNoite;
+    if(document.getElementById('fn-hostaway-login')){
+      im.hostawayLogin=g('fn-hostaway-login').trim();
+      im.hostawaySenha=g('fn-hostaway-senha');
+    }
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
     im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
@@ -1645,6 +1666,9 @@ function renderAbaCaptacao(im){
         <input type="checkbox" id="cap-kpi-claire" ${im.incluirKpiClaire?'checked':''}> Colocar na Claire? <span class="text-muted" style="font-weight:400;">(Tempo de Onboarding)</span>
       </label>
       ${!im.dataAtivacao?`<div class="hint" style="color:var(--brand-red,#c0392b);margin:2px 0 6px;"><i class="fa-solid fa-triangle-exclamation"></i> Esse imóvel ainda não tem data de ativação (não está "Ativo") — só entra na média de Tempo de Onboarding quando tiver.</div>`:''}
+      ${(()=>{const t=_tempoOnboarding(im);
+        if(_ehReativacao(im))return`<div class="hint" style="margin:2px 0 6px;"><i class="fa-solid fa-rotate"></i> Imóvel marcado como Reativação — não entra na média de Tempo de Onboarding da Claire.</div>`;
+        return t.dias!=null?`<div class="hint" style="margin:2px 0 6px;">Vai pra Claire: <strong>${t.dias} dias</strong> (${t.base==='liberacao'?'liberação → ativo':'contrato → ativo'})${t.semLiberacao?' · ⚠️ sem data de liberação, usando a data do contrato':''}</div>`:'';})()}
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-top:8px;">
         <input type="checkbox" id="cap-kpi-setup" ${im.incluirSetupClaire?'checked':''}> Colocar o Setup na Claire? <span class="text-muted" style="font-weight:400;">(Redução de Custos)</span>
       </label>
@@ -1873,14 +1897,6 @@ function renderAbaContrato(im){
 
   <div class="form-section-title"><i class="fa-solid fa-chart-line"></i> Precificação Inicial</div>
   <div class="form-row">
-    <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'ct-min-noite',value:im.valorMinNoite||0,min:0,step:10})}</div>
-    <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'ct-base-noite',value:im.valorBaseNoite||0,min:0,step:10})}</div>
-  </div>
-  <div class="form-row">
-    <div class="form-group"><label>Taxa Hóspede Extra (R$)</label>${numInput({id:'ct-taxa-extra',value:im.taxaHospedeExtra||0,min:0,step:10})}</div>
-    <div class="form-group"><label>Acima de (nº hóspedes)</label>${numInput({id:'ct-extra-acima',value:im.taxaHospedeExtraAcimaDe||0,min:0})}</div>
-  </div>
-  <div class="form-row">
     <div class="form-group"><label>Taxa de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">cobrada do hóspede (Hostaway)</span></label>${numInput({id:'ct-taxa-limpeza',value:im.taxaLimpeza||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
     <div class="form-group"><label>Custo de Limpeza (R$)<br><span style="font-weight:400;color:var(--text-muted);">pago ao prestador por diária</span></label>${numInput({id:'ct-custo-limpeza',value:im.custoLimpezaRecorrente||0,min:0,step:10,oninput:'_atualizarMargemLimpeza()'})}</div>
   </div>
@@ -1960,8 +1976,34 @@ function _onDataContratoAssinadoChange(inp){
 
 // ═══════════════════ ABA DEFINIÇÕES ═══════════════════
 function renderAbaDefinicoes(im){
+  const sugLib=!im.dataLiberacao?_sugestaoDataLiberacao(im):null;
+  const espera=_diasEsperaProprietario(im);
+  const evid=im.liberacaoEvidencia||'';
   return`<div class="form-grid">
-  <div class="form-section-title"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
+  <div class="form-section-title"><i class="fa-solid fa-key"></i> Liberação do Imóvel</div>
+  <div class="form-row">
+    <div class="form-group"><label>Liberado para vistoria em</label>
+      <input id="def-data-liberacao" type="date" class="input" value="${esc(im.dataLiberacao||'')}" onchange="_onDataLiberacaoChange(this.value)">
+    </div>
+    <div class="form-group"><label>Tipo de onboarding</label>
+      <select id="def-tipo-onboarding" class="input">
+        <option value="novo"${_ehReativacao(im)?'':' selected'}>Novo</option>
+        <option value="reativacao"${_ehReativacao(im)?' selected':''}>Reativação</option>
+      </select>
+    </div>
+  </div>
+  ${sugLib?`<div class="hint" style="margin:-4px 0 8px;"><i class="fa-solid fa-lightbulb"></i> Sugestão: ${fmtDate(sugLib)} (data em que entrou em "${esc(FASE_LABEL.vistoria_compras)}"). <a style="cursor:pointer;color:var(--rose);" onclick="_onDataLiberacaoChange('${sugLib}')">Usar esta data</a></div>`:''}
+  ${!im.dataLiberacao&&im.contratoAssinado?`<div class="hint" style="margin:-4px 0 8px;color:#B45309;">⏸️ Aguardando proprietário liberar o imóvel${im.dataContratoAssinado?` · ${diasEntre(im.dataContratoAssinado,hoje())}d desde o contrato`:''}</div>`:''}
+  ${espera!=null?`<div class="hint" style="margin:-4px 0 8px;">Espera do proprietário: <strong>${espera} dias</strong> (contrato → liberação)</div>`:''}
+  <div class="form-group"><label>Evidência da liberação <span style="font-weight:400;color:var(--text-muted);">(opcional — link ou descrição do print/mensagem do proprietário)</span></label>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <input id="def-liberacao-evidencia" class="input" value="${esc(evid)}" placeholder="https://... ou 'WhatsApp 12/09, print na pasta'">
+      ${/^https?:\/\//i.test(evid)?`<a href="${esc(evid)}" target="_blank" class="btn btn-xs btn-outline" title="Abrir"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`:''}
+    </div>
+  </div>
+  <div class="hint" style="margin-bottom:8px;">Reativação = imóvel que já operou com a gente, saiu e voltou (só vistoria e limpeza). Fica fora das médias de onboarding.</div>
+
+  <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-sliders"></i> Definições Operacionais</div>
   <div class="form-row" style="flex-wrap:wrap;gap:16px;">
     ${DEF_OPERACIONAIS.map(s=>`<label class="checkbox-label"><input type="checkbox" id="def-op-${esc(s.id)}"${(im.defOperacionais||{})[s.id]?' checked':''}> ${esc(s.nome)}</label>`).join('')}
     ${!DEF_OPERACIONAIS.length?`<span style="font-size:12px;color:var(--text-muted);">Nenhum serviço configurado. Adicione em Configurações.</span>`:''}
@@ -2137,7 +2179,7 @@ function renderAbaFormulario(im){
         :(status==='editado'?'<span class="tag tag-lav" title="Editado pelo proprietário"><i class="fa-solid fa-pen"></i></span>':'');
       let campo;
       if(p.tipo==='radio'||p.tipo==='checkbox'){
-        const selecionadas=val?val.split(',').map(x=>x.trim()).filter(Boolean):[];
+        const selecionadas=window.splitOpcoesMulti(val,p.opcoes);
         const pills=(p.opcoes||[]).map(op=>
           `<button type="button" class="rascunho-pill${selecionadas.includes(op)?' selected':''}" data-op="${esc(op)}" data-tipo="${p.tipo}" onclick="_toggleRascunhoPill(this)">${esc(op)}</button>`
         ).join('');
@@ -2257,7 +2299,7 @@ function _toggleRascunhoPill(btn){
     hidden.value=op;
   } else {
     btn.classList.toggle('selected');
-    const cur=hidden.value?hidden.value.split(',').map(x=>x.trim()).filter(Boolean):[];
+    const cur=window.splitOpcoesMulti(hidden.value,[...grid.querySelectorAll('.rascunho-pill')].map(b=>b.dataset.op));
     const i=cur.indexOf(op);
     if(btn.classList.contains('selected')){ if(i===-1)cur.push(op); }
     else if(i>-1){ cur.splice(i,1); }
@@ -2353,7 +2395,8 @@ function renderAbaCompras(im){
           <td style="text-align:center;font-weight:600;color:${falta>0?'var(--rose)':'var(--green)'};">${falta}</td>
           <td style="text-align:right;padding:0 4px;"><input class="input compra-preco-input" data-subkey="${subKey}" style="width:72px;padding:3px 5px;text-align:right;" type="number" min="0" step="1" value="${precoUn}" oninput="_onCompraPrecoinput(this,'${subKey}')" onblur="_onCompraPreco(this,'${subKey}')"></td>
           <td id="cp-total-${subKey}" style="text-align:right;padding:0 8px;font-weight:600;">${fmtMoeda(total)}</td>
-          <td style="padding:0 8px;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}</td>
+          <td style="padding:0 8px;white-space:nowrap;">${item.link?`<a href="${esc(item.link)}" target="_blank" class="btn btn-xs btn-outline">🛒</a>`:'-'}
+            <button type="button" class="btn btn-xs btn-outline" title="${item.link?'Editar link de compra':'Adicionar link de compra'}" onclick="editarLinkItemCompra(${ITENS_COMPRAS.indexOf(item)})"><i class="fa-solid fa-pen"></i></button></td>
         </tr>`;}).join('')}
         </tbody>
       </table>
@@ -4283,7 +4326,17 @@ function renderAbaFinal(im){
     </div>
     <div class="form-group"><label>Data de Envio</label><input id="fn-data-envio" type="date" class="input" value="${im.dataEnvioParaCriacao||''}"></div>
   </div>
-  <div class="form-group"><label>Valor Mínimo / Noite confirmado (R$)</label><input id="fn-min-noite" type="number" class="input" value="${im.valorMinNoite||0}"></div>
+
+  <div class="form-section-title" style="margin-top:16px;"><i class="fa-solid fa-key"></i> Acesso Hostaway</div>
+  <div class="form-row">
+    <div class="form-group"><label>Login</label><input id="fn-hostaway-login" class="input" autocomplete="off" value="${esc(im.hostawayLogin||'')}" placeholder="e-mail ou usuário"></div>
+    <div class="form-group"><label>Senha</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input id="fn-hostaway-senha" type="password" class="input" autocomplete="new-password" value="${esc(im.hostawaySenha||'')}">
+        <button type="button" class="btn btn-xs btn-outline" title="Mostrar/ocultar" onclick="const i=document.getElementById('fn-hostaway-senha');i.type=i.type==='password'?'text':'password';"><i class="fa-solid fa-eye"></i></button>
+      </div>
+    </div>
+  </div>
 
   <div class="form-group" style="margin-top:8px;">
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
@@ -4353,7 +4406,6 @@ async function criarTarefaClaire(){
 📍 Endereço: ${im.endereco||'—'}
 👤 Proprietário: ${im.proprietarioNome||'—'} | ${im.proprietarioTel||'—'}
 🛏 Camas: ${camas||'—'} | Banheiros: ${im.banheiros||'—'} | Quartos: ${im.quartos||'—'}
-💰 Valor mín/noite: R$ ${im.valorMinNoite||0}
 📱 Plataformas: ${plataformas||'—'}
 📁 Pasta captação: ${im.captacaoLink||'—'}
 📸 Fotos: ${im.ops?.fotos?.data||'—'} (${im.ops?.fotos?.responsavel||'—'})
@@ -4480,12 +4532,9 @@ async function gerarPDFOutrasInformacoes(){
 
   ${sec('💰','Preços',`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
-      ${campo('Diária mínima',im.valorMinNoite?fmtMoeda(im.valorMinNoite):'',true)}
-      ${campo('Diária base',im.valorBaseNoite?fmtMoeda(im.valorBaseNoite):'',true)}
       ${campo('Taxa de limpeza',im.taxaLimpeza?fmtMoeda(im.taxaLimpeza):'',true)}
       ${campo('Custo de limpeza',im.custoLimpezaRecorrente?fmtMoeda(im.custoLimpezaRecorrente):'',true)}
       ${campo('Margem por limpeza',(im.taxaLimpeza||im.custoLimpezaRecorrente)?fmtMoeda((+im.taxaLimpeza||0)-(+im.custoLimpezaRecorrente||0)):'',true)}
-      ${campo('Taxa hóspede extra (acima de '+( im.taxaHospedeExtraAcimaDe||'—')+' pessoas)',im.taxaHospedeExtra?fmtMoeda(im.taxaHospedeExtra):'',true)}
       ${campo('Caução',im.valorCaucao?fmtMoeda(im.valorCaucao):'',true)}
       ${campo('Mínimo de noites',im.minimoNoites)}
       ${campo('Política de cancelamento',im.politicaCancelamento)}
@@ -4571,6 +4620,48 @@ function pedirCotacaoJarvis(modo){
     ${listHtml}`;
   document.getElementById('modal-generico').classList.add('open');
 }
+// ═══════════════════ TEMPO DE ONBOARDING ═══════════════════
+// Base de cálculo global (Configurações), vale pro dashboard e pro envio à Claire
+// (o backend lê a mesma chave em /onboarding-stats):
+//   'liberacao' = dataLiberacao → dataAtivacao (sem liberação, cai pro contrato e sinaliza)
+//   'contrato'  = dataContratoAssinado → dataAtivacao
+let KPI_BASE_ONBOARDING='liberacao';
+const KPI_BASE_LABEL={liberacao:'liberação → ativo',contrato:'contrato → ativo'};
+function _ehReativacao(im){return im.tipoOnboarding==='reativacao';}
+// {dias, base usada de fato, semLiberacao (fallback pro contrato na base "liberação")}
+function _tempoOnboarding(im,fim){
+  fim=fim||im.dataAtivacao;
+  const semLiberacao=KPI_BASE_ONBOARDING==='liberacao'&&!im.dataLiberacao;
+  const usaLib=KPI_BASE_ONBOARDING==='liberacao'&&!!im.dataLiberacao;
+  const ini=usaLib?im.dataLiberacao:im.dataContratoAssinado;
+  return{dias:ini&&fim?diasEntre(ini,fim):null,base:usaLib?'liberacao':'contrato',semLiberacao};
+}
+function _diasEsperaProprietario(im){
+  return im.dataContratoAssinado&&im.dataLiberacao?diasEntre(im.dataContratoAssinado,im.dataLiberacao):null;
+}
+// Sugestão (nunca preenche sozinho): primeira vez que o imóvel entrou em "Vistoria e Compras",
+// tirada do histórico de Atualizações.
+function _sugestaoDataLiberacao(im){
+  const lbl=FASE_LABEL.vistoria_compras;
+  const a=(im.atualizacoes||[]).filter(a=>a.tipo==='fase'&&(a.texto||'').includes(`"${lbl}"`))
+    .map(a=>a.data).sort()[0];
+  return a?a.slice(0,10):null;
+}
+function _onDataLiberacaoChange(val){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const anterior=im.dataLiberacao||'';
+  im.dataLiberacao=val||'';
+  if(im.dataLiberacao&&im.dataLiberacao!==anterior)
+    _addAtualizacao(im,`Imóvel liberado para vistoria em ${fmtDate(im.dataLiberacao)}`,'fase');
+  _coletarDadosAba(_abaAtiva,im);
+  saveAll();renderKanban();renderAba(_abaAtiva);
+}
+function _setKpiBaseOnboarding(v){
+  KPI_BASE_ONBOARDING=v==='contrato'?'contrato':'liberacao';
+  saveAll();renderDashboard();
+  showToast('Base do tempo de onboarding: '+(KPI_BASE_ONBOARDING==='contrato'?'Data do contrato':'Data da liberação'),'sage');
+}
+
 // ═══════════════════ DASHBOARD ═══════════════════
 // Cores próprias do painel por fase (as de FASE_COLOR repetem tons — rose e gold são o mesmo
 // dourado, lav é quase branco — e no dashboard cada fase precisa ser distinguível de relance).
@@ -4587,8 +4678,17 @@ function renderDashboard(){
   const ativosLista=imoveis.filter(i=>i.status==='ativo');
   const mesAtual=hoje().slice(0,7);
   const ativadosMes=ativosLista.filter(i=>(i.dataAtivacao||'').slice(0,7)===mesAtual).length;
-  const comTempo=ativosLista.filter(i=>i.dataContratoAssinado&&i.dataAtivacao);
-  const tempoMedio=comTempo.length?Math.round(comTempo.reduce((s,i)=>s+diasEntre(i.dataContratoAssinado,i.dataAtivacao),0)/comTempo.length):null;
+  // Médias de onboarding: só imóveis "Novo" (reativação tem card próprio); perdidos já estão fora
+  const media=arr=>arr.length?Math.round(arr.reduce((s,d)=>s+d,0)/arr.length):null;
+  const comTempo=ativosLista.filter(i=>!_ehReativacao(i)&&_tempoOnboarding(i).dias!=null);
+  const tempoMedio=media(comTempo.map(i=>_tempoOnboarding(i).dias));
+  const qtdSemLib=comTempo.filter(i=>_tempoOnboarding(i).semLiberacao).length;
+  const esperas=imoveis.filter(i=>i.status!=='perdido'&&!_ehReativacao(i)).map(_diasEsperaProprietario).filter(d=>d!=null);
+  const esperaMedia=media(esperas);
+  const reativ=ativosLista.filter(i=>_ehReativacao(i)&&_tempoOnboarding(i).dias!=null);
+  const reativMedia=media(reativ.map(i=>_tempoOnboarding(i).dias));
+  const baseLbl=KPI_BASE_LABEL[KPI_BASE_ONBOARDING];
+  const avisoSemLib='<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;" title="Sem data de liberação — calculado a partir do contrato">⚠️ sem data de liberação</span>';
   const assinados=emAndamentoLista.filter(i=>i.contratoAssinado&&i.dataContratoAssinado)
     .sort((a,b)=>a.dataContratoAssinado.localeCompare(b.dataContratoAssinado));
   const perdidos=imoveis.filter(i=>i.status==='perdido').length;
@@ -4601,7 +4701,12 @@ function renderDashboard(){
   if(stats)stats.innerHTML=
     kpi(emAndamentoLista.length,'Em onboarding','person-digging','#B45309','var(--amber-bg)',`${assinados.length} com contrato assinado`)+
     kpi(ativadosMes,'Ativados este mês','circle-check','var(--green-text)','var(--green-bg)',`${ativosLista.length} ativos no total`)+
-    kpi(tempoMedio!=null?tempoMedio+'d':'—','Tempo médio até ativar','clock','var(--sky)','var(--sky-bg)','contrato assinado → ativo')+
+    kpi(tempoMedio!=null?tempoMedio+'d':'—','Operação: liberação → ativo','clock','var(--sky)','var(--sky-bg)',
+      `base: ${baseLbl}${qtdSemLib?` · ⚠️ ${qtdSemLib} sem data de liberação`:''}`)+
+    kpi(esperaMedia!=null?esperaMedia+'d':'—','Proprietário: contrato → liberação','hourglass-half','#B45309','var(--amber-bg)',
+      `${esperas.length} imóve${esperas.length===1?'l':'is'} com as duas datas`)+
+    kpi(reativMedia!=null?reativMedia+'d':'—','Reativações: tempo médio','rotate','var(--text-muted)','var(--surface-2)',
+      `${reativ.length} reativaç${reativ.length===1?'ão':'ões'} · fora das médias`)+
     kpi(perdidos,'Perdidos','circle-xmark','var(--red)','var(--red-bg)','');
 
   // Pipeline: uma coluna por fase, com os imóveis e há quantos dias estão nela
@@ -4634,27 +4739,36 @@ function renderDashboard(){
 
   const assinadosBody=document.getElementById('dash-assinados-body');
   if(assinadosBody)assinadosBody.innerHTML=assinados.length?assinados.map(im=>{
-    const d=diasEntre(im.dataContratoAssinado,hoje());
+    const t=_tempoOnboarding(im,hoje());
+    const d=t.dias;
     return`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
-      <td class="link">${esc(im.nome)}</td>
+      <td class="link">${esc(im.nome)}${_ehReativacao(im)?' <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;">Reativação</span>':''}</td>
       <td><span class="tag" style="background:${DASH_FASE_COR[im.status]||'#999999'}22;color:${DASH_FASE_COR[im.status]||'inherit'};font-size:10.5px;">${esc(FASE_LABEL[im.status]||im.status)}</span></td>
       <td>${fmtDate(im.dataContratoAssinado)}</td>
-      <td style="text-align:right;"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
-    </tr>`;}).join(''):`<tr><td colspan="4" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
+      <td>${im.dataLiberacao?fmtDate(im.dataLiberacao):'<span class="tag tag-amber" style="font-size:10px;padding:1px 6px;">⏸️ Aguardando proprietário</span>'}</td>
+      <td style="text-align:right;" title="Dias desde ${t.base==='liberacao'?'a liberação':'o contrato'}"><span class="dash-dias ${_dashDiasClasse(d)}">${d}d</span></td>
+    </tr>`;}).join(''):`<tr><td colspan="5" class="empty-state">Nenhum contrato assinado aguardando ativação.</td></tr>`;
 
   const tbody=document.getElementById('dash-ativos-body');
   const recentes=[...ativosLista].sort((a,b)=>(b.dataAtivacao||'').localeCompare(a.dataAtivacao||'')).slice(0,8);
-  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
-      <td class="link">${esc(im.nome)}</td>
+  if(tbody)tbody.innerHTML=recentes.length?recentes.map(im=>{
+    const t=_tempoOnboarding(im);const esp=_diasEsperaProprietario(im);
+    return`<tr style="cursor:pointer;" onclick="abrirDetalhe('${im.id}')">
+      <td class="link">${esc(im.nome)}${_ehReativacao(im)?' <span class="tag tag-lav" style="font-size:10px;padding:1px 6px;">Reativação</span>':''}</td>
       <td>${fmtDate(im.dataAtivacao)}</td>
-      <td style="text-align:right;">${im.dataContratoAssinado&&im.dataAtivacao?diasEntre(im.dataContratoAssinado,im.dataAtivacao)+' dias':'—'}</td>
-    </tr>`).join(''):`<tr><td colspan="3" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+      <td style="text-align:right;">${t.dias!=null?t.dias+' dias':'—'}${t.semLiberacao&&t.dias!=null?'<br>'+avisoSemLib:''}</td>
+      <td style="text-align:right;color:var(--text-muted);">${esp!=null?esp+' dias':'—'}</td>
+    </tr>`;}).join(''):`<tr><td colspan="4" class="empty-state">Nenhuma ativação ainda.</td></tr>`;
+  const thOp=document.getElementById('dash-ativos-th-op');
+  if(thOp)thOp.textContent=KPI_BASE_ONBOARDING==='contrato'?'Contrato → ativação':'Liberação → ativação';
+  const hintChart=document.getElementById('dash-chart-hint');
+  if(hintChart)hintChart.textContent=`dias ${KPI_BASE_ONBOARDING==='contrato'?'entre contrato assinado':'entre liberação para vistoria'} e ativação · reativações fora · altere a base em Configurações`;
 
   const chartEl=document.getElementById('dash-chart-ativacao');
   if(chartEl){
     const dadosChart=[...comTempo]
       .sort((a,b)=>a.dataAtivacao.localeCompare(b.dataAtivacao))
-      .map(i=>({nome:i.nome,dias:diasEntre(i.dataContratoAssinado,i.dataAtivacao)}));
+      .map(i=>{const t=_tempoOnboarding(i);return{nome:i.nome,dias:t.dias,semLiberacao:t.semLiberacao,espera:_diasEsperaProprietario(i)};});
     chartEl.innerHTML=_chartAtivacaoSvg(dadosChart);
   }
 }
@@ -4672,8 +4786,8 @@ function _chartAtivacaoSvg(dados){
     const barH=topPad+plotH-yTop;
     const label=d.nome.length>16?d.nome.slice(0,15)+'…':d.nome;
     return`<g>
-      <rect x="${x}" y="${yTop}" width="${bw}" height="${barH}" rx="4" style="fill:var(--sage);"><title>${esc(d.nome)}: ${d.dias} dias</title></rect>
-      <text x="${x+bw/2}" y="${yTop-6}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--text-strong,#1a1a1a);">${d.dias}d</text>
+      <rect x="${x}" y="${yTop}" width="${bw}" height="${barH}" rx="4" style="fill:${d.semLiberacao?'var(--amber)':'var(--sage)'};"><title>${esc(d.nome)}: ${d.dias} dias de operação${d.espera!=null?` · espera do proprietário: ${d.espera} dias`:''}${d.semLiberacao?' · ⚠️ sem data de liberação (calculado do contrato)':''}</title></rect>
+      <text x="${x+bw/2}" y="${yTop-6}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--text-strong,#1a1a1a);">${d.semLiberacao?'⚠':''}${d.dias}d</text>
       <text x="${x+bw/2}" y="${topPad+plotH+16}" text-anchor="end" transform="rotate(-35 ${x+bw/2} ${topPad+plotH+16})" style="font-size:10.5px;fill:var(--text-muted);">${esc(label)}</text>
     </g>`;
   }).join('');
@@ -6289,6 +6403,13 @@ function renderConfig(){
       :`<div class="text-muted" style="font-size:12px;padding:4px 0;">Nenhum membro cadastrado ainda.</div>`);
   }
 
+  const kb=document.getElementById('config-kpi-base');
+  if(kb)kb.innerHTML=`<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px;">
+      <label class="checkbox-label"><input type="radio" name="kpi-base-onb" value="liberacao"${KPI_BASE_ONBOARDING==='liberacao'?' checked':''} onchange="_setKpiBaseOnboarding(this.value)"> <strong>Data da liberação</strong>&nbsp;(liberado para vistoria → ativo)</label>
+      <label class="checkbox-label"><input type="radio" name="kpi-base-onb" value="contrato"${KPI_BASE_ONBOARDING==='contrato'?' checked':''} onchange="_setKpiBaseOnboarding(this.value)"> <strong>Data do contrato</strong>&nbsp;(contrato assinado → ativo)</label>
+    </div>
+    <div class="hint" style="margin-top:8px;">Vale para o Dashboard e para o KPI enviado à Claire. Na base "liberação", imóvel sem data de liberação usa a data do contrato e aparece com ⚠️. Reativações e perdidos ficam fora das médias.</div>`;
+
   const ci=document.getElementById('config-itens');
   if(!ci)return;
   const baseOpts=QTD_RULE_BASES;
@@ -6308,7 +6429,8 @@ function renderConfig(){
       const base=item.qtdRule.slice(dash+1);
       const modalidades=item.modalidades||[];
       return`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;"></td>
+        <td style="padding:5px 4px;"><span style="font-size:10px;color:var(--text-muted);">${esc(item.cat)}</span><br><input id="ci-nome-${i}" class="input" value="${esc(item.nome)}" style="font-size:12px;padding:2px 4px;min-width:160px;">
+          <div style="display:flex;gap:4px;align-items:center;margin-top:3px;"><input id="ci-link-${i}" class="input" value="${esc(item.link||'')}" placeholder="Link de compra (https://...)" style="font-size:11px;padding:2px 4px;min-width:160px;color:var(--text-muted);">${item.link?`<a href="${esc(item.link)}" target="_blank" title="Abrir link" style="font-size:12px;">🛒</a>`:''}</div></td>
         <td style="padding:5px 4px;text-align:center;"><input id="ci-n-${i}" type="number" class="input" value="${n}" min="1" style="width:52px;text-align:center;padding:2px 4px;font-size:12px;"></td>
         <td style="padding:5px 4px;">
           <select id="ci-base-${i}" class="input" style="font-size:12px;padding:4px 6px;">
@@ -6920,6 +7042,7 @@ function salvarRegra(i){
   const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
   item.qtdRule=`${n}-${base}`;
   item.modalidades=_lerModalidadesConfig(i);
+  _lerLinkItemConfig(item,i);
   saveAll();showToast(`"${item.nome}" atualizado!`,'sage');
 }
 function salvarTodasRegras(){
@@ -6929,8 +7052,24 @@ function salvarTodasRegras(){
     const base=document.getElementById(`ci-base-${i}`)?.value||'unidade';
     item.qtdRule=`${n}-${base}`;
     item.modalidades=_lerModalidadesConfig(i);
+    _lerLinkItemConfig(item,i);
   });
   saveAll();showToast('Todas as regras salvas!','sage');
+}
+function _lerLinkItemConfig(item,i){
+  const el=document.getElementById(`ci-link-${i}`);
+  if(el)item.link=el.value.trim();
+}
+// Editar o link de compra direto da aba Compras do imóvel — o link é do catálogo
+// (Configurações → Itens de Compras), então vale pra todos os imóveis.
+function editarLinkItemCompra(idx){
+  const item=ITENS_COMPRAS[idx];if(!item)return;
+  const novo=prompt(`Link de compra de "${item.nome}" (vale pra todos os imóveis).\nDeixe vazio pra remover:`,item.link||'');
+  if(novo===null)return;
+  const im=getImovel(_imovelAtivoId);if(im)_coletarDadosAba(_abaAtiva,im);
+  item.link=novo.trim();
+  saveAll();renderAba(_abaAtiva);
+  showToast(item.link?'Link atualizado!':'Link removido.','sage');
 }
 function apagarItemConfig(i){
   const item=ITENS_COMPRAS[i];if(!item)return;

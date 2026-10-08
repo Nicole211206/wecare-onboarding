@@ -94,6 +94,12 @@ def onboarding_stats(db: Session = Depends(get_db)):
     prestadores = data.get("prestadores") or []
     atualizado_em = data.get("atualizadoEm")
 
+    # Base de cálculo do tempo de onboarding (Configurações do painel):
+    # "liberacao" = dataLiberacao → dataAtivacao (fallback pro contrato se faltar)
+    # "contrato"  = dataContratoAssinado → dataAtivacao
+    base_row = db.get(models.ConfigTexto, "kpi_base_onboarding")
+    base_kpi = "contrato" if base_row and base_row.texto == "contrato" else "liberacao"
+
     todos_imoveis = [
         {
             "nome": im.nome,
@@ -108,9 +114,31 @@ def onboarding_stats(db: Session = Depends(get_db)):
             "incluirSetupClaire": im.incluir_setup_claire,
             "eventosExtras": (im.extra or {}).get("eventosExtras") or [],
             "ops": (im.extra or {}).get("ops") or {},
+            "dataLiberacao": (im.extra or {}).get("dataLiberacao") or None,
+            "tipoOnboarding": "Reativação" if (im.extra or {}).get("tipoOnboarding") == "reativacao" else "Novo",
         }
         for im in db.scalars(select(models.Imovel))
     ]
+
+    from datetime import date
+
+    def _dias(ini, fim):
+        if not ini or not fim:
+            return None
+        try:
+            return (date.fromisoformat(str(fim)[:10]) - date.fromisoformat(str(ini)[:10])).days
+        except ValueError:
+            return None
+
+    for im in todos_imoveis:
+        im["diasContratoAteAtivo"] = _dias(im["dataContratoAssinado"], im["dataAtivacao"])
+        im["diasLiberacaoAteAtivo"] = _dias(im["dataLiberacao"], im["dataAtivacao"])
+        im["diasEsperaProprietario"] = _dias(im["dataContratoAssinado"], im["dataLiberacao"])
+        # Sem data de liberação, cai pro contrato (e sinaliza) — mesma regra do dashboard.
+        usa_liberacao = base_kpi == "liberacao" and im["diasLiberacaoAteAtivo"] is not None
+        im["diasOnboarding"] = im["diasLiberacaoAteAtivo"] if usa_liberacao else im["diasContratoAteAtivo"]
+        im["baseCalculo"] = "liberacao" if usa_liberacao else "contrato"
+        im["semDataLiberacao"] = base_kpi == "liberacao" and not im["dataLiberacao"]
 
     imoveis = [
         {
@@ -121,6 +149,14 @@ def onboarding_stats(db: Session = Depends(get_db)):
             "dataAtivacao": im["dataAtivacao"],
             "incluirKpiClaire": bool(im["incluirKpiClaire"]),
             "mesReferenciaKpi": im["mesReferenciaKpi"],
+            "dataLiberacao": im["dataLiberacao"],
+            "tipoOnboarding": im["tipoOnboarding"],
+            "baseCalculo": im["baseCalculo"],
+            "diasOnboarding": im["diasOnboarding"],
+            "diasContratoAteAtivo": im["diasContratoAteAtivo"],
+            "diasLiberacaoAteAtivo": im["diasLiberacaoAteAtivo"],
+            "diasEsperaProprietario": im["diasEsperaProprietario"],
+            "semDataLiberacao": im["semDataLiberacao"],
         }
         for im in todos_imoveis
         if im["status"] != "perdido" and (im["contratoAssinado"] is True or im["status"] != "contrato")
@@ -130,20 +166,21 @@ def onboarding_stats(db: Session = Depends(get_db)):
     media_onboarding = round(sum(x["diasOnboarding"] for x in ativos) / len(ativos)) if ativos else None
     em_onboarding = sum(1 for s in stats_list if s.get("status") and s["status"] not in ("ativo", "perdido"))
 
-    from datetime import datetime
-
     kpi_por_mes: dict[str, dict] = {}
     for im in todos_imoveis:
-        if im["incluirKpiClaire"] is True and im["mesReferenciaKpi"] and im["dataContratoAssinado"] and im["dataAtivacao"]:
+        # Reativação não é onboarding — fica fora da média enviada pra Claire.
+        if im["tipoOnboarding"] == "Reativação":
+            continue
+        if im["incluirKpiClaire"] is True and im["mesReferenciaKpi"] and im["diasOnboarding"] is not None:
             mes = im["mesReferenciaKpi"]
-            dias = (
-                datetime.fromisoformat(im["dataAtivacao"].replace("Z", "+00:00"))
-                - datetime.fromisoformat(im["dataContratoAssinado"].replace("Z", "+00:00"))
-            ).total_seconds() / 86400
-            bucket = kpi_por_mes.setdefault(mes, {"somaDias": 0.0, "count": 0})
-            bucket["somaDias"] += dias
+            bucket = kpi_por_mes.setdefault(
+                mes, {"somaDias": 0.0, "count": 0, "baseCalculo": base_kpi, "semDataLiberacao": 0}
+            )
+            bucket["somaDias"] += im["diasOnboarding"]
             bucket["count"] += 1
-    for mes, b in kpi_por_mes.items():
+            if im["semDataLiberacao"]:
+                bucket["semDataLiberacao"] += 1
+    for b in kpi_por_mes.values():
         b["mediaOnboardingDias"] = round(b["somaDias"] / b["count"], 1)
         del b["somaDias"]
 
@@ -178,6 +215,7 @@ def onboarding_stats(db: Session = Depends(get_db)):
             "emOnboarding": em_onboarding,
         },
         "kpiPorMes": kpi_por_mes,
+        "baseCalculo": base_kpi,
         "setupPorMes": setup_por_mes,
         "atualizadoEm": atualizado_em,
     }
