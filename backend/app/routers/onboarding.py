@@ -106,11 +106,10 @@ def onboarding_stats(db: Session = Depends(get_db)):
     prestadores = data.get("prestadores") or []
     atualizado_em = data.get("atualizadoEm")
 
-    # Base de cálculo do tempo de onboarding (Configurações do painel):
-    # "liberacao" = liberação efetiva → dataAtivacao (fallback pro contrato se faltar)
-    # "contrato"  = dataContratoAssinado → dataAtivacao
-    base_row = db.get(models.ConfigTexto, "kpi_base_onboarding")
-    base_kpi = "contrato" if base_row and base_row.texto == "contrato" else "liberacao"
+    # Tempo de onboarding = liberação efetiva → dataAtivacao. A escolha é por imóvel (check
+    # "liberação diferente da assinatura" na aba Contrato; sem o check, liberação = assinatura),
+    # então não existe mais base global — kpi_base_onboarding é ignorada.
+    base_kpi = "liberacao"
 
     todos_imoveis = [
         {

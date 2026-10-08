@@ -736,7 +736,9 @@ function loadAll(){
   v=g('wc_modelos_negocio');if(Array.isArray(v))MODELOS_NEGOCIO=v;
   v=g('wc_proprietarios');if(Array.isArray(v))proprietarios=v;
   v=g('wc_modalidades_enxoval');if(Array.isArray(v))MODALIDADES_ENXOVAL=v;
-  v=g('wc_kpi_base_onboarding');KPI_BASE_ONBOARDING=v==='contrato'?'contrato':'liberacao';
+  // A base agora é por imóvel (check de liberação na aba Contrato); a chave global
+  // wc_kpi_base_onboarding segue no sync só por compatibilidade e é ignorada.
+  KPI_BASE_ONBOARDING='liberacao';
   // Seed só quando a coleção nunca foi salva neste navegador (g()===null). Antes semeava
   // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
   _seedModelosNegocio(g('wc_modelos_negocio')===null);
@@ -1374,8 +1376,8 @@ function _coletarDadosAba(aba,im){
       im.hostawaySenha=g('fn-hostaway-senha');
     }
     im.anuncioConjunto=document.getElementById('fn-anuncio-conjunto')?.checked||false;
-    im.anuncioConjuntoWcOutro=g('fn-anuncio-wc-outro');
     im.anuncioConjuntoWc=g('fn-anuncio-wc-conjunto');
+    if(document.getElementById('fn-anuncio-conjunto-wrap'))im.anuncioConjuntoExternos=_acColetarExternos();
     im.anuncioConjuntoValorMinNoite=gn('fn-ac-min-noite');
     im.anuncioConjuntoValorBaseNoite=gn('fn-ac-base-noite');
     im.anuncioConjuntoTaxaHospedeExtra=gn('fn-ac-taxa-extra');
@@ -4347,26 +4349,30 @@ function renderAbaFinal(im){
     <label class="checkbox-label"><input type="checkbox" id="fn-anuncio-conjunto"${im.anuncioConjunto?' checked':''} onchange="_toggleAnuncioConjunto(this)"> Terá anúncio em conjunto?</label>
   </div>
   <div id="fn-anuncio-conjunto-wrap" style="${im.anuncioConjunto?'':'display:none;'}background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;">
-    <div style="font-weight:700;font-size:14px;margin-bottom:10px;"><i class="fa-solid fa-link" style="color:var(--brand-gold);"></i> Anúncio em conjunto</div>
-    <div class="form-group"><label>Imóveis do onboarding neste anúncio</label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
-        ${(im.anuncioConjuntoImoveis||[]).map(id=>{const o=getImovel(id);return o?`<span class="tag tag-sky" style="font-size:12px;">${esc(o.nome)} <a style="cursor:pointer;margin-left:4px;" title="Tirar do anúncio" onclick="_acRemoverImovel('${esc(id)}')"><i class="fa-solid fa-xmark"></i></a></span>`:'';}).join('')||'<span style="font-size:12px;color:var(--text-muted);">Nenhum ainda.</span>'}
-      </div>
-      <div style="display:flex;gap:6px;max-width:460px;">
-        <select id="fn-ac-add-imovel" class="input" style="flex:1;">
-          <option value="">— escolher imóvel —</option>
-          ${imoveis.filter(o=>o.id!==im.id&&o.status!=='perdido'&&!(im.anuncioConjuntoImoveis||[]).includes(o.id)).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).map(o=>`<option value="${esc(o.id)}">${esc(o.nome||'(sem nome)')}</option>`).join('')}
-        </select>
-        <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarImovel()"><i class="fa-solid fa-plus"></i></button>
-      </div>
-      <div class="hint" style="margin-top:4px;">Os dados deste card ficam iguais em todos os imóveis do anúncio.</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="font-weight:700;font-size:14px;flex:1;"><i class="fa-solid fa-link" style="color:var(--brand-gold);"></i> Anúncio em conjunto</div>
+      <button type="button" class="btn btn-sm btn-outline" onclick="gerarPDFAnuncioConjunto()"><i class="fa-solid fa-file-pdf"></i> PDF compilado pro anúncio</button>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Outros imóveis (fora do onboarding)</label><input id="fn-anuncio-wc-outro" class="input" placeholder="Ex: WC-00123" value="${esc(im.anuncioConjuntoWcOutro||'')}"></div>
-      <div class="form-group"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+    <div class="form-group" style="max-width:300px;"><label>WC do anúncio em conjunto</label><input id="fn-anuncio-wc-conjunto" class="input" placeholder="Ex: WC-00456" value="${esc(im.anuncioConjuntoWc||'')}"></div>
+
+    <div class="form-section-title" style="margin-top:6px;font-size:12px;"><i class="fa-solid fa-house"></i> Imóveis do anúncio</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <select id="fn-ac-add-imovel" class="input" style="flex:1;min-width:200px;max-width:340px;">
+        <option value="">— imóvel do onboarding —</option>
+        ${imoveis.filter(o=>o.id!==im.id&&o.status!=='perdido'&&!(im.anuncioConjuntoImoveis||[]).includes(o.id)).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).map(o=>`<option value="${esc(o.id)}">${esc(o.nome||'(sem nome)')}</option>`).join('')}
+      </select>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarImovel()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+      <span style="color:var(--text-muted);font-size:12px;">ou</span>
+      <button type="button" class="btn btn-sm btn-outline" onclick="_acAdicionarExterno()"><i class="fa-solid fa-plus"></i> Imóvel fora do onboarding</button>
     </div>
+    <div class="hint" style="margin-bottom:8px;">Imóvel do onboarding: os dados são puxados dele e somados abaixo, e este card aparece igual nele também. Imóvel que já está ativo fora do onboarding: preencha os dados no bloco dele.</div>
     ${_resumoAnuncioConjuntoHtml(im)}
-    <div class="form-section-title" style="margin-top:14px;font-size:12px;"><i class="fa-solid fa-dollar-sign"></i> Valores do anúncio em conjunto</div>
+    ${_acExternos(im).map(x=>_acExternoHtml(x)).join('')}
+
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <div class="form-section-title" style="font-size:12px;margin:0;flex:1;"><i class="fa-solid fa-dollar-sign"></i> Valores do anúncio em conjunto</div>
+      ${_acUnidades(im).length>1?`<button type="button" class="btn btn-xs btn-outline" onclick="_acUsarTotais()" title="Preenche caução e taxa de limpeza com a soma dos imóveis"><i class="fa-solid fa-calculator"></i> Usar os totais</button>`:''}
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Valor Mínimo / Noite (R$)</label>${numInput({id:'fn-ac-min-noite',value:im.anuncioConjuntoValorMinNoite||0,min:0,step:10})}</div>
       <div class="form-group"><label>Valor Base / Noite (R$)</label>${numInput({id:'fn-ac-base-noite',value:im.anuncioConjuntoValorBaseNoite||0,min:0,step:10})}</div>
@@ -4406,9 +4412,93 @@ function _onDataAtivacaoChange(inp){
 // im.anuncioConjuntoImoveis = ids dos outros imóveis do onboarding no mesmo anúncio. O vínculo é
 // nos dois sentidos e os campos do card (AC_CAMPOS) são copiados pra todos do grupo ao salvar,
 // então abrir qualquer um dos imóveis mostra o mesmo card.
-const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoWcOutro','anuncioConjuntoValorMinNoite','anuncioConjuntoValorBaseNoite',
+// Imóveis fora do onboarding (anúncio já ativo) ficam em im.anuncioConjuntoExternos, preenchidos à mão.
+const AC_CAMPOS=['anuncioConjuntoWc','anuncioConjuntoExternos','anuncioConjuntoValorMinNoite','anuncioConjuntoValorBaseNoite',
   'anuncioConjuntoTaxaHospedeExtra','anuncioConjuntoTaxaHospedeExtraAcimaDe','anuncioConjuntoCaucao','anuncioConjuntoTaxaLimpeza',
   'anuncioConjuntoDespesasHostaway','anuncioConjuntoLimpeza','anuncioConjuntoObs'];
+const AC_EXT_CAMPOS=[
+  ['nome','Nome / WC do imóvel','text'],['linkAnuncio','Link do anúncio atual','text'],
+  ['proprietario','Proprietário','text'],['tel','Telefone','text'],
+  ['endereco','Endereço','text'],['camas','Camas (ex: 1 casal, 2 solteiro)','text'],
+  ['quartos','Quartos','number'],['banheiros','Banheiros','number'],
+  ['hospedes','Máx. hóspedes','number'],['caucao','Caução (R$)','number'],
+  ['taxaLimpeza','Taxa de limpeza (R$)','number'],['custoLimpeza','Custo de limpeza (R$)','number'],
+  ['limpezaResp','Quem faz a limpeza','text'],
+];
+// O antigo campo de texto "Outros imóveis" vira um bloco de imóvel externo (só o nome preenchido)
+function _acExternos(im){
+  if(Array.isArray(im.anuncioConjuntoExternos))return im.anuncioConjuntoExternos;
+  return im.anuncioConjuntoWcOutro?[{id:'ext_legado',nome:im.anuncioConjuntoWcOutro}]:[];
+}
+function _acExternoHtml(x){
+  return`<div class="ac-ext-card" data-ext-id="${esc(x.id)}" style="background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:10px 12px;margin-top:8px;">
+    <div style="display:flex;align-items:center;margin-bottom:6px;">
+      <span class="tag tag-neutral" style="font-size:10.5px;">fora do onboarding</span>
+      <button type="button" class="btn btn-xs btn-danger" style="margin-left:auto;" onclick="_acRemoverExterno('${esc(x.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 10px;">
+      ${AC_EXT_CAMPOS.map(([k,lbl,tipo])=>`<div class="form-group" style="margin:0;"><label style="font-size:11px;">${lbl}</label><input class="input ac-ext-in" data-k="${k}" type="${tipo}"${tipo==='number'?' min="0"':''} value="${esc(x[k]??'')}" onchange="_acAtualizarCard()" style="padding:5px 8px;font-size:12.5px;"></div>`).join('')}
+    </div>
+    <div class="form-group" style="margin:6px 0 0;"><label style="font-size:11px;">Outras informações pro anúncio (comodidades, regras, acesso, check-in...)</label><textarea class="input ac-ext-in" data-k="info" rows="3" style="font-size:12.5px;">${esc(x.info||'')}</textarea></div>
+  </div>`;
+}
+function _acColetarExternos(){
+  return[...document.querySelectorAll('#fn-anuncio-conjunto-wrap .ac-ext-card')].map(card=>{
+    const x={id:card.dataset.extId==='ext_legado'?'ext_'+uid():card.dataset.extId};
+    card.querySelectorAll('.ac-ext-in').forEach(el=>{
+      const tipo=(AC_EXT_CAMPOS.find(c=>c[0]===el.dataset.k)||[])[2];
+      x[el.dataset.k]=tipo==='number'?(el.value===''?'':+el.value):el.value;
+    });
+    return x;
+  });
+}
+function _acAtualizarCard(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);saveAll();
+  const y=document.getElementById('detalhe-body')?.scrollTop;renderAba('final');
+  const body=document.getElementById('detalhe-body');if(body&&y!=null)body.scrollTop=y;
+}
+function _acAdicionarExterno(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  im.anuncioConjunto=true;
+  im.anuncioConjuntoExternos=[..._acExternos(im),{id:'ext_'+uid()}];
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+}
+function _acRemoverExterno(id){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  im.anuncioConjuntoExternos=_acExternos(im).filter(x=>x.id!==id);
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+}
+// Cada imóvel do anúncio (onboarding ou externo) no mesmo formato, pra somar e pro PDF
+function _acUnidades(im){
+  const doOnb=_grupoAnuncioConjunto(im).map(getImovel).map(o=>({
+    id:o.id,externo:false,nome:o.nome||'',proprietario:o.proprietarioNome||'',tel:o.proprietarioTel||'',endereco:o.endereco||'',
+    quartos:+o.quartos||0,banheiros:((+o.banheirosCompletos||0)+(+o.banheirosLavabo||0))||(+o.banheiros||0),hospedes:+o.maxHospedes||0,
+    camas:(o.camas||[]).map(c=>`${c.qtd}x ${c.tipo}`).join(', '),caucao:+o.valorCaucao||0,
+    taxaLimpeza:+o.taxaLimpeza||0,custoLimpeza:+o.custoLimpezaRecorrente||0,limpezaResp:o.defLimpeza?.responsavel||'',im:o}));
+  const ext=_acExternos(im).map(x=>({...x,externo:true,quartos:+x.quartos||0,banheiros:+x.banheiros||0,hospedes:+x.hospedes||0,
+    caucao:+x.caucao||0,taxaLimpeza:+x.taxaLimpeza||0,custoLimpeza:+x.custoLimpeza||0}));
+  return[...doOnb,...ext];
+}
+const AC_SOMAVEIS=['quartos','banheiros','hospedes','caucao','taxaLimpeza','custoLimpeza'];
+function _acTotais(unidades){
+  const t={};AC_SOMAVEIS.forEach(k=>t[k]=unidades.reduce((s,u)=>s+(+u[k]||0),0));
+  t.camas=unidades.map(u=>u.camas).filter(Boolean).join(' + ');
+  return t;
+}
+function _acUsarTotais(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  _coletarDadosAba('final',im);
+  const t=_acTotais(_acUnidades(im));
+  im.anuncioConjuntoCaucao=t.caucao;im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;
+  _propagarAnuncioConjunto(im);
+  saveAll();renderAba('final');
+  showToast('Caução e taxa de limpeza preenchidas com a soma dos imóveis.','sage');
+}
 function _grupoAnuncioConjunto(im){return[im.id,...(im.anuncioConjuntoImoveis||[])].filter((id,i,a)=>a.indexOf(id)===i&&getImovel(id));}
 function _propagarAnuncioConjunto(im){
   const grupo=_grupoAnuncioConjunto(im);
@@ -4430,6 +4520,10 @@ function _acAdicionarImovel(){
   // junta também quem já estava no grupo do outro imóvel
   im.anuncioConjuntoImoveis=[...new Set([...(im.anuncioConjuntoImoveis||[]),id,...(outro.anuncioConjuntoImoveis||[])])].filter(x=>x!==im.id);
   im.anuncioConjunto=true;
+  // valores ainda zerados: já começa com a soma dos imóveis
+  const t=_acTotais(_acUnidades(im));
+  if(!im.anuncioConjuntoCaucao)im.anuncioConjuntoCaucao=t.caucao;
+  if(!im.anuncioConjuntoTaxaLimpeza)im.anuncioConjuntoTaxaLimpeza=t.taxaLimpeza;
   _propagarAnuncioConjunto(im);
   saveAll();renderAba('final');
 }
@@ -4442,26 +4536,100 @@ function _acRemoverImovel(id){
   if(saiu){saiu.anuncioConjuntoImoveis=[];saiu.anuncioConjunto=false;}
   saveAll();renderAba('final');
 }
-// Dados puxados de cada imóvel do grupo: proprietário, limpeza e formulário
+// Tabela com os dados de cada imóvel do anúncio + linha de total somado
 function _resumoAnuncioConjuntoHtml(im){
-  const grupo=_grupoAnuncioConjunto(im).map(getImovel);
-  if(grupo.length<2)return'';
-  const statusForm=o=>o.formEnviadoEm?'<span class="tag tag-sage" style="font-size:10.5px;">enviado</span>'
-    :o.formPreenchidoEm?'<span class="tag tag-lav" style="font-size:10.5px;">preenchendo</span>'
+  const un=_acUnidades(im);
+  if(un.length<2)return`<div class="hint" style="margin-bottom:6px;">Só este imóvel por enquanto — adicione os outros do anúncio.</div>`;
+  const t=_acTotais(un);
+  const statusForm=u=>u.externo?'<span class="tag tag-neutral" style="font-size:10.5px;">fora do onboarding</span>'
+    :u.im.formEnviadoEm?'<span class="tag tag-sage" style="font-size:10.5px;">enviado</span>'
+    :u.im.formPreenchidoEm?'<span class="tag tag-lav" style="font-size:10.5px;">preenchendo</span>'
     :'<span class="tag tag-neutral" style="font-size:10.5px;">não enviado</span>';
+  const td='padding:6px 8px;vertical-align:top;';
   return`<div style="overflow-x:auto;margin-top:4px;"><table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);border-radius:8px;">
     <thead><tr style="border-bottom:1px solid var(--border);">
-      <th style="text-align:left;padding:6px 8px;">Imóvel</th><th style="text-align:left;padding:6px 8px;">Proprietário</th>
-      <th style="text-align:left;padding:6px 8px;">Limpeza</th><th style="text-align:left;padding:6px 8px;">Formulário</th><th></th>
+      <th style="text-align:left;${td}">Imóvel</th><th style="text-align:left;${td}">Proprietário</th>
+      <th style="text-align:center;${td}">Quartos</th><th style="text-align:center;${td}">Banh.</th><th style="text-align:center;${td}">Hósp.</th>
+      <th style="text-align:left;${td}">Camas</th><th style="text-align:right;${td}">Caução</th><th style="text-align:left;${td}">Limpeza</th>
+      <th style="text-align:left;${td}">Formulário</th><th></th>
     </tr></thead>
-    <tbody>${grupo.map(o=>`<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:6px 8px;font-weight:600;">${esc(o.nome||'')}${o.id===im.id?' <span style="color:var(--text-muted);font-weight:400;">(este)</span>':''}</td>
-      <td style="padding:6px 8px;">${esc(o.proprietarioNome||'—')}${o.proprietarioTel?`<br><span style="color:var(--text-muted);">${esc(o.proprietarioTel)}</span>`:''}</td>
-      <td style="padding:6px 8px;">${esc(o.defLimpeza?.responsavel||'—')}${o.taxaLimpeza?`<br><span style="color:var(--text-muted);">taxa ${fmtMoeda(o.taxaLimpeza)}${o.custoLimpezaRecorrente?` · custo ${fmtMoeda(o.custoLimpezaRecorrente)}`:''}</span>`:''}</td>
-      <td style="padding:6px 8px;">${statusForm(o)}</td>
-      <td style="padding:6px 8px;text-align:right;">${o.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(o.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`:''}</td>
-    </tr>`).join('')}</tbody>
+    <tbody>${un.map(u=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="${td}font-weight:600;">${esc(u.nome||'(sem nome)')}${u.id===im.id?' <span style="color:var(--text-muted);font-weight:400;">(este)</span>':''}</td>
+      <td style="${td}">${esc(u.proprietario||'—')}${u.tel?`<br><span style="color:var(--text-muted);">${esc(u.tel)}</span>`:''}</td>
+      <td style="${td}text-align:center;">${u.quartos||'—'}</td><td style="${td}text-align:center;">${u.banheiros||'—'}</td><td style="${td}text-align:center;">${u.hospedes||'—'}</td>
+      <td style="${td}">${esc(u.camas||'—')}</td>
+      <td style="${td}text-align:right;">${u.caucao?fmtMoeda(u.caucao):'—'}</td>
+      <td style="${td}">${esc(u.limpezaResp||'—')}${u.taxaLimpeza?`<br><span style="color:var(--text-muted);">taxa ${fmtMoeda(u.taxaLimpeza)}${u.custoLimpeza?` · custo ${fmtMoeda(u.custoLimpeza)}`:''}</span>`:''}</td>
+      <td style="${td}">${statusForm(u)}</td>
+      <td style="${td}text-align:right;white-space:nowrap;">${!u.externo&&u.id!==im.id?`<button type="button" class="btn btn-xs btn-outline" onclick="salvarImovelAtual();abrirDetalhe('${esc(u.id)}')" title="Abrir imóvel"><i class="fa-solid fa-arrow-up-right-from-square"></i></button> <button type="button" class="btn btn-xs btn-danger" onclick="_acRemoverImovel('${esc(u.id)}')" title="Tirar do anúncio"><i class="fa-solid fa-xmark"></i></button>`:''}</td>
+    </tr>`).join('')}
+    <tr style="background:var(--surface-2);font-weight:700;">
+      <td style="${td}" colspan="2">Total do anúncio</td>
+      <td style="${td}text-align:center;">${t.quartos}</td><td style="${td}text-align:center;">${t.banheiros}</td><td style="${td}text-align:center;">${t.hospedes}</td>
+      <td style="${td}font-weight:400;">${esc(t.camas||'—')}</td>
+      <td style="${td}text-align:right;">${fmtMoeda(t.caucao)}</td>
+      <td style="${td}font-weight:400;">taxa ${fmtMoeda(t.taxaLimpeza)}${t.custoLimpeza?` · custo ${fmtMoeda(t.custoLimpeza)}`:''}</td>
+      <td colspan="2"></td>
+    </tr></tbody>
   </table></div>`;
+}
+// PDF pra criação do anúncio: imóveis + totais, valores, e os formulários dos imóveis do
+// onboarding compilados pergunta por pergunta (resposta igual nos dois aparece uma vez só).
+async function gerarPDFAnuncioConjunto(){
+  const im=getImovel(_imovelAtivoId);if(!im)return;
+  const win=window.open('','_blank'); // antes do await (bloqueador de pop-up)
+  _coletarDadosAba('final',im);_propagarAnuncioConjunto(im);saveAll();
+  const un=_acUnidades(im),t=_acTotais(un);
+  const campo=_pdfCampoHtml,sec=_pdfSecaoHtml;
+  const linhaUn=u=>`<tr><td style="padding:6px;border-bottom:1px solid #EFE7D6;font-weight:600;">${esc(u.nome||'')}${u.externo?' <span style="color:#999;font-weight:400;">(fora do onboarding)</span>':''}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;">${esc(u.proprietario||'—')} ${esc(u.tel||'')}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.quartos||'—'}</td><td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.banheiros||'—'}</td>
+    <td style="padding:6px;border-bottom:1px solid #EFE7D6;text-align:center;">${u.hospedes||'—'}</td><td style="padding:6px;border-bottom:1px solid #EFE7D6;">${esc(u.camas||'—')}</td></tr>`;
+  const tabela=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;">
+    <tr style="color:#132030;font-size:10px;text-transform:uppercase;"><th style="text-align:left;padding:6px;">Imóvel</th><th style="text-align:left;padding:6px;">Proprietário</th><th style="padding:6px;">Quartos</th><th style="padding:6px;">Banh.</th><th style="padding:6px;">Hósp.</th><th style="text-align:left;padding:6px;">Camas</th></tr>
+    ${un.map(linhaUn).join('')}
+    <tr style="font-weight:700;background:#F7F2E8;"><td style="padding:6px;" colspan="2">Total</td><td style="padding:6px;text-align:center;">${t.quartos}</td><td style="padding:6px;text-align:center;">${t.banheiros}</td><td style="padding:6px;text-align:center;">${t.hospedes}</td><td style="padding:6px;font-weight:400;">${esc(t.camas||'—')}</td></tr>
+  </table>`;
+  const valores=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+    ${campo('Diária mínima',im.anuncioConjuntoValorMinNoite?fmtMoeda(im.anuncioConjuntoValorMinNoite):'',true)}
+    ${campo('Diária base',im.anuncioConjuntoValorBaseNoite?fmtMoeda(im.anuncioConjuntoValorBaseNoite):'',true)}
+    ${campo('Taxa hóspede extra'+(im.anuncioConjuntoTaxaHospedeExtraAcimaDe?` (acima de ${im.anuncioConjuntoTaxaHospedeExtraAcimaDe})`:''),im.anuncioConjuntoTaxaHospedeExtra?fmtMoeda(im.anuncioConjuntoTaxaHospedeExtra):'',true)}
+    ${campo('Caução',im.anuncioConjuntoCaucao?fmtMoeda(im.anuncioConjuntoCaucao):'',true)}
+    ${campo('Taxa de limpeza',im.anuncioConjuntoTaxaLimpeza?fmtMoeda(im.anuncioConjuntoTaxaLimpeza):'',true)}
+  </div>
+  ${campo('Despesas para automatizar no Hostaway',im.anuncioConjuntoDespesasHostaway)}
+  ${campo('Limpeza',im.anuncioConjuntoLimpeza)}
+  ${campo('Observações',im.anuncioConjuntoObs)}`;
+  const doOnb=un.filter(u=>!u.externo);
+  const respDe=u=>({...(u.im.formRespostas||{}),...(u.im.formRascunho||{})});
+  const resps=doOnb.map(u=>({nome:u.nome,r:respDe(u)}));
+  const formHtml=(window.FORM_SECOES||[]).map(s=>{
+    const pergs=(s.perguntas||[]).map(p=>{
+      const vals=resps.map(x=>({nome:x.nome,v:String(x.r[p.id]??'').trim()})).filter(x=>x.v);
+      if(!vals.length)return'';
+      const iguais=vals.length===resps.length&&vals.every(x=>x.v===vals[0].v);
+      const corpo=iguais?`<div style="font-size:13px;color:#333;">${esc(vals[0].v)}</div>`
+        :vals.map(x=>`<div style="font-size:13px;color:#333;margin-top:2px;"><strong style="color:#B8863C;">${esc(x.nome)}:</strong> ${esc(x.v)}</div>`).join('');
+      return`<div style="padding:7px 0;border-bottom:1px solid #EFE7D6;"><div style="font-size:10px;font-weight:700;color:#132030;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">${esc(p.label)}</div>${corpo}</div>`;
+    }).join('');
+    return pergs?sec('📋',esc(s.secao),pergs):'';
+  }).join('');
+  const externosHtml=un.filter(u=>u.externo).map(u=>sec('🏠',esc(u.nome||'Imóvel fora do onboarding')+' (fora do onboarding)',`
+    ${campo('Link do anúncio atual',u.linkAnuncio)}${campo('Endereço',u.endereco)}
+    ${campo('Limpeza',[u.limpezaResp,u.taxaLimpeza?'taxa '+fmtMoeda(u.taxaLimpeza):''].filter(Boolean).join(' · '))}
+    ${campo('Outras informações',u.info)}`)).join('');
+  const cab={nome:'Anúncio em conjunto'+(im.anuncioConjuntoWc?' — '+im.anuncioConjuntoWc:''),proprietarioNome:[...new Set(un.map(u=>u.proprietario).filter(Boolean))].join(', ')};
+  win.document.write(`<html><head><meta charset="utf-8"><title>Anúncio em conjunto${im.anuncioConjuntoWc?' — '+esc(im.anuncioConjuntoWc):''}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#333;padding:32px 40px;max-width:900px;margin:0 auto;}
+    @media print{body{padding:16px;}@page{margin:1.2cm;size:A4;}}</style></head><body>
+  ${await _pdfHeaderHtml(cab,'Compilado para criação do anúncio em conjunto')}
+  ${sec('🏘️','Imóveis do anúncio',tabela)}
+  ${sec('💰','Valores e operação do anúncio',valores)}
+  ${externosHtml}
+  ${formHtml||sec('📋','Formulários','<div style="padding:8px 0;color:#999;">Nenhuma resposta de formulário nos imóveis do onboarding ainda.</div>')}
+  </body></html>`);
+  win.document.close();win.print();
 }
 function _toggleAnuncioConjunto(cb){
   const wrap=document.getElementById('fn-anuncio-conjunto-wrap');
@@ -4867,7 +5035,7 @@ function renderDashboard(){
   const thOp=document.getElementById('dash-ativos-th-op');
   if(thOp)thOp.textContent=KPI_BASE_ONBOARDING==='contrato'?'Contrato → ativação':'Liberação → ativação';
   const hintChart=document.getElementById('dash-chart-hint');
-  if(hintChart)hintChart.textContent=`dias ${KPI_BASE_ONBOARDING==='contrato'?'entre contrato assinado':'entre liberação para vistoria'} e ativação · reativações fora · altere a base em Configurações`;
+  if(hintChart)hintChart.textContent='dias entre a liberação (ou a assinatura, se liberou junto) e a ativação · reativações fora';
 
   const chartEl=document.getElementById('dash-chart-ativacao');
   if(chartEl){
@@ -6507,13 +6675,6 @@ function renderConfig(){
       </tr>`).join('')+`</table>`
       :`<div class="text-muted" style="font-size:12px;padding:4px 0;">Nenhum membro cadastrado ainda.</div>`);
   }
-
-  const kb=document.getElementById('config-kpi-base');
-  if(kb)kb.innerHTML=`<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px;">
-      <label class="checkbox-label"><input type="radio" name="kpi-base-onb" value="liberacao"${KPI_BASE_ONBOARDING==='liberacao'?' checked':''} onchange="_setKpiBaseOnboarding(this.value)"> <strong>Data da liberação</strong>&nbsp;(liberado para vistoria → ativo)</label>
-      <label class="checkbox-label"><input type="radio" name="kpi-base-onb" value="contrato"${KPI_BASE_ONBOARDING==='contrato'?' checked':''} onchange="_setKpiBaseOnboarding(this.value)"> <strong>Data do contrato</strong>&nbsp;(contrato assinado → ativo)</label>
-    </div>
-    <div class="hint" style="margin-top:8px;">Vale para o Dashboard e para o KPI enviado à Claire. Na base "liberação", imóvel sem data de liberação usa a data do contrato e aparece com ⚠️. Reativações e perdidos ficam fora das médias.</div>`;
 
   const ci=document.getElementById('config-itens');
   if(!ci)return;
