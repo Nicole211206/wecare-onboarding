@@ -733,7 +733,6 @@ function loadAll(){
   v=g('wc_processo_texto');if(typeof v==='string')processoTexto=v;
   v=g('wc_anotacoes_texto');if(typeof v==='string')anotacoesTexto=v;
   v=g('wc_anotacoes_notas');if(Array.isArray(v))anotacoesNotas=v;
-  if(_migrarAnotacoesParaNotas())saveAll();
   v=g('wc_manual_fornecedores');if(typeof v==='string')manualFornecedores=v;
   v=g('wc_orcamentos');if(Array.isArray(v))orcamentos=v;
   v=g('wc_estoque_itens');if(Array.isArray(v))estoqueItens=v;
@@ -748,10 +747,14 @@ function loadAll(){
   // sempre que a lista estava vazia, então apagar todos os modelos/modalidades nunca "pegava".
   _seedModelosNegocio(g('wc_modelos_negocio')===null);
   _seedModalidadesEnxoval(g('wc_modalidades_enxoval')===null);
-  if(_seedEtapasDefOperacionais())saveAll();
+  // saveAll() só depois de TODAS as coleções lidas: chamado no meio do loadAll, gravava de volta
+  // as que ainda estavam vazias na memória (modelos, proprietários, modalidades, orçamentos...)
+  // e o push seguinte apagava tudo isso no servidor (incidente 2026-10-08).
+  const _migrouNotas=_migrarAnotacoesParaNotas(),_semeouEtapas=_seedEtapasDefOperacionais();
   _migrarProprietarios();
   _migrarFasesAntigas();
   _migrarGastosSetup();
+  if(_migrouNotas||_semeouEtapas)saveAll();
 }
 
 let _autoSaveTimer=null;
